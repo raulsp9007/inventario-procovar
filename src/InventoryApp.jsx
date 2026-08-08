@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Package, TrendingDown, Plus, Minus, RotateCcw, AlertTriangle, History, Settings2 } from "lucide-react";
+import { getData, setData } from "./storage";
+import { todayStr, formatDate } from "./dateUtils";
 
 const PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
@@ -11,15 +13,6 @@ const PRODUCTS = [
 
 const LOW_STOCK_THRESHOLD = 20;
 const STORAGE_KEY = "procovar-inventario-v1";
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function formatDate(d) {
-  const date = new Date(d + "T00:00:00");
-  return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
-}
 
 export default function InventoryApp() {
   const [stock, setStock] = useState(() =>
@@ -35,18 +28,16 @@ export default function InventoryApp() {
   const [editInputs, setEditInputs] = useState({});
   const [error, setError] = useState("");
 
-  // Load from storage
   useEffect(() => {
     (async () => {
       try {
-        const result = await window.storage.get(STORAGE_KEY, false);
+        const result = await getData(STORAGE_KEY);
         if (result && result.value) {
           const parsed = JSON.parse(result.value);
           setStock(parsed.stock || {});
           setMovements(parsed.movements || []);
         }
       } catch (e) {
-        // no existing data yet, that's fine
       } finally {
         setLoaded(true);
       }
@@ -56,11 +47,7 @@ export default function InventoryApp() {
   const persist = useCallback(async (nextStock, nextMovements) => {
     setSaveState("saving");
     try {
-      await window.storage.set(
-        STORAGE_KEY,
-        JSON.stringify({ stock: nextStock, movements: nextMovements }),
-        false
-      );
+      await setData(STORAGE_KEY, JSON.stringify({ stock: nextStock, movements: nextMovements }));
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 1200);
     } catch (e) {
@@ -168,7 +155,6 @@ export default function InventoryApp() {
         .rowfade { animation: fadeIn 0.25s ease; }
       `}</style>
 
-      {/* Header */}
       <div style={{ background: "#22261F", color: "#F7F4EC", padding: "24px 16px 20px" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
@@ -221,7 +207,6 @@ export default function InventoryApp() {
           </button>
         </div>
 
-        {/* Product cards */}
         <div style={{ display: "grid", gap: 10 }}>
           {PRODUCTS.map((p) => {
             const qty = stock[p.code] || 0;
@@ -316,7 +301,6 @@ export default function InventoryApp() {
           })}
         </div>
 
-        {/* History */}
         <div style={{ marginTop: 28 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
             <History size={14} /> HISTORIAL DE MOVIMIENTOS
