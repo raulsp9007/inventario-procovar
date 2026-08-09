@@ -143,9 +143,17 @@ export default function InventoryApp() {
     const restored = m.type === "venta" ? current + m.qty : Math.max(0, current - m.qty);
     const nextStock = { ...stock, [code]: restored };
     const nextMovements = movements.filter((_, i) => i !== idx);
+    const nextCumulativeRevenue =
+      m.type === "venta" ? cumulativeRevenue - m.qty * (m.unitPrice || 0) : cumulativeRevenue;
     setStock(nextStock);
     setMovements(nextMovements);
-    persist({ ...currentPersistedState, stock: nextStock, movements: nextMovements });
+    setCumulativeRevenue(nextCumulativeRevenue);
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+    });
   }
 
   function openEdit() {
