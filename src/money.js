@@ -1,4 +1,4 @@
-import { getWeekStartStr } from "./dateUtils";
+import { getWeekStartStr } from "./dateUtils.js";
 
 export function formatCUP(amount) {
   const n = Number(amount) || 0;
