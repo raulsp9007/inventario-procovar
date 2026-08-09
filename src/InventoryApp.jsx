@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Package, TrendingDown, Plus, Minus, RotateCcw, AlertTriangle, History, Settings2 } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, formatDate } from "./dateUtils";
+import WeeklySummary from "./WeeklySummary";
 
 const PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
@@ -27,6 +28,7 @@ export default function InventoryApp() {
   const [editMode, setEditMode] = useState(false);
   const [editInputs, setEditInputs] = useState({});
   const [error, setError] = useState("");
+  const [view, setView] = useState("stock"); // "stock" | "resumen"
 
   useEffect(() => {
     (async () => {
@@ -174,6 +176,31 @@ export default function InventoryApp() {
         </div>
       </div>
 
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0", display: "flex", gap: 8 }}>
+        <button
+          onClick={() => setView("stock")}
+          style={{
+            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            borderRadius: 7, border: "1px solid #22261F",
+            background: view === "stock" ? "#22261F" : "transparent",
+            color: view === "stock" ? "#F7F4EC" : "#22261F",
+          }}
+        >
+          Stock
+        </button>
+        <button
+          onClick={() => setView("resumen")}
+          style={{
+            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            borderRadius: 7, border: "1px solid #22261F",
+            background: view === "resumen" ? "#22261F" : "transparent",
+            color: view === "resumen" ? "#F7F4EC" : "#22261F",
+          }}
+        >
+          Resumen semanal
+        </button>
+      </div>
+
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "20px 16px 0" }}>
         {lowStockCount > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#FBEFE0", border: "1px solid #E9CFA0", color: "#8A5A1E", padding: "10px 14px", borderRadius: 8, fontSize: 13.5, marginBottom: 16 }}>
@@ -190,6 +217,8 @@ export default function InventoryApp() {
           </div>
         )}
 
+        {view === "stock" && (
+        <>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PRODUCTOS</div>
           <button
@@ -339,6 +368,10 @@ export default function InventoryApp() {
             </div>
           )}
         </div>
+        </>
+        )}
+
+        {view === "resumen" && <WeeklySummary products={PRODUCTS} movements={movements} />}
 
         <div style={{ marginTop: 20, fontSize: 11.5, color: "#B4AF9E", textAlign: "center" }}>
           {saveState === "saving" ? "Guardando…" : saveState === "saved" ? "Guardado ✓" : "Los datos se guardan automáticamente en este dispositivo"}
