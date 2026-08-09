@@ -1248,6 +1248,8 @@ git commit -m "Add PWA icon generator and generated icons"
 - Modify: `vite.config.js`
 - Modify: `index.html`
 
+> **Nota post-implementación:** el `command === "build"` de los snippets abajo (y del `vite.config.js` original de la Task 1) resultó estar mal — `vite preview` también reporta `command: "serve"` (igual que `vite dev`), así que rompía `npm run preview` localmente (los assets se servían con el prefijo `/inventario-procovar/` horneado en el HTML, pero el server de preview montaba en `/`). El fix real, aplicado después de la verificación manual de este task, usa `mode === "production" || isPreview` en su lugar. El deploy real a GitHub Pages nunca estuvo afectado (sirve `dist/` tal cual, sin pasar por la lógica de preview de Vite). Ver commits `a4a1f21` y `05cec8a`.
+
 - [ ] **Step 1: Instalar la dependencia**
 
 ```bash
