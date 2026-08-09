@@ -90,7 +90,9 @@ export default function WeeklySummary({
                       borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
                     }}
                   >
-                    <span style={{ color: "#8A8574" }}>Semana del {formatDate(w.weekStart)}</span>
+                    <span style={{ color: "#8A8574" }}>
+                      Semana del {formatDate(w.weekStart < monthStart ? monthStart : w.weekStart)}
+                    </span>
                     <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(w.total)}</span>
                   </div>
                 ))}
