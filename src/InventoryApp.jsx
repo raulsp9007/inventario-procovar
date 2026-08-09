@@ -35,6 +35,7 @@ export default function InventoryApp() {
   );
   const [editMode, setEditMode] = useState(false);
   const [editInputs, setEditInputs] = useState({});
+  const [editPriceInputs, setEditPriceInputs] = useState({});
   const [error, setError] = useState("");
   const [view, setView] = useState("stock"); // "stock" | "resumen"
   const currentPersistedState = {
@@ -158,13 +159,19 @@ export default function InventoryApp() {
 
   function openEdit() {
     const inputs = {};
-    PRODUCTS.forEach((p) => (inputs[p.code] = String(stock[p.code] || 0)));
+    const priceInputs = {};
+    PRODUCTS.forEach((p) => {
+      inputs[p.code] = String(stock[p.code] || 0);
+      priceInputs[p.code] = String(prices[p.code] || 0);
+    });
     setEditInputs(inputs);
+    setEditPriceInputs(priceInputs);
     setEditMode(true);
   }
 
   function saveEdit() {
     const nextStock = { ...stock };
+    const nextPrices = { ...prices };
     const adjustments = [];
     const nextLastAdjustedAt = { ...lastAdjustedAt };
     const now = new Date().toISOString();
@@ -177,13 +184,23 @@ export default function InventoryApp() {
         nextLastAdjustedAt[p.code] = now;
       }
       nextStock[p.code] = newVal;
+
+      const priceVal = parseFloat(editPriceInputs[p.code]);
+      nextPrices[p.code] = isNaN(priceVal) || priceVal < 0 ? 0 : priceVal;
     });
     const nextMovements = [...adjustments, ...movements].slice(0, 500);
     setStock(nextStock);
+    setPrices(nextPrices);
     setMovements(nextMovements);
     setLastAdjustedAt(nextLastAdjustedAt);
     setEditMode(false);
-    persist({ ...currentPersistedState, stock: nextStock, movements: nextMovements, lastAdjustedAt: nextLastAdjustedAt });
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      lastAdjustedAt: nextLastAdjustedAt,
+      prices: nextPrices,
+    });
   }
 
   return (
@@ -307,17 +324,32 @@ export default function InventoryApp() {
 
                   <div style={{ textAlign: "right" }}>
                     {editMode ? (
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={editInputs[p.code]}
-                        onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                        style={{
-                          width: 90, textAlign: "right", fontSize: 20, fontWeight: 700,
-                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "6px 10px",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={editInputs[p.code]}
+                          onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                          style={{
+                            width: 90, textAlign: "right", fontSize: 20, fontWeight: 700,
+                            border: "1px solid #D8D2C0", borderRadius: 7, padding: "6px 10px",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        />
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={editPriceInputs[p.code]}
+                          onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                          placeholder="Precio CUP"
+                          title="Precio en CUP"
+                          style={{
+                            width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
+                            border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",
+                            fontVariantNumeric: "tabular-nums", color: "#8A8574",
+                          }}
+                        />
+                      </div>
                     ) : (
                       <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "#B4661E" : "#22261F" }}>
                         {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "#9A9484" }}>uds</span>
