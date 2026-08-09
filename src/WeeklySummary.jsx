@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 
@@ -22,6 +23,8 @@ export default function WeeklySummary({
   const cumulativeUSD = convertToUSD(cumulativeRevenue, exchangeRate);
   const commissionCUP = (cumulativeRevenue * (commissionPercent || 0)) / 100;
   const commissionUSD = convertToUSD(commissionCUP, exchangeRate);
+  const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
+  const [commissionInput, setCommissionInput] = useState(() => (commissionPercent ? String(commissionPercent) : ""));
 
   const soldInRange = (code, start, end) =>
     movements
@@ -122,9 +125,11 @@ export default function WeeklySummary({
             <input
               type="number"
               inputMode="decimal"
-              value={exchangeRate ?? ""}
+              value={rateInput}
               onChange={(e) => {
-                const val = parseFloat(e.target.value);
+                const raw = e.target.value;
+                setRateInput(raw);
+                const val = parseFloat(raw);
                 onExchangeRateChange(isNaN(val) || val <= 0 ? null : val);
               }}
               placeholder="tasa"
@@ -141,9 +146,11 @@ export default function WeeklySummary({
             <input
               type="number"
               inputMode="decimal"
-              value={commissionPercent || ""}
+              value={commissionInput}
               onChange={(e) => {
-                const val = parseFloat(e.target.value);
+                const raw = e.target.value;
+                setCommissionInput(raw);
+                const val = parseFloat(raw);
                 onCommissionPercentChange(isNaN(val) || val < 0 ? 0 : val);
               }}
               placeholder="0"
