@@ -185,8 +185,10 @@ export default function InventoryApp() {
       }
       nextStock[p.code] = newVal;
 
+      // Precio no genera movimiento ni timestamp de ajuste (no hay "historial de precio",
+      // solo el unitPrice congelado en cada venta) — se sobreescribe siempre, sin diff-check.
       const priceVal = parseFloat(editPriceInputs[p.code]);
-      nextPrices[p.code] = isNaN(priceVal) || priceVal < 0 ? 0 : priceVal;
+      nextPrices[p.code] = !Number.isFinite(priceVal) || priceVal < 0 ? 0 : priceVal;
     });
     const nextMovements = [...adjustments, ...movements].slice(0, 500);
     setStock(nextStock);
@@ -336,17 +338,17 @@ export default function InventoryApp() {
                             fontVariantNumeric: "tabular-nums",
                           }}
                         />
+                        <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em" }}>PRECIO CUP</div>
                         <input
                           type="number"
                           inputMode="decimal"
                           value={editPriceInputs[p.code]}
                           onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                          placeholder="Precio CUP"
                           title="Precio en CUP"
                           style={{
                             width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
                             border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",
-                            fontVariantNumeric: "tabular-nums", color: "#8A8574",
+                            fontVariantNumeric: "tabular-nums", color: "#26241F",
                           }}
                         />
                       </div>
