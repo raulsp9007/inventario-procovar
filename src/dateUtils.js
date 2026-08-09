@@ -45,3 +45,9 @@ export function getPreviousWeekRangeStr(referenceDateStr = todayStr()) {
   prevSunday.setDate(prevSunday.getDate() - 1);
   return { start: toDateStr(prevMonday), end: toDateStr(prevSunday) };
 }
+
+// Primer día del mes de referenceDateStr (formato "YYYY-MM-DD").
+export function getMonthStartStr(referenceDateStr = todayStr()) {
+  const d = new Date(referenceDateStr + "T00:00:00");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
+}
