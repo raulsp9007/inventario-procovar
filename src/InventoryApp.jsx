@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Package, TrendingDown, Plus, Minus, RotateCcw, AlertTriangle, History, Settings2 } from "lucide-react";
 import { getData, setData } from "./storage";
-import { todayStr, formatDate } from "./dateUtils";
+import { todayStr, formatDate, formatDateTime } from "./dateUtils";
 import WeeklySummary from "./WeeklySummary";
 
 const PRODUCTS = [
@@ -20,6 +20,7 @@ export default function InventoryApp() {
     PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: 0 }), {})
   );
   const [movements, setMovements] = useState([]);
+  const [lastAdjustedAt, setLastAdjustedAt] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [saleInputs, setSaleInputs] = useState(() =>
@@ -38,6 +39,7 @@ export default function InventoryApp() {
           const parsed = JSON.parse(result.value);
           setStock(parsed.stock || {});
           setMovements(parsed.movements || []);
+          setLastAdjustedAt(parsed.lastAdjustedAt || {});
         }
       } catch (e) {
       } finally {
@@ -46,10 +48,13 @@ export default function InventoryApp() {
     })();
   }, []);
 
-  const persist = useCallback(async (nextStock, nextMovements) => {
+  const persist = useCallback(async (nextStock, nextMovements, nextLastAdjustedAt) => {
     setSaveState("saving");
     try {
-      await setData(STORAGE_KEY, JSON.stringify({ stock: nextStock, movements: nextMovements }));
+      await setData(
+        STORAGE_KEY,
+        JSON.stringify({ stock: nextStock, movements: nextMovements, lastAdjustedAt: nextLastAdjustedAt })
+      );
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 1200);
     } catch (e) {
@@ -105,7 +110,7 @@ export default function InventoryApp() {
     setStock(nextStock);
     setMovements(nextMovements);
     setSaleInputs((s) => ({ ...s, [code]: "" }));
-    persist(nextStock, nextMovements);
+    persist(nextStock, nextMovements, lastAdjustedAt);
   }
 
   function undoLast(code) {
@@ -118,7 +123,7 @@ export default function InventoryApp() {
     const nextMovements = movements.filter((_, i) => i !== idx);
     setStock(nextStock);
     setMovements(nextMovements);
-    persist(nextStock, nextMovements);
+    persist(nextStock, nextMovements, lastAdjustedAt);
   }
 
   function openEdit() {
@@ -131,20 +136,24 @@ export default function InventoryApp() {
   function saveEdit() {
     const nextStock = { ...stock };
     const adjustments = [];
+    const nextLastAdjustedAt = { ...lastAdjustedAt };
+    const now = new Date().toISOString();
     PRODUCTS.forEach((p) => {
       const val = parseInt(editInputs[p.code], 10);
       const newVal = isNaN(val) || val < 0 ? 0 : val;
       const diff = newVal - (stock[p.code] || 0);
       if (diff !== 0) {
         adjustments.push(makeMovement(p.code, "ajuste", diff));
+        nextLastAdjustedAt[p.code] = now;
       }
       nextStock[p.code] = newVal;
     });
     const nextMovements = [...adjustments, ...movements].slice(0, 500);
     setStock(nextStock);
     setMovements(nextMovements);
+    setLastAdjustedAt(nextLastAdjustedAt);
     setEditMode(false);
-    persist(nextStock, nextMovements);
+    persist(nextStock, nextMovements, nextLastAdjustedAt);
   }
 
   return (
@@ -260,6 +269,9 @@ export default function InventoryApp() {
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 15.5 }}>{p.name}</div>
                       <div style={{ fontSize: 12, color: "#9A9484" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
+                      {lastAdjustedAt[p.code] && (
+                        <div style={{ fontSize: 11, color: "#B4AF9E" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
+                      )}
                     </div>
                   </div>
 
