@@ -30,6 +30,7 @@ export default function InventoryApp() {
   const [editInputs, setEditInputs] = useState({});
   const [error, setError] = useState("");
   const [view, setView] = useState("stock"); // "stock" | "resumen"
+  const currentPersistedState = { stock, movements, lastAdjustedAt };
 
   useEffect(() => {
     (async () => {
@@ -48,13 +49,10 @@ export default function InventoryApp() {
     })();
   }, []);
 
-  const persist = useCallback(async (nextStock, nextMovements, nextLastAdjustedAt) => {
+  const persist = useCallback(async (nextState) => {
     setSaveState("saving");
     try {
-      await setData(
-        STORAGE_KEY,
-        JSON.stringify({ stock: nextStock, movements: nextMovements, lastAdjustedAt: nextLastAdjustedAt })
-      );
+      await setData(STORAGE_KEY, JSON.stringify(nextState));
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 1200);
     } catch (e) {
@@ -110,7 +108,7 @@ export default function InventoryApp() {
     setStock(nextStock);
     setMovements(nextMovements);
     setSaleInputs((s) => ({ ...s, [code]: "" }));
-    persist(nextStock, nextMovements, lastAdjustedAt);
+    persist({ ...currentPersistedState, stock: nextStock, movements: nextMovements });
   }
 
   function undoLast(code) {
@@ -123,7 +121,7 @@ export default function InventoryApp() {
     const nextMovements = movements.filter((_, i) => i !== idx);
     setStock(nextStock);
     setMovements(nextMovements);
-    persist(nextStock, nextMovements, lastAdjustedAt);
+    persist({ ...currentPersistedState, stock: nextStock, movements: nextMovements });
   }
 
   function openEdit() {
@@ -153,7 +151,7 @@ export default function InventoryApp() {
     setMovements(nextMovements);
     setLastAdjustedAt(nextLastAdjustedAt);
     setEditMode(false);
-    persist(nextStock, nextMovements, nextLastAdjustedAt);
+    persist({ ...currentPersistedState, stock: nextStock, movements: nextMovements, lastAdjustedAt: nextLastAdjustedAt });
   }
 
   return (
