@@ -1,5 +1,5 @@
-import { getWeekStartStr, getPreviousWeekRangeStr, todayStr, formatDate } from "./dateUtils";
-import { formatCUP, revenueInRange } from "./money";
+import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, formatDate } from "./dateUtils";
+import { formatCUP, revenueInRange, totalRevenueInRange } from "./money";
 
 export default function WeeklySummary({
   products,
@@ -14,6 +14,10 @@ export default function WeeklySummary({
   const weekStart = getWeekStartStr();
   const today = todayStr();
   const { start: prevStart, end: prevEnd } = getPreviousWeekRangeStr();
+  const monthStart = getMonthStartStr();
+  const weekTotal = totalRevenueInRange(movements, weekStart, today);
+  const monthTotal = totalRevenueInRange(movements, monthStart, today);
+  const monthName = new Date(monthStart + "T00:00:00").toLocaleDateString("es-ES", { month: "long", year: "numeric" });
 
   const soldInRange = (code, start, end) =>
     movements
@@ -58,6 +62,19 @@ export default function WeeklySummary({
           );
         })}
       </div>
+
+      {showPrices && (
+        <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "12px 16px", fontSize: 14 }}>
+            <span style={{ color: "#8A8574" }}>Total semana actual</span>
+            <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(weekTotal)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "12px 16px", fontSize: 14 }}>
+            <span style={{ color: "#8A8574" }}>Total {monthName}</span>
+            <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(monthTotal)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
