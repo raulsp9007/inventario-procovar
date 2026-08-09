@@ -4,7 +4,6 @@ import { formatCUP, revenueInRange } from "./money";
 export default function WeeklySummary({
   products,
   movements,
-  prices,
   cumulativeRevenue,
   exchangeRate,
   commissionPercent,

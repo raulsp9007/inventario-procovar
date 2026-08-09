@@ -475,7 +475,6 @@ export default function InventoryApp() {
           <WeeklySummary
             products={PRODUCTS}
             movements={movements}
-            prices={prices}
             cumulativeRevenue={cumulativeRevenue}
             exchangeRate={exchangeRate}
             commissionPercent={commissionPercent}
