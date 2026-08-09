@@ -316,7 +316,7 @@ export default function InventoryApp() {
                       aria-label="Registrar venta"
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        flex: "0 0 auto", width: 40,
+                        flex: "0 0 auto", width: 40, height: 40,
                         background: "#22261F", color: "#F7F4EC", border: "none",
                         borderRadius: 7, padding: "10px", cursor: "pointer",
                       }}
