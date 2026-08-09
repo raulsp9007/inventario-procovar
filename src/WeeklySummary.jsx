@@ -1,5 +1,5 @@
 import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, formatDate } from "./dateUtils";
-import { formatCUP, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
+import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 
 export default function WeeklySummary({
   products,
@@ -19,6 +19,9 @@ export default function WeeklySummary({
   const monthTotal = totalRevenueInRange(movements, monthStart, today);
   const monthName = new Date(monthStart + "T00:00:00").toLocaleDateString("es-ES", { month: "long", year: "numeric" });
   const weeklyBreakdown = monthWeeklyBreakdown(movements, monthStart, today);
+  const cumulativeUSD = convertToUSD(cumulativeRevenue, exchangeRate);
+  const commissionCUP = (cumulativeRevenue * (commissionPercent || 0)) / 100;
+  const commissionUSD = convertToUSD(commissionCUP, exchangeRate);
 
   const soldInRange = (code, start, end) =>
     movements
@@ -101,6 +104,65 @@ export default function WeeklySummary({
           )}
         </div>
       )}
+
+      <div style={{ marginTop: 16, background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>TOTAL GENERAL ACUMULADO</span>
+          {showPrices && (
+            <span style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
+              {formatCUP(cumulativeRevenue)}
+              {cumulativeUSD !== null && <span style={{ color: "#8A8574", fontWeight: 500, fontSize: 13 }}> · {formatUSD(cumulativeUSD)}</span>}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 8 }}>
+          <label style={{ fontSize: 13, color: "#8A8574", display: "flex", alignItems: "center", gap: 6 }}>
+            1 USD =
+            <input
+              type="number"
+              inputMode="decimal"
+              value={exchangeRate ?? ""}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                onExchangeRateChange(isNaN(val) || val <= 0 ? null : val);
+              }}
+              placeholder="tasa"
+              style={{
+                width: 90, border: "1px solid #E7E2D3", borderRadius: 7,
+                padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums",
+              }}
+            />
+            CUP
+          </label>
+
+          <label style={{ fontSize: 13, color: "#8A8574", display: "flex", alignItems: "center", gap: 6 }}>
+            Comisión
+            <input
+              type="number"
+              inputMode="decimal"
+              value={commissionPercent || ""}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                onCommissionPercentChange(isNaN(val) || val < 0 ? 0 : val);
+              }}
+              placeholder="0"
+              style={{
+                width: 60, border: "1px solid #E7E2D3", borderRadius: 7,
+                padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums",
+              }}
+            />
+            %
+          </label>
+        </div>
+
+        {showPrices && commissionPercent > 0 && (
+          <div style={{ fontSize: 13, color: "#8A8574" }}>
+            Comisión ({commissionPercent}%): <span style={{ fontWeight: 700, color: "#26241F" }}>{formatCUP(commissionCUP)}</span>
+            {commissionUSD !== null && <span> · {formatUSD(commissionUSD)}</span>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
