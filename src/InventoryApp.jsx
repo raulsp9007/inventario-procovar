@@ -21,6 +21,13 @@ export default function InventoryApp() {
   );
   const [movements, setMovements] = useState([]);
   const [lastAdjustedAt, setLastAdjustedAt] = useState({});
+  const [prices, setPrices] = useState(() =>
+    PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: 0 }), {})
+  );
+  const [cumulativeRevenue, setCumulativeRevenue] = useState(0);
+  const [exchangeRate, setExchangeRate] = useState(null);
+  const [commissionPercent, setCommissionPercent] = useState(0);
+  const [showPrices, setShowPrices] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [saleInputs, setSaleInputs] = useState(() =>
@@ -30,7 +37,10 @@ export default function InventoryApp() {
   const [editInputs, setEditInputs] = useState({});
   const [error, setError] = useState("");
   const [view, setView] = useState("stock"); // "stock" | "resumen"
-  const currentPersistedState = { stock, movements, lastAdjustedAt };
+  const currentPersistedState = {
+    stock, movements, lastAdjustedAt,
+    prices, cumulativeRevenue, exchangeRate, commissionPercent, showPrices,
+  };
 
   useEffect(() => {
     (async () => {
@@ -41,6 +51,11 @@ export default function InventoryApp() {
           setStock(parsed.stock || {});
           setMovements(parsed.movements || []);
           setLastAdjustedAt(parsed.lastAdjustedAt || {});
+          setPrices(parsed.prices || {});
+          setCumulativeRevenue(parsed.cumulativeRevenue || 0);
+          setExchangeRate(parsed.exchangeRate ?? null);
+          setCommissionPercent(parsed.commissionPercent || 0);
+          setShowPrices(parsed.showPrices ?? true);
         }
       } catch (e) {
       } finally {
