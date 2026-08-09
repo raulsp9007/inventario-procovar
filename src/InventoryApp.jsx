@@ -92,7 +92,7 @@ export default function InventoryApp() {
     .filter((m) => m.type === "venta")
     .reduce((sum, m) => sum + m.qty, 0);
 
-  function makeMovement(code, type, qty) {
+  function makeMovement(code, type, qty, extra = {}) {
     return {
       id: `${Date.now()}-${type}-${code}-${Math.random().toString(36).slice(2, 7)}`,
       code,
@@ -100,6 +100,7 @@ export default function InventoryApp() {
       qty,
       date: todayStr(),
       timestamp: new Date().toISOString(),
+      ...extra,
     };
   }
 
@@ -117,13 +118,21 @@ export default function InventoryApp() {
       setTimeout(() => setError(""), 2500);
       return;
     }
+    const unitPrice = prices[code] || 0;
     const nextStock = { ...stock, [code]: current - qty };
-    const movement = makeMovement(code, "venta", qty);
+    const movement = makeMovement(code, "venta", qty, { unitPrice });
     const nextMovements = [movement, ...movements].slice(0, 500);
+    const nextCumulativeRevenue = cumulativeRevenue + qty * unitPrice;
     setStock(nextStock);
     setMovements(nextMovements);
+    setCumulativeRevenue(nextCumulativeRevenue);
     setSaleInputs((s) => ({ ...s, [code]: "" }));
-    persist({ ...currentPersistedState, stock: nextStock, movements: nextMovements });
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+    });
   }
 
   function undoLast(code) {
