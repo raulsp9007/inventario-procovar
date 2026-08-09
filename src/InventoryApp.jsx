@@ -471,7 +471,25 @@ export default function InventoryApp() {
         </>
         )}
 
-        {view === "resumen" && <WeeklySummary products={PRODUCTS} movements={movements} />}
+        {view === "resumen" && (
+          <WeeklySummary
+            products={PRODUCTS}
+            movements={movements}
+            prices={prices}
+            cumulativeRevenue={cumulativeRevenue}
+            exchangeRate={exchangeRate}
+            commissionPercent={commissionPercent}
+            showPrices={showPrices}
+            onExchangeRateChange={(next) => {
+              setExchangeRate(next);
+              persist({ ...currentPersistedState, exchangeRate: next });
+            }}
+            onCommissionPercentChange={(next) => {
+              setCommissionPercent(next);
+              persist({ ...currentPersistedState, commissionPercent: next });
+            }}
+          />
+        )}
 
         <div style={{ marginTop: 20, fontSize: 11.5, color: "#B4AF9E", textAlign: "center" }}>
           {saveState === "saving" ? "Guardando…" : saveState === "saved" ? "Guardado ✓" : "Los datos se guardan automáticamente en este dispositivo"}

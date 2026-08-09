@@ -1,6 +1,17 @@
 import { getWeekStartStr, getPreviousWeekRangeStr, todayStr, formatDate } from "./dateUtils";
+import { formatCUP, revenueInRange } from "./money";
 
-export default function WeeklySummary({ products, movements }) {
+export default function WeeklySummary({
+  products,
+  movements,
+  prices,
+  cumulativeRevenue,
+  exchangeRate,
+  commissionPercent,
+  showPrices,
+  onExchangeRateChange,
+  onCommissionPercentChange,
+}) {
   const weekStart = getWeekStartStr();
   const today = todayStr();
   const { start: prevStart, end: prevEnd } = getPreviousWeekRangeStr();
@@ -21,6 +32,7 @@ export default function WeeklySummary({ products, movements }) {
           const previous = soldInRange(p.code, prevStart, prevEnd);
           const hasComparison = previous > 0;
           const pctChange = hasComparison ? Math.round(((current - previous) / previous) * 100) : null;
+          const revenue = revenueInRange(movements, p.code, weekStart, today);
           return (
             <div
               key={p.code}
@@ -36,6 +48,9 @@ export default function WeeklySummary({ products, movements }) {
               </div>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                 <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{current} uds</span>
+                {showPrices && (
+                  <span style={{ fontSize: 12.5, color: "#8A8574", fontVariantNumeric: "tabular-nums" }}>{formatCUP(revenue)}</span>
+                )}
                 <span style={{ fontSize: 12.5, color: pctChange === null ? "#9A9484" : pctChange >= 0 ? "#3C6E4A" : "#B4661E" }}>
                   {pctChange === null ? "—" : `${pctChange >= 0 ? "↑" : "↓"} ${Math.abs(pctChange)}%`}
                 </span>
