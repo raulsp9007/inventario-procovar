@@ -4,6 +4,7 @@ import { getData, setData } from "./storage";
 import { todayStr, formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
 import WeeklySummary from "./WeeklySummary";
+import Orders from "./Orders.jsx";
 
 const PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
@@ -38,7 +39,7 @@ export default function InventoryApp() {
   const [editInputs, setEditInputs] = useState({});
   const [editPriceInputs, setEditPriceInputs] = useState({});
   const [error, setError] = useState("");
-  const [view, setView] = useState("stock"); // "stock" | "resumen"
+  const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos"
   const currentPersistedState = {
     stock, movements, lastAdjustedAt,
     prices, cumulativeRevenue, exchangeRate, commissionPercent, showPrices,
@@ -206,6 +207,52 @@ export default function InventoryApp() {
     });
   }
 
+  function confirmOrder({ customerName, isDelivery, lines }) {
+    const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const nextStock = { ...stock };
+    const newMovements = [];
+    let addedRevenue = 0;
+    lines.forEach(({ code, qty }) => {
+      const unitPrice = prices[code] || 0;
+      nextStock[code] = (nextStock[code] || 0) - qty;
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, orderId, customerName, isDelivery }));
+      addedRevenue += qty * unitPrice;
+    });
+    const nextMovements = [...newMovements, ...movements].slice(0, 500);
+    const nextCumulativeRevenue = cumulativeRevenue + addedRevenue;
+    setStock(nextStock);
+    setMovements(nextMovements);
+    setCumulativeRevenue(nextCumulativeRevenue);
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+    });
+  }
+
+  function deleteOrder(orderId) {
+    const orderMovements = movements.filter((m) => m.orderId === orderId);
+    if (orderMovements.length === 0) return;
+    const nextStock = { ...stock };
+    let removedRevenue = 0;
+    orderMovements.forEach((m) => {
+      nextStock[m.code] = (nextStock[m.code] || 0) + m.qty;
+      removedRevenue += m.qty * (m.unitPrice || 0);
+    });
+    const nextMovements = movements.filter((m) => m.orderId !== orderId);
+    const nextCumulativeRevenue = cumulativeRevenue - removedRevenue;
+    setStock(nextStock);
+    setMovements(nextMovements);
+    setCumulativeRevenue(nextCumulativeRevenue);
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+    });
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#F7F4EC", fontFamily: "'Inter', system-ui, sans-serif", color: "#26241F", paddingBottom: 48 }}>
       <style>{`
@@ -235,7 +282,7 @@ export default function InventoryApp() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0", display: "flex", gap: 8 }}>
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0", display: "flex", flexWrap: "wrap", gap: 8 }}>
         <button
           onClick={() => setView("stock")}
           style={{
@@ -257,6 +304,17 @@ export default function InventoryApp() {
           }}
         >
           Resumen semanal
+        </button>
+        <button
+          onClick={() => setView("pedidos")}
+          style={{
+            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            borderRadius: 7, border: "1px solid #22261F",
+            background: view === "pedidos" ? "#22261F" : "transparent",
+            color: view === "pedidos" ? "#F7F4EC" : "#22261F",
+          }}
+        >
+          Pedidos
         </button>
         <button
           onClick={() => {
@@ -486,6 +544,20 @@ export default function InventoryApp() {
             onCommissionPercentChange={(next) => {
               setCommissionPercent(next);
               persist({ ...currentPersistedState, commissionPercent: next });
+            }}
+          />
+        )}
+
+        {view === "pedidos" && (
+          <Orders
+            products={PRODUCTS}
+            movements={movements}
+            stock={stock}
+            onConfirmOrder={confirmOrder}
+            onDeleteOrder={deleteOrder}
+            onError={(message) => {
+              setError(message);
+              setTimeout(() => setError(""), 2500);
             }}
           />
         )}
