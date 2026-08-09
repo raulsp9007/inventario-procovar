@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Package, TrendingDown, Plus, Minus, RotateCcw, AlertTriangle, History, Settings2 } from "lucide-react";
+import { Plus, RotateCcw, AlertTriangle, History, Settings2 } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, formatDate, formatDateTime } from "./dateUtils";
 import WeeklySummary from "./WeeklySummary";
@@ -306,21 +306,22 @@ export default function InventoryApp() {
                       onChange={(e) => setSaleInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                       onKeyDown={(e) => { if (e.key === "Enter") registerSale(p.code); }}
                       style={{
-                        flex: "1 1 110px", minWidth: 110, border: "1px solid #E7E2D3", borderRadius: 7,
+                        flex: "1 1 auto", minWidth: 110, border: "1px solid #E7E2D3", borderRadius: 7,
                         padding: "9px 12px", fontSize: 16, fontVariantNumeric: "tabular-nums",
                       }}
                     />
                     <button
                       onClick={() => registerSale(p.code)}
+                      title="Registrar venta"
+                      aria-label="Registrar venta"
                       style={{
-                        display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                        flex: "1 1 auto",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flex: "0 0 auto", width: 40,
                         background: "#22261F", color: "#F7F4EC", border: "none",
-                        borderRadius: 7, padding: "10px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
-                        whiteSpace: "nowrap",
+                        borderRadius: 7, padding: "10px", cursor: "pointer",
                       }}
                     >
-                      <Minus size={14} /> Registrar venta
+                      <Plus size={18} strokeWidth={2.5} />
                     </button>
                     {lastMovement && (
                       <button
