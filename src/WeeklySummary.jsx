@@ -1,5 +1,5 @@
 import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, formatDate } from "./dateUtils";
-import { formatCUP, revenueInRange, totalRevenueInRange } from "./money";
+import { formatCUP, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 
 export default function WeeklySummary({
   products,
@@ -18,6 +18,7 @@ export default function WeeklySummary({
   const weekTotal = totalRevenueInRange(movements, weekStart, today);
   const monthTotal = totalRevenueInRange(movements, monthStart, today);
   const monthName = new Date(monthStart + "T00:00:00").toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  const weeklyBreakdown = monthWeeklyBreakdown(movements, monthStart, today);
 
   const soldInRange = (code, start, end) =>
     movements
@@ -73,6 +74,29 @@ export default function WeeklySummary({
             <span style={{ color: "#8A8574" }}>Total {monthName}</span>
             <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(monthTotal)}</span>
           </div>
+
+          {weeklyBreakdown.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
+                HISTORIAL SEMANAL DE {monthName.toUpperCase()}
+              </div>
+              <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+                {weeklyBreakdown.map((w, i) => (
+                  <div
+                    key={w.weekStart}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "10px 16px", fontSize: 13.5,
+                      borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
+                    }}
+                  >
+                    <span style={{ color: "#8A8574" }}>Semana del {formatDate(w.weekStart)}</span>
+                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(w.total)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
