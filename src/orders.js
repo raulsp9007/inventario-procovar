@@ -13,7 +13,7 @@ export function groupOrders(movements, dateStr) {
     }
     byId.get(m.orderId).lines.push({ code: m.code, qty: m.qty });
   });
-  return Array.from(byId.values()).sort((a, b) => (a.timestamp < b.timestamp ? -1 : 1));
+  return Array.from(byId.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
 export function formatOrdersForWhatsApp(orders, products) {
