@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, RotateCcw, AlertTriangle, History, Settings2 } from "lucide-react";
+import { Plus, RotateCcw, AlertTriangle, History, Settings2, Eye, EyeOff } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, formatDate, formatDateTime } from "./dateUtils";
+import { formatCUP } from "./money";
 import WeeklySummary from "./WeeklySummary";
 
 const PRODUCTS = [
@@ -257,6 +258,23 @@ export default function InventoryApp() {
         >
           Resumen semanal
         </button>
+        <button
+          onClick={() => {
+            const next = !showPrices;
+            setShowPrices(next);
+            persist({ ...currentPersistedState, showPrices: next });
+          }}
+          title={showPrices ? "Ocultar precios" : "Mostrar precios"}
+          aria-label={showPrices ? "Ocultar precios" : "Mostrar precios"}
+          style={{
+            flex: "0 0 auto", width: 40, padding: "9px", cursor: "pointer",
+            borderRadius: 7, border: "1px solid #22261F",
+            background: "transparent", color: "#22261F",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          {showPrices ? <Eye size={16} /> : <EyeOff size={16} />}
+        </button>
       </div>
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "20px 16px 0" }}>
@@ -320,6 +338,11 @@ export default function InventoryApp() {
                       <div style={{ fontSize: 12, color: "#9A9484" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
                       {lastAdjustedAt[p.code] && (
                         <div style={{ fontSize: 11, color: "#B4AF9E" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
+                      )}
+                      {showPrices && (
+                        <div style={{ fontSize: 11, color: "#8A8574" }}>
+                          Precio: {prices[p.code] ? formatCUP(prices[p.code]) : "no definido"}
+                        </div>
                       )}
                     </div>
                   </div>
