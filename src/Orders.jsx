@@ -15,9 +15,9 @@ function openOrderWhatsApp(order, products) {
 export default function Orders({ products, movements, stock, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onError }) {
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
-  const [qtyInputs, setQtyInputs] = useState(() =>
-    products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {})
-  );
+  const [draftLines, setDraftLines] = useState([]);
+  const [selectedProductCode, setSelectedProductCode] = useState("");
+  const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -38,6 +38,11 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
   const pastDatesDesc = Array.from(pastOrdersByDate.keys()).sort((a, b) => b.localeCompare(a));
   const pastOrdersCount = pastDatesDesc.reduce((sum, d) => sum + pastOrdersByDate.get(d).length, 0);
 
+  const availableProducts = products.filter((p) => !draftLines.some((l) => l.code === p.code));
+  const effectiveSelectedProductCode = availableProducts.some((p) => p.code === selectedProductCode)
+    ? selectedProductCode
+    : (availableProducts[0]?.code || "");
+
   const suggestions = showSuggestions
     ? matchCustomerNames(getCustomerNames(movements), customerName)
     : [];
@@ -45,17 +50,36 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
   function resetForm() {
     setCustomerName("");
     setIsDelivery(false);
-    setQtyInputs(products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {}));
+    setDraftLines([]);
+    setPendingQty("");
     setEditingOrderId(null);
   }
 
   function startEdit(order) {
     setCustomerName(order.customerName);
     setIsDelivery(order.isDelivery);
-    const inputs = products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {});
-    order.lines.forEach((line) => { inputs[line.code] = String(line.qty); });
-    setQtyInputs(inputs);
+    setDraftLines(order.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
+    setPendingQty("");
     setEditingOrderId(order.orderId);
+  }
+
+  function addDraftLine() {
+    if (!effectiveSelectedProductCode) return;
+    const qty = parseInt(pendingQty, 10);
+    if (!pendingQty || isNaN(qty) || qty <= 0) {
+      onError("Ingresa una cantidad válida.");
+      return;
+    }
+    setDraftLines((lines) => [...lines, { code: effectiveSelectedProductCode, qty: String(qty) }]);
+    setPendingQty("");
+  }
+
+  function updateDraftLineQty(code, value) {
+    setDraftLines((lines) => lines.map((l) => (l.code === code ? { ...l, qty: value } : l)));
+  }
+
+  function removeDraftLine(code) {
+    setDraftLines((lines) => lines.filter((l) => l.code !== code));
   }
 
   function confirmOrder() {
@@ -63,9 +87,9 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
       onError("Ingresa el nombre del cliente.");
       return;
     }
-    const lines = products
-      .map((p) => ({ code: p.code, qty: parseInt(qtyInputs[p.code], 10) }))
-      .filter((line) => !isNaN(line.qty) && line.qty > 0);
+    const lines = draftLines
+      .map((l) => ({ code: l.code, qty: parseInt(l.qty, 10) }))
+      .filter((l) => !isNaN(l.qty) && l.qty > 0);
     if (lines.length === 0) {
       onError("Agrega al menos un producto al pedido.");
       return;
@@ -259,24 +283,81 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
           Entrega a domicilio
         </label>
 
-        <div style={{ display: "grid", gap: 8 }}>
-          {products.map((p) => (
-            <div key={p.code} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <span style={{ fontSize: 13.5 }}>{p.name}</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                placeholder="0"
-                value={qtyInputs[p.code]}
-                onChange={(e) => setQtyInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                style={{
-                  width: 70, textAlign: "right", border: "1px solid #E7E2D3", borderRadius: 7,
-                  padding: "7px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
-                }}
-              />
-            </div>
-          ))}
-        </div>
+        {draftLines.length > 0 && (
+          <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+            {draftLines.map((line) => {
+              const product = products.find((p) => p.code === line.code);
+              return (
+                <div key={line.code} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 13.5 }}>{product ? product.name : line.code}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={line.qty}
+                      onChange={(e) => updateDraftLineQty(line.code, e.target.value)}
+                      style={{
+                        width: 60, textAlign: "right", border: "1px solid #E7E2D3", borderRadius: 7,
+                        padding: "6px 8px", fontSize: 14, fontVariantNumeric: "tabular-nums",
+                      }}
+                    />
+                    <button
+                      onClick={() => removeDraftLine(line.code)}
+                      title="Quitar producto"
+                      aria-label="Quitar producto"
+                      style={{
+                        background: "transparent", border: "none", color: "#8A8574",
+                        cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {availableProducts.length > 0 ? (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select
+              value={effectiveSelectedProductCode}
+              onChange={(e) => setSelectedProductCode(e.target.value)}
+              style={{
+                flex: "1 1 auto", border: "1px solid #E7E2D3", borderRadius: 7,
+                padding: "9px 10px", fontSize: 14, background: "#FFFFFF",
+              }}
+            >
+              {availableProducts.map((p) => (
+                <option key={p.code} value={p.code}>{p.name}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="Cant."
+              value={pendingQty}
+              onChange={(e) => setPendingQty(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addDraftLine(); }}
+              style={{
+                width: 70, textAlign: "right", border: "1px solid #E7E2D3", borderRadius: 7,
+                padding: "9px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
+              }}
+            />
+            <button
+              onClick={addDraftLine}
+              style={{
+                flex: "0 0 auto", background: "#22261F", color: "#F7F4EC", border: "none",
+                borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              Agregar
+            </button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12.5, color: "#9A9484" }}>Todos los productos ya están en el pedido.</div>
+        )}
 
         <button
           onClick={confirmOrder}
