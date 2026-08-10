@@ -236,6 +236,42 @@ export default function InventoryApp() {
     });
   }
 
+  function editOrder(orderId, { customerName, isDelivery, lines }) {
+    const originalMovements = movements.filter((m) => m.orderId === orderId);
+    if (originalMovements.length === 0) return;
+
+    const restoredStock = { ...stock };
+    let removedRevenue = 0;
+    originalMovements.forEach((m) => {
+      restoredStock[m.code] = (restoredStock[m.code] || 0) + m.qty;
+      removedRevenue += m.qty * (m.unitPrice || 0);
+    });
+
+    const nextStock = { ...restoredStock };
+    const newMovements = [];
+    let addedRevenue = 0;
+    lines.forEach(({ code, qty }) => {
+      const unitPrice = prices[code] || 0;
+      nextStock[code] = (nextStock[code] || 0) - qty;
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, orderId, customerName, isDelivery, sent: false }));
+      addedRevenue += qty * unitPrice;
+    });
+
+    const otherMovements = movements.filter((m) => m.orderId !== orderId);
+    const nextMovements = [...newMovements, ...otherMovements].slice(0, 500);
+    const nextCumulativeRevenue = cumulativeRevenue - removedRevenue + addedRevenue;
+
+    setStock(nextStock);
+    setMovements(nextMovements);
+    setCumulativeRevenue(nextCumulativeRevenue);
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+    });
+  }
+
   function markOrderSent(orderId, sent) {
     const nextMovements = movements.map((m) =>
       m.orderId === orderId ? { ...m, sent } : m
@@ -555,6 +591,7 @@ export default function InventoryApp() {
             movements={movements}
             stock={stock}
             onConfirmOrder={confirmOrder}
+            onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
             onMarkSent={markOrderSent}
             onError={(message) => {

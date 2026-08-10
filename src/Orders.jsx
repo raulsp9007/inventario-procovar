@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2, Send } from "lucide-react";
+import { Trash2, Send, Pencil } from "lucide-react";
 import { todayStr } from "./dateUtils";
 import { groupOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
@@ -10,7 +10,7 @@ function openOrderWhatsApp(order, products) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-export default function Orders({ products, movements, stock, onConfirmOrder, onDeleteOrder, onMarkSent, onError }) {
+export default function Orders({ products, movements, stock, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onError }) {
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
   const [qtyInputs, setQtyInputs] = useState(() =>
@@ -19,11 +19,28 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [editingOrderId, setEditingOrderId] = useState(null);
 
   const todaysOrders = groupOrders(movements, todayStr());
   const suggestions = showSuggestions
     ? matchCustomerNames(getCustomerNames(movements), customerName)
     : [];
+
+  function resetForm() {
+    setCustomerName("");
+    setIsDelivery(false);
+    setQtyInputs(products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {}));
+    setEditingOrderId(null);
+  }
+
+  function startEdit(order) {
+    setCustomerName(order.customerName);
+    setIsDelivery(order.isDelivery);
+    const inputs = products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {});
+    order.lines.forEach((line) => { inputs[line.code] = String(line.qty); });
+    setQtyInputs(inputs);
+    setEditingOrderId(order.orderId);
+  }
 
   function confirmOrder() {
     if (!customerName.trim()) {
@@ -37,18 +54,25 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
       onError("Agrega al menos un producto al pedido.");
       return;
     }
+    const editingOrder = editingOrderId ? todaysOrders.find((o) => o.orderId === editingOrderId) : null;
     for (const line of lines) {
-      const available = stock[line.code] || 0;
+      const reserved = editingOrder
+        ? (editingOrder.lines.find((l) => l.code === line.code)?.qty || 0)
+        : 0;
+      const available = (stock[line.code] || 0) + reserved;
       if (line.qty > available) {
         const product = products.find((p) => p.code === line.code);
         onError(`No hay suficiente stock de ${product ? product.name : line.code}.`);
         return;
       }
     }
-    onConfirmOrder({ customerName: customerName.trim(), isDelivery, lines });
-    setCustomerName("");
-    setIsDelivery(false);
-    setQtyInputs(products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {}));
+    const draft = { customerName: customerName.trim(), isDelivery, lines };
+    if (editingOrderId) {
+      onEditOrder(editingOrderId, draft);
+    } else {
+      onConfirmOrder(draft);
+    }
+    resetForm();
   }
 
   function toggleSelected(orderId) {
@@ -72,8 +96,21 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
 
   return (
     <div>
-      <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
-        NUEVO PEDIDO
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>
+          {editingOrderId ? "EDITAR PEDIDO" : "NUEVO PEDIDO"}
+        </div>
+        {editingOrderId && (
+          <button
+            onClick={resetForm}
+            style={{
+              background: "transparent", border: "none", color: "#8A8574", fontSize: 12.5,
+              cursor: "pointer", textDecoration: "underline",
+            }}
+          >
+            Cancelar edición
+          </button>
+        )}
       </div>
       <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
         <div style={{ position: "relative", marginBottom: 10 }}>
@@ -148,7 +185,7 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
             borderRadius: 7, padding: "11px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}
         >
-          Confirmar pedido
+          {editingOrderId ? "Guardar cambios" : "Confirmar pedido"}
         </button>
       </div>
 
@@ -228,6 +265,18 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
                     />
                     Enviado
                   </label>
+                  <button
+                    onClick={() => startEdit(order)}
+                    title="Editar pedido"
+                    aria-label="Editar pedido"
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
+                      borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                    }}
+                  >
+                    <Pencil size={14} />
+                  </button>
                   <button
                     onClick={() => openOrderWhatsApp(order, products)}
                     title="Enviar por WhatsApp"
