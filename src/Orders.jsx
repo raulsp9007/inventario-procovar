@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Trash2, Send } from "lucide-react";
 import { todayStr } from "./dateUtils";
 import { groupOrders, formatOrdersForWhatsApp } from "./orderHelpers";
+import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
 
 export default function Orders({ products, movements, stock, onConfirmOrder, onDeleteOrder, onError }) {
   const [customerName, setCustomerName] = useState("");
@@ -9,8 +10,12 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
   const [qtyInputs, setQtyInputs] = useState(() =>
     products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {})
   );
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const todaysOrders = groupOrders(movements, todayStr());
+  const suggestions = showSuggestions
+    ? matchCustomerNames(getCustomerNames(movements), customerName)
+    : [];
 
   function confirmOrder() {
     if (!customerName.trim()) {
@@ -50,16 +55,42 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
         NUEVO PEDIDO
       </div>
       <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
-        <input
-          type="text"
-          placeholder="Nombre y apellidos del cliente"
-          value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
-          style={{
-            width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
-            padding: "9px 12px", fontSize: 14, marginBottom: 10,
-          }}
-        />
+        <div style={{ position: "relative", marginBottom: 10 }}>
+          <input
+            type="text"
+            placeholder="Nombre y apellidos del cliente"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            style={{
+              width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
+              padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
+            }}
+          />
+          {suggestions.length > 0 && (
+            <div
+              style={{
+                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
+                background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 7,
+                marginTop: 4, overflow: "hidden",
+              }}
+            >
+              {suggestions.map((name) => (
+                <div
+                  key={name}
+                  onClick={() => {
+                    setCustomerName(name);
+                    setShowSuggestions(false);
+                  }}
+                  style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer" }}
+                >
+                  {name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "#8A8574", marginBottom: 14, cursor: "pointer" }}>
           <input

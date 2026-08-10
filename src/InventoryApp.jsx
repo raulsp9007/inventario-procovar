@@ -5,6 +5,7 @@ import { todayStr, formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
+import Customers from "./Customers.jsx";
 
 const PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
@@ -39,7 +40,7 @@ export default function InventoryApp() {
   const [editInputs, setEditInputs] = useState({});
   const [editPriceInputs, setEditPriceInputs] = useState({});
   const [error, setError] = useState("");
-  const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos"
+  const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes"
   const currentPersistedState = {
     stock, movements, lastAdjustedAt,
     prices, cumulativeRevenue, exchangeRate, commissionPercent, showPrices,
@@ -51,6 +52,8 @@ export default function InventoryApp() {
         const result = await getData(STORAGE_KEY);
         if (result && result.value) {
           const parsed = JSON.parse(result.value);
+          // Campo nuevo agregado alguna vez: siempre con `|| default` / `?? default` acá.
+          // Así datos guardados en una versión anterior nunca rompen ni se borran.
           setStock(parsed.stock || {});
           setMovements(parsed.movements || []);
           setLastAdjustedAt(parsed.lastAdjustedAt || {});
@@ -317,6 +320,17 @@ export default function InventoryApp() {
           Pedidos
         </button>
         <button
+          onClick={() => setView("clientes")}
+          style={{
+            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            borderRadius: 7, border: "1px solid #22261F",
+            background: view === "clientes" ? "#22261F" : "transparent",
+            color: view === "clientes" ? "#F7F4EC" : "#22261F",
+          }}
+        >
+          Clientes
+        </button>
+        <button
           onClick={() => {
             const next = !showPrices;
             setShowPrices(next);
@@ -560,6 +574,10 @@ export default function InventoryApp() {
               setTimeout(() => setError(""), 2500);
             }}
           />
+        )}
+
+        {view === "clientes" && (
+          <Customers products={PRODUCTS} movements={movements} />
         )}
 
         <div style={{ marginTop: 20, fontSize: 11.5, color: "#B4AF9E", textAlign: "center" }}>
