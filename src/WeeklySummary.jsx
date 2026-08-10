@@ -165,8 +165,11 @@ export default function WeeklySummary({
 
         {showPrices && commissionPercent > 0 && (
           <div style={{ fontSize: 13, color: "#8A8574" }}>
-            Comisión ({commissionPercent}%): <span style={{ fontWeight: 700, color: "#26241F" }}>{formatCUP(commissionCUP)}</span>
-            {commissionUSD !== null && <span> · {formatUSD(commissionUSD)}</span>}
+            Comisión ({commissionPercent}%):{" "}
+            <span style={{ fontWeight: 700, color: "#26241F" }}>
+              {commissionUSD !== null ? formatUSD(commissionUSD) : formatCUP(commissionCUP)}
+            </span>
+            {commissionUSD === null && <span> (definí la tasa USD arriba para verla en dólares)</span>}
           </div>
         )}
       </div>
