@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, RotateCcw, AlertTriangle, History, Settings2, Eye, EyeOff } from "lucide-react";
+import { RotateCcw, AlertTriangle, History, Settings2, Eye, EyeOff } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
@@ -35,9 +35,6 @@ export default function InventoryApp() {
   const [showPrices, setShowPrices] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
-  const [saleInputs, setSaleInputs] = useState(() =>
-    DEFAULT_PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {})
-  );
   const [editMode, setEditMode] = useState(false);
   const [editInputs, setEditInputs] = useState({});
   const [editPriceInputs, setEditPriceInputs] = useState({});
@@ -113,37 +110,6 @@ export default function InventoryApp() {
       timestamp: new Date().toISOString(),
       ...extra,
     };
-  }
-
-  function registerSale(code) {
-    const raw = saleInputs[code];
-    const qty = parseInt(raw, 10);
-    if (!raw || isNaN(qty) || qty <= 0) {
-      setError("Ingresa una cantidad válida.");
-      setTimeout(() => setError(""), 2500);
-      return;
-    }
-    const current = stock[code] || 0;
-    if (qty > current) {
-      setError("No hay suficiente stock para esa venta.");
-      setTimeout(() => setError(""), 2500);
-      return;
-    }
-    const unitPrice = prices[code] || 0;
-    const nextStock = { ...stock, [code]: current - qty };
-    const movement = makeMovement(code, "venta", qty, { unitPrice });
-    const nextMovements = [movement, ...movements].slice(0, 500);
-    const nextCumulativeRevenue = cumulativeRevenue + qty * unitPrice;
-    setStock(nextStock);
-    setMovements(nextMovements);
-    setCumulativeRevenue(nextCumulativeRevenue);
-    setSaleInputs((s) => ({ ...s, [code]: "" }));
-    persist({
-      ...currentPersistedState,
-      stock: nextStock,
-      movements: nextMovements,
-      cumulativeRevenue: nextCumulativeRevenue,
-    });
   }
 
   function undoLast(code) {
@@ -502,46 +468,19 @@ export default function InventoryApp() {
                   </div>
                 </div>
 
-                {!editMode && (
+                {!editMode && lastMovement && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, alignItems: "center" }}>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      placeholder="Cant. vendida"
-                      value={saleInputs[p.code] ?? ""}
-                      onChange={(e) => setSaleInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") registerSale(p.code); }}
-                      style={{
-                        flex: "1 1 auto", minWidth: 110, border: "1px solid #E7E2D3", borderRadius: 7,
-                        padding: "9px 12px", fontSize: 16, fontVariantNumeric: "tabular-nums",
-                      }}
-                    />
                     <button
-                      onClick={() => registerSale(p.code)}
-                      title="Registrar venta"
-                      aria-label="Registrar venta"
+                      onClick={() => undoLast(p.code)}
+                      title="Deshacer último movimiento"
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        flex: "0 0 auto", width: 40, height: 40,
-                        background: "#22261F", color: "#F7F4EC", border: "none",
-                        borderRadius: 7, padding: "10px", cursor: "pointer",
+                        background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
+                        borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                       }}
                     >
-                      <Plus size={18} strokeWidth={2.5} />
+                      <RotateCcw size={14} />
                     </button>
-                    {lastMovement && (
-                      <button
-                        onClick={() => undoLast(p.code)}
-                        title="Deshacer último movimiento"
-                        style={{
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                          borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
-                        }}
-                      >
-                        <RotateCcw size={14} />
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
