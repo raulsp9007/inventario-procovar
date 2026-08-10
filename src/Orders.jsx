@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Trash2, Send, Pencil } from "lucide-react";
-import { todayStr } from "./dateUtils";
-import { groupOrders, formatOrderForWhatsApp } from "./orderHelpers";
+import { Trash2, Send, Pencil, ChevronDown, ChevronUp } from "lucide-react";
+import { todayStr, formatDate, getDateNDaysAgoStr } from "./dateUtils";
+import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
+
+const PAST_ORDERS_DAYS = 14;
 
 function openOrderWhatsApp(order, products) {
   const text = formatOrderForWhatsApp(order, products);
@@ -20,8 +22,22 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [editingOrderId, setEditingOrderId] = useState(null);
+  const [showPast, setShowPast] = useState(false);
 
-  const todaysOrders = groupOrders(movements, todayStr());
+  const today = todayStr();
+  const allOrders = groupAllOrders(movements);
+  const todaysOrders = allOrders.filter((o) => o.date === today);
+  const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
+  const pastOrdersByDate = new Map();
+  allOrders
+    .filter((o) => o.date !== today && o.date >= pastCutoff)
+    .forEach((o) => {
+      if (!pastOrdersByDate.has(o.date)) pastOrdersByDate.set(o.date, []);
+      pastOrdersByDate.get(o.date).push(o);
+    });
+  const pastDatesDesc = Array.from(pastOrdersByDate.keys()).sort((a, b) => b.localeCompare(a));
+  const pastOrdersCount = pastDatesDesc.reduce((sum, d) => sum + pastOrdersByDate.get(d).length, 0);
+
   const suggestions = showSuggestions
     ? matchCustomerNames(getCustomerNames(movements), customerName)
     : [];
@@ -54,7 +70,7 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
       onError("Agrega al menos un producto al pedido.");
       return;
     }
-    const editingOrder = editingOrderId ? todaysOrders.find((o) => o.orderId === editingOrderId) : null;
+    const editingOrder = editingOrderId ? allOrders.find((o) => o.orderId === editingOrderId) : null;
     for (const line of lines) {
       const reserved = editingOrder
         ? (editingOrder.lines.find((l) => l.code === line.code)?.qty || 0)
@@ -92,6 +108,90 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
     });
     setSelectMode(false);
     setSelectedIds(new Set());
+  }
+
+  function renderOrderRow(order, i, { inSelectMode }) {
+    return (
+      <div
+        key={order.orderId}
+        style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          gap: 8, padding: "12px 16px", fontSize: 13.5,
+          borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {inSelectMode && (
+            <input
+              type="checkbox"
+              checked={order.sent || selectedIds.has(order.orderId)}
+              disabled={order.sent}
+              onChange={() => toggleSelected(order.orderId)}
+            />
+          )}
+          <div>
+            <div style={{ fontWeight: 600 }}>
+              {order.isDelivery ? "📦 " : ""}{order.customerName}
+            </div>
+            <div style={{ color: "#9A9484", fontSize: 12.5 }}>
+              {order.lines.map((line) => {
+                const product = products.find((p) => p.code === line.code);
+                return `${line.qty}x ${product ? product.short : line.code}`;
+              }).join(", ")}
+            </div>
+          </div>
+        </div>
+
+        {!inSelectMode && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={order.sent}
+                onChange={(e) => onMarkSent(order.orderId, e.target.checked)}
+              />
+              Enviado
+            </label>
+            <button
+              onClick={() => startEdit(order)}
+              title="Editar pedido"
+              aria-label="Editar pedido"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
+                borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+              }}
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={() => openOrderWhatsApp(order, products)}
+              title="Enviar por WhatsApp"
+              aria-label="Enviar por WhatsApp"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: "#25D366", color: "#FFFFFF", border: "none",
+                borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+              }}
+            >
+              <Send size={14} />
+            </button>
+            <button
+              onClick={() => onDeleteOrder(order.orderId)}
+              title="Eliminar pedido"
+              aria-label="Eliminar pedido"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
+                borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -224,85 +324,32 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
         </div>
       ) : (
         <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
-          {todaysOrders.map((order, i) => (
-            <div
-              key={order.orderId}
-              style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                gap: 8, padding: "12px 16px", fontSize: 13.5,
-                borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {selectMode && (
-                  <input
-                    type="checkbox"
-                    checked={order.sent || selectedIds.has(order.orderId)}
-                    disabled={order.sent}
-                    onChange={() => toggleSelected(order.orderId)}
-                  />
-                )}
-                <div>
-                  <div style={{ fontWeight: 600 }}>
-                    {order.isDelivery ? "📦 " : ""}{order.customerName}
-                  </div>
-                  <div style={{ color: "#9A9484", fontSize: 12.5 }}>
-                    {order.lines.map((line) => {
-                      const product = products.find((p) => p.code === line.code);
-                      return `${line.qty}x ${product ? product.short : line.code}`;
-                    }).join(", ")}
-                  </div>
-                </div>
-              </div>
+          {todaysOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: selectMode }))}
+        </div>
+      )}
 
-              {!selectMode && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={order.sent}
-                      onChange={(e) => onMarkSent(order.orderId, e.target.checked)}
-                    />
-                    Enviado
-                  </label>
-                  <button
-                    onClick={() => startEdit(order)}
-                    title="Editar pedido"
-                    aria-label="Editar pedido"
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                      borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
-                    }}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    onClick={() => openOrderWhatsApp(order, products)}
-                    title="Enviar por WhatsApp"
-                    aria-label="Enviar por WhatsApp"
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: "#25D366", color: "#FFFFFF", border: "none",
-                      borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
-                    }}
-                  >
-                    <Send size={14} />
-                  </button>
-                  <button
-                    onClick={() => onDeleteOrder(order.orderId)}
-                    title="Eliminar pedido"
-                    aria-label="Eliminar pedido"
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                      borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              )}
+      {pastOrdersCount > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <button
+            onClick={() => setShowPast((s) => !s)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
+              color: "#8A8574", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
+              padding: 0, marginBottom: showPast ? 10 : 0,
+            }}
+          >
+            {showPast ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            PEDIDOS ANTERIORES ({pastOrdersCount})
+          </button>
+
+          {showPast && pastDatesDesc.map((date) => (
+            <div key={date} style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 12, color: "#9A9484", marginBottom: 6 }}>
+                {formatDate(date)}
+              </div>
+              <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+                {pastOrdersByDate.get(date).map((order, i) => renderOrderRow(order, i, { inSelectMode: false }))}
+              </div>
             </div>
           ))}
         </div>

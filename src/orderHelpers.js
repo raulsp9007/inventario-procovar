@@ -1,13 +1,14 @@
-export function groupOrders(movements, dateStr) {
-  const todaysOrderMovements = movements.filter((m) => m.date === dateStr && m.orderId);
+export function groupAllOrders(movements) {
+  const orderMovements = movements.filter((m) => m.orderId);
   const byId = new Map();
-  todaysOrderMovements.forEach((m) => {
+  orderMovements.forEach((m) => {
     if (!byId.has(m.orderId)) {
       byId.set(m.orderId, {
         orderId: m.orderId,
         customerName: m.customerName,
         isDelivery: !!m.isDelivery,
         sent: !!m.sent,
+        date: m.date,
         timestamp: m.timestamp,
         lines: [],
       });
@@ -15,6 +16,10 @@ export function groupOrders(movements, dateStr) {
     byId.get(m.orderId).lines.push({ code: m.code, qty: m.qty });
   });
   return Array.from(byId.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+}
+
+export function groupOrders(movements, dateStr) {
+  return groupAllOrders(movements).filter((order) => order.date === dateStr);
 }
 
 export function formatOrderForWhatsApp(order, products) {

@@ -256,6 +256,7 @@ export default function InventoryApp() {
   function editOrder(orderId, { customerName, isDelivery, lines }) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
+    const originalDate = originalMovements[0].date;
 
     const restoredStock = { ...stock };
     let removedRevenue = 0;
@@ -270,7 +271,7 @@ export default function InventoryApp() {
     lines.forEach(({ code, qty }) => {
       const unitPrice = prices[code] || 0;
       nextStock[code] = (nextStock[code] || 0) - qty;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, orderId, customerName, isDelivery, sent: false }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, orderId, customerName, isDelivery, sent: false, date: originalDate }));
       addedRevenue += qty * unitPrice;
     });
 

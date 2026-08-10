@@ -51,3 +51,10 @@ export function getMonthStartStr(referenceDateStr = todayStr()) {
   const d = new Date(referenceDateStr + "T00:00:00");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
 }
+
+// Fecha n días antes de referenceDateStr (formato "YYYY-MM-DD").
+export function getDateNDaysAgoStr(n, referenceDateStr = todayStr()) {
+  const d = new Date(referenceDateStr + "T00:00:00");
+  d.setDate(d.getDate() - n);
+  return toDateStr(d);
+}
