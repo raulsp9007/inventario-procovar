@@ -1,16 +1,24 @@
 import { useState } from "react";
 import { Trash2, Send } from "lucide-react";
 import { todayStr } from "./dateUtils";
-import { groupOrders, formatOrdersForWhatsApp } from "./orderHelpers";
+import { groupOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
 
-export default function Orders({ products, movements, stock, onConfirmOrder, onDeleteOrder, onError }) {
+function openOrderWhatsApp(order, products) {
+  const text = formatOrderForWhatsApp(order, products);
+  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+export default function Orders({ products, movements, stock, onConfirmOrder, onDeleteOrder, onMarkSent, onError }) {
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
   const [qtyInputs, setQtyInputs] = useState(() =>
     products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {})
   );
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
 
   const todaysOrders = groupOrders(movements, todayStr());
   const suggestions = showSuggestions
@@ -43,10 +51,23 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
     setQtyInputs(products.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {}));
   }
 
-  function sendWhatsApp() {
-    const text = formatOrdersForWhatsApp(todaysOrders, products);
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+  function toggleSelected(orderId) {
+    setSelectedIds((s) => {
+      const next = new Set(s);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  }
+
+  function confirmBulkSend() {
+    todaysOrders.forEach((order) => {
+      if (!selectedIds.has(order.orderId)) return;
+      openOrderWhatsApp(order, products);
+      onMarkSent(order.orderId, true);
+    });
+    setSelectMode(false);
+    setSelectedIds(new Set());
   }
 
   return (
@@ -134,19 +155,31 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PEDIDOS DE HOY</div>
         <button
-          onClick={sendWhatsApp}
-          disabled={todaysOrders.length === 0}
+          onClick={() => (selectMode ? confirmBulkSend() : setSelectMode(true))}
+          disabled={todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)}
           style={{
             display: "flex", alignItems: "center", gap: 6,
-            background: todaysOrders.length === 0 ? "#E7E2D3" : "#25D366",
-            color: todaysOrders.length === 0 ? "#9A9484" : "#FFFFFF",
+            background: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "#E7E2D3" : "#25D366",
+            color: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "#9A9484" : "#FFFFFF",
             border: "none", borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600,
-            cursor: todaysOrders.length === 0 ? "default" : "pointer",
+            cursor: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "default" : "pointer",
           }}
         >
-          <Send size={14} /> Enviar por WhatsApp
+          <Send size={14} /> {selectMode ? `Confirmar envío (${selectedIds.size})` : "Enviar por WhatsApp"}
         </button>
       </div>
+
+      {selectMode && (
+        <button
+          onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+          style={{
+            background: "transparent", border: "none", color: "#8A8574", fontSize: 12.5,
+            cursor: "pointer", padding: "0 0 10px", textDecoration: "underline",
+          }}
+        >
+          Cancelar selección
+        </button>
+      )}
 
       {todaysOrders.length === 0 ? (
         <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
@@ -163,29 +196,64 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onD
                 borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
               }}
             >
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {order.isDelivery ? "📦 " : ""}{order.customerName}
-                </div>
-                <div style={{ color: "#9A9484", fontSize: 12.5 }}>
-                  {order.lines.map((line) => {
-                    const product = products.find((p) => p.code === line.code);
-                    return `${line.qty}x ${product ? product.short : line.code}`;
-                  }).join(", ")}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={order.sent || selectedIds.has(order.orderId)}
+                    disabled={order.sent}
+                    onChange={() => toggleSelected(order.orderId)}
+                  />
+                )}
+                <div>
+                  <div style={{ fontWeight: 600 }}>
+                    {order.isDelivery ? "📦 " : ""}{order.customerName}
+                  </div>
+                  <div style={{ color: "#9A9484", fontSize: 12.5 }}>
+                    {order.lines.map((line) => {
+                      const product = products.find((p) => p.code === line.code);
+                      return `${line.qty}x ${product ? product.short : line.code}`;
+                    }).join(", ")}
+                  </div>
                 </div>
               </div>
-              <button
-                onClick={() => onDeleteOrder(order.orderId)}
-                title="Eliminar pedido"
-                aria-label="Eliminar pedido"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                  borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
+
+              {!selectMode && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={order.sent}
+                      onChange={(e) => onMarkSent(order.orderId, e.target.checked)}
+                    />
+                    Enviado
+                  </label>
+                  <button
+                    onClick={() => openOrderWhatsApp(order, products)}
+                    title="Enviar por WhatsApp"
+                    aria-label="Enviar por WhatsApp"
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "#25D366", color: "#FFFFFF", border: "none",
+                      borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                    }}
+                  >
+                    <Send size={14} />
+                  </button>
+                  <button
+                    onClick={() => onDeleteOrder(order.orderId)}
+                    title="Eliminar pedido"
+                    aria-label="Eliminar pedido"
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
+                      borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -7,6 +7,7 @@ export function groupOrders(movements, dateStr) {
         orderId: m.orderId,
         customerName: m.customerName,
         isDelivery: !!m.isDelivery,
+        sent: !!m.sent,
         timestamp: m.timestamp,
         lines: [],
       });
@@ -16,17 +17,11 @@ export function groupOrders(movements, dateStr) {
   return Array.from(byId.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
-export function formatOrdersForWhatsApp(orders, products) {
-  return orders
-    .map((order) => {
-      const itemsText = order.lines
-        .map((line) => {
-          const product = products.find((p) => p.code === line.code);
-          return `${line.qty}x ${product ? product.name : line.code}`;
-        })
-        .join(", ");
-      const prefix = order.isDelivery ? `📦 ${order.customerName} (a domicilio)` : order.customerName;
-      return `${prefix}: ${itemsText}`;
-    })
-    .join("\n");
+export function formatOrderForWhatsApp(order, products) {
+  const nameLine = order.isDelivery ? `${order.customerName} (a domicilio)` : order.customerName;
+  const productLines = order.lines.map((line) => {
+    const product = products.find((p) => p.code === line.code);
+    return `${product ? product.name : line.code} - ${line.qty}`;
+  });
+  return [nameLine, ...productLines].join("\n");
 }

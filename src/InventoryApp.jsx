@@ -236,6 +236,14 @@ export default function InventoryApp() {
     });
   }
 
+  function markOrderSent(orderId, sent) {
+    const nextMovements = movements.map((m) =>
+      m.orderId === orderId ? { ...m, sent } : m
+    );
+    setMovements(nextMovements);
+    persist({ ...currentPersistedState, movements: nextMovements });
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#F7F4EC", fontFamily: "'Inter', system-ui, sans-serif", color: "#26241F", paddingBottom: 48 }}>
       <style>{`
@@ -548,6 +556,7 @@ export default function InventoryApp() {
             stock={stock}
             onConfirmOrder={confirmOrder}
             onDeleteOrder={deleteOrder}
+            onMarkSent={markOrderSent}
             onError={(message) => {
               setError(message);
               setTimeout(() => setError(""), 2500);
