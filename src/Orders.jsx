@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Trash2, Send } from "lucide-react";
 import { todayStr } from "./dateUtils";
-import { groupOrders, formatOrdersForWhatsApp } from "./orders";
+import { groupOrders, formatOrdersForWhatsApp } from "./orderHelpers";
 
 export default function Orders({ products, movements, stock, onConfirmOrder, onDeleteOrder, onError }) {
   const [customerName, setCustomerName] = useState("");
