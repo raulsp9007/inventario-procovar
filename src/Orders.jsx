@@ -38,7 +38,7 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
   const pastDatesDesc = Array.from(pastOrdersByDate.keys()).sort((a, b) => b.localeCompare(a));
   const pastOrdersCount = pastDatesDesc.reduce((sum, d) => sum + pastOrdersByDate.get(d).length, 0);
 
-  const availableProducts = products.filter((p) => !draftLines.some((l) => l.code === p.code));
+  const availableProducts = products.filter((p) => !p.archived && !draftLines.some((l) => l.code === p.code));
   const effectiveSelectedProductCode = availableProducts.some((p) => p.code === selectedProductCode)
     ? selectedProductCode
     : (availableProducts[0]?.code || "");

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, History, Settings2, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, History, Settings2, Eye, EyeOff, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
@@ -48,6 +48,7 @@ export default function InventoryApp() {
   const [editLowStockInputs, setEditLowStockInputs] = useState({});
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes"
   const currentPersistedState = {
@@ -102,8 +103,10 @@ export default function InventoryApp() {
     );
   }
 
-  const totalStock = products.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
-  const lowStockCount = products.filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
+  const activeProducts = products.filter((p) => !p.archived);
+  const archivedProducts = products.filter((p) => p.archived);
+  const totalStock = activeProducts.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
+  const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
   const todaysMovements = movements.filter((m) => m.date === todayStr());
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
@@ -127,7 +130,7 @@ export default function InventoryApp() {
     const nameInputs = {};
     const hlInputs = {};
     const lowStockInputs = {};
-    products.forEach((p) => {
+    activeProducts.forEach((p) => {
       inputs[p.code] = String(stock[p.code] || 0);
       priceInputs[p.code] = String(prices[p.code] || 0);
       nameInputs[p.code] = p.name;
@@ -176,7 +179,7 @@ export default function InventoryApp() {
     const adjustments = [];
     const nextLastAdjustedAt = { ...lastAdjustedAt };
     const now = new Date().toISOString();
-    products.forEach((p) => {
+    activeProducts.forEach((p) => {
       const val = parseInt(editInputs[p.code], 10);
       const newVal = isNaN(val) || val < 0 ? 0 : val;
       const diff = newVal - (stock[p.code] || 0);
@@ -192,6 +195,7 @@ export default function InventoryApp() {
       nextPrices[p.code] = !Number.isFinite(priceVal) || priceVal < 0 ? 0 : priceVal;
     });
     const nextProducts = products.map((p) => {
+      if (p.archived) return p;
       const trimmedName = (editNameInputs[p.code] || "").trim();
       const hlVal = parseFloat(editHlInputs[p.code]);
       const lowStockVal = parseInt(editLowStockInputs[p.code], 10);
@@ -217,6 +221,18 @@ export default function InventoryApp() {
       prices: nextPrices,
       products: nextProducts,
     });
+  }
+
+  function archiveProduct(code) {
+    const nextProducts = products.map((p) => (p.code === code ? { ...p, archived: true } : p));
+    setProducts(nextProducts);
+    persist({ ...currentPersistedState, products: nextProducts });
+  }
+
+  function restoreProduct(code) {
+    const nextProducts = products.map((p) => (p.code === code ? { ...p, archived: false } : p));
+    setProducts(nextProducts);
+    persist({ ...currentPersistedState, products: nextProducts });
   }
 
   function confirmOrder({ customerName, isDelivery, lines }) {
@@ -439,7 +455,7 @@ export default function InventoryApp() {
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
-          {products.map((p) => {
+          {activeProducts.map((p) => {
             const qty = stock[p.code] || 0;
             const isLow = qty <= lowStockThresholdFor(p);
             const lastMovement = movements.find((m) => m.code === p.code);
@@ -554,6 +570,22 @@ export default function InventoryApp() {
                   </div>
                 </div>
 
+                {editMode && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                    <button
+                      onClick={() => archiveProduct(p.code)}
+                      title="Eliminar producto"
+                      aria-label="Eliminar producto"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        background: "transparent", border: "1px solid #E7E2D3", color: "#8A5A1E",
+                        borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer",
+                      }}
+                    >
+                      <Trash2 size={13} /> Eliminar producto
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -599,6 +631,48 @@ export default function InventoryApp() {
             </div>
           )}
         </div>
+
+        {editMode && archivedProducts.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <button
+              onClick={() => setShowArchived((s) => !s)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
+                color: "#8A8574", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
+                padding: 0, marginBottom: showArchived ? 10 : 0,
+              }}
+            >
+              {showArchived ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              PRODUCTOS ELIMINADOS ({archivedProducts.length})
+            </button>
+
+            {showArchived && (
+              <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+                {archivedProducts.map((p, i) => (
+                  <div
+                    key={p.code}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      gap: 8, padding: "10px 16px", fontSize: 13.5,
+                      borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
+                    }}
+                  >
+                    <span>{p.name}</span>
+                    <button
+                      onClick={() => restoreProduct(p.code)}
+                      style={{
+                        background: "transparent", border: "1px solid #E7E2D3", color: "#3C6E4A",
+                        borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer",
+                      }}
+                    >
+                      Restaurar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ marginTop: 28 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>

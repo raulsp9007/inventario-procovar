@@ -30,6 +30,7 @@ export default function WeeklySummary({
   const [hlGoalInput, setHlGoalInput] = useState(() => (hlGoal != null ? String(hlGoal) : ""));
   const hlSold = totalHlSold(movements, products);
   const hlPct = hlGoal != null && hlGoal > 0 ? Math.round((hlSold / hlGoal) * 100) : null;
+  const activeProducts = products.filter((p) => !p.archived);
 
   const soldInRange = (code, start, end) =>
     movements
@@ -42,7 +43,7 @@ export default function WeeklySummary({
         RESUMEN SEMANAL · {formatDate(weekStart)} – {formatDate(today)}
       </div>
       <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
-        {products.map((p, i) => {
+        {activeProducts.map((p, i) => {
           const current = soldInRange(p.code, weekStart, today);
           const previous = soldInRange(p.code, prevStart, prevEnd);
           const hasComparison = previous > 0;
