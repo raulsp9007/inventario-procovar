@@ -6,8 +6,9 @@ import { formatCUP } from "./money";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
 import Customers from "./Customers.jsx";
+import { generateProductCode, nextProductColor } from "./productHelpers";
 
-const PRODUCTS = [
+const DEFAULT_PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
   { code: "P500",  name: "Parranda 500ml",  short: "P-500",  color: "#C77A2E" },
   { code: "P330",  name: "Parranda 330ml",  short: "P-330",  color: "#C77A2E" },
@@ -19,13 +20,14 @@ const LOW_STOCK_THRESHOLD = 20;
 const STORAGE_KEY = "procovar-inventario-v1";
 
 export default function InventoryApp() {
+  const [products, setProducts] = useState(DEFAULT_PRODUCTS);
   const [stock, setStock] = useState(() =>
-    PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: 0 }), {})
+    DEFAULT_PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: 0 }), {})
   );
   const [movements, setMovements] = useState([]);
   const [lastAdjustedAt, setLastAdjustedAt] = useState({});
   const [prices, setPrices] = useState(() =>
-    PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: 0 }), {})
+    DEFAULT_PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: 0 }), {})
   );
   const [cumulativeRevenue, setCumulativeRevenue] = useState(0);
   const [exchangeRate, setExchangeRate] = useState(null);
@@ -34,15 +36,17 @@ export default function InventoryApp() {
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [saleInputs, setSaleInputs] = useState(() =>
-    PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {})
+    DEFAULT_PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: "" }), {})
   );
   const [editMode, setEditMode] = useState(false);
   const [editInputs, setEditInputs] = useState({});
   const [editPriceInputs, setEditPriceInputs] = useState({});
+  const [editNameInputs, setEditNameInputs] = useState({});
+  const [newProductName, setNewProductName] = useState("");
   const [error, setError] = useState("");
   const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes"
   const currentPersistedState = {
-    stock, movements, lastAdjustedAt,
+    stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, exchangeRate, commissionPercent, showPrices,
   };
 
@@ -57,6 +61,7 @@ export default function InventoryApp() {
           setStock(parsed.stock || {});
           setMovements(parsed.movements || []);
           setLastAdjustedAt(parsed.lastAdjustedAt || {});
+          setProducts(parsed.products || DEFAULT_PRODUCTS);
           setPrices(parsed.prices || {});
           setCumulativeRevenue(parsed.cumulativeRevenue || 0);
           setExchangeRate(parsed.exchangeRate ?? null);
@@ -91,8 +96,8 @@ export default function InventoryApp() {
     );
   }
 
-  const totalStock = PRODUCTS.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
-  const lowStockCount = PRODUCTS.filter((p) => (stock[p.code] || 0) <= LOW_STOCK_THRESHOLD).length;
+  const totalStock = products.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
+  const lowStockCount = products.filter((p) => (stock[p.code] || 0) <= LOW_STOCK_THRESHOLD).length;
   const todaysMovements = movements.filter((m) => m.date === todayStr());
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
@@ -165,13 +170,37 @@ export default function InventoryApp() {
   function openEdit() {
     const inputs = {};
     const priceInputs = {};
-    PRODUCTS.forEach((p) => {
+    const nameInputs = {};
+    products.forEach((p) => {
       inputs[p.code] = String(stock[p.code] || 0);
       priceInputs[p.code] = String(prices[p.code] || 0);
+      nameInputs[p.code] = p.name;
     });
     setEditInputs(inputs);
     setEditPriceInputs(priceInputs);
+    setEditNameInputs(nameInputs);
     setEditMode(true);
+  }
+
+  function addProduct() {
+    const trimmed = newProductName.trim();
+    if (!trimmed) {
+      setError("Ingresa el nombre del producto.");
+      setTimeout(() => setError(""), 2500);
+      return;
+    }
+    const code = generateProductCode(trimmed, products.map((p) => p.code));
+    const color = nextProductColor(products.length);
+    const newProduct = { code, name: trimmed, short: trimmed, color };
+    const nextProducts = [...products, newProduct];
+    setProducts(nextProducts);
+    setNewProductName("");
+    if (editMode) {
+      setEditInputs((s) => ({ ...s, [code]: "0" }));
+      setEditPriceInputs((s) => ({ ...s, [code]: "0" }));
+      setEditNameInputs((s) => ({ ...s, [code]: trimmed }));
+    }
+    persist({ ...currentPersistedState, products: nextProducts });
   }
 
   function saveEdit() {
@@ -180,7 +209,7 @@ export default function InventoryApp() {
     const adjustments = [];
     const nextLastAdjustedAt = { ...lastAdjustedAt };
     const now = new Date().toISOString();
-    PRODUCTS.forEach((p) => {
+    products.forEach((p) => {
       const val = parseInt(editInputs[p.code], 10);
       const newVal = isNaN(val) || val < 0 ? 0 : val;
       const diff = newVal - (stock[p.code] || 0);
@@ -195,11 +224,16 @@ export default function InventoryApp() {
       const priceVal = parseFloat(editPriceInputs[p.code]);
       nextPrices[p.code] = !Number.isFinite(priceVal) || priceVal < 0 ? 0 : priceVal;
     });
+    const nextProducts = products.map((p) => {
+      const trimmedName = (editNameInputs[p.code] || "").trim();
+      return trimmedName ? { ...p, name: trimmedName } : p;
+    });
     const nextMovements = [...adjustments, ...movements].slice(0, 500);
     setStock(nextStock);
     setPrices(nextPrices);
     setMovements(nextMovements);
     setLastAdjustedAt(nextLastAdjustedAt);
+    setProducts(nextProducts);
     setEditMode(false);
     persist({
       ...currentPersistedState,
@@ -207,6 +241,7 @@ export default function InventoryApp() {
       movements: nextMovements,
       lastAdjustedAt: nextLastAdjustedAt,
       prices: nextPrices,
+      products: nextProducts,
     });
   }
 
@@ -385,7 +420,7 @@ export default function InventoryApp() {
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
-          {PRODUCTS.map((p) => {
+          {products.map((p) => {
             const qty = stock[p.code] || 0;
             const isLow = qty <= LOW_STOCK_THRESHOLD;
             const lastMovement = movements.find((m) => m.code === p.code);
@@ -406,7 +441,19 @@ export default function InventoryApp() {
                       width: 6, height: 40, borderRadius: 3, background: p.color, flexShrink: 0,
                     }} />
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 15.5 }}>{p.name}</div>
+                      {editMode ? (
+                        <input
+                          type="text"
+                          value={editNameInputs[p.code] ?? p.name}
+                          onChange={(e) => setEditNameInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                          style={{
+                            fontWeight: 700, fontSize: 15.5, border: "1px solid #D8D2C0", borderRadius: 7,
+                            padding: "4px 8px", marginBottom: 2,
+                          }}
+                        />
+                      ) : (
+                        <div style={{ fontWeight: 700, fontSize: 15.5 }}>{p.name}</div>
+                      )}
                       <div style={{ fontSize: 12, color: "#9A9484" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
                       {lastAdjustedAt[p.code] && (
                         <div style={{ fontSize: 11, color: "#B4AF9E" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
@@ -461,7 +508,7 @@ export default function InventoryApp() {
                       type="number"
                       inputMode="numeric"
                       placeholder="Cant. vendida"
-                      value={saleInputs[p.code]}
+                      value={saleInputs[p.code] ?? ""}
                       onChange={(e) => setSaleInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                       onKeyDown={(e) => { if (e.key === "Enter") registerSale(p.code); }}
                       style={{
@@ -500,6 +547,35 @@ export default function InventoryApp() {
               </div>
             );
           })}
+          {editMode && (
+            <div
+              style={{
+                background: "#FFFFFF", border: "1px dashed #D8D2C0", borderRadius: 12,
+                padding: "14px 18px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
+              }}
+            >
+              <input
+                type="text"
+                placeholder="Nombre del producto nuevo"
+                value={newProductName}
+                onChange={(e) => setNewProductName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addProduct(); }}
+                style={{
+                  flex: "1 1 auto", minWidth: 160, border: "1px solid #E7E2D3", borderRadius: 7,
+                  padding: "9px 12px", fontSize: 14,
+                }}
+              />
+              <button
+                onClick={addProduct}
+                style={{
+                  flex: "0 0 auto", background: "#22261F", color: "#F7F4EC", border: "none",
+                  borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                + Agregar producto
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={{ marginTop: 28 }}>
@@ -513,7 +589,7 @@ export default function InventoryApp() {
           ) : (
             <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
               {movements.slice(0, 25).map((m, i) => {
-                const product = PRODUCTS.find((p) => p.code === m.code);
+                const product = products.find((p) => p.code === m.code);
                 return (
                   <div
                     key={m.id}
@@ -545,7 +621,7 @@ export default function InventoryApp() {
 
         {view === "resumen" && (
           <WeeklySummary
-            products={PRODUCTS}
+            products={products}
             movements={movements}
             cumulativeRevenue={cumulativeRevenue}
             exchangeRate={exchangeRate}
@@ -564,7 +640,7 @@ export default function InventoryApp() {
 
         {view === "pedidos" && (
           <Orders
-            products={PRODUCTS}
+            products={products}
             movements={movements}
             stock={stock}
             onConfirmOrder={confirmOrder}
@@ -577,7 +653,7 @@ export default function InventoryApp() {
         )}
 
         {view === "clientes" && (
-          <Customers products={PRODUCTS} movements={movements} />
+          <Customers products={products} movements={movements} />
         )}
 
         <div style={{ marginTop: 20, fontSize: 11.5, color: "#B4AF9E", textAlign: "center" }}>
