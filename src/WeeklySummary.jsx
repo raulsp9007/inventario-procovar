@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, formatDate } from "./dateUtils";
-import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
+import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown, totalHlSold } from "./money";
 
 export default function WeeklySummary({
   products,
@@ -11,6 +11,8 @@ export default function WeeklySummary({
   showPrices,
   onExchangeRateChange,
   onCommissionPercentChange,
+  hlGoal,
+  onHlGoalChange,
 }) {
   const weekStart = getWeekStartStr();
   const today = todayStr();
@@ -25,6 +27,9 @@ export default function WeeklySummary({
   const commissionUSD = convertToUSD(commissionCUP, exchangeRate);
   const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
   const [commissionInput, setCommissionInput] = useState(() => (commissionPercent ? String(commissionPercent) : ""));
+  const [hlGoalInput, setHlGoalInput] = useState(() => (hlGoal != null ? String(hlGoal) : ""));
+  const hlSold = totalHlSold(movements, products);
+  const hlPct = hlGoal != null && hlGoal > 0 ? Math.round((hlSold / hlGoal) * 100) : null;
 
   const soldInRange = (code, start, end) =>
     movements
@@ -170,6 +175,42 @@ export default function WeeklySummary({
               {commissionUSD !== null ? formatUSD(commissionUSD) : formatCUP(commissionCUP)}
             </span>
             {commissionUSD === null && <span> (definí la tasa USD arriba para verla en dólares)</span>}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 16, background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>HECTOLITROS</span>
+          <span style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
+            {hlSold.toFixed(2)} hL
+          </span>
+        </div>
+
+        <label style={{ fontSize: 13, color: "#8A8574", display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+          Meta HL
+          <input
+            type="number"
+            inputMode="decimal"
+            value={hlGoalInput}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setHlGoalInput(raw);
+              const val = parseFloat(raw);
+              onHlGoalChange(isNaN(val) || val <= 0 ? null : val);
+            }}
+            placeholder="meta"
+            style={{
+              width: 90, border: "1px solid #E7E2D3", borderRadius: 7,
+              padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums",
+            }}
+          />
+          hL
+        </label>
+
+        {hlGoal != null && (
+          <div style={{ fontSize: 13, color: "#8A8574" }}>
+            Vendido: <span style={{ fontWeight: 700, color: "#26241F" }}>{hlSold.toFixed(2)} hL</span> de {hlGoal} hL ({hlPct}%)
           </div>
         )}
       </div>

@@ -27,6 +27,16 @@ export function totalRevenueInRange(movements, start, end) {
     .reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
 }
 
+export function totalHlSold(movements, products) {
+  return movements
+    .filter((m) => m.type === "venta")
+    .reduce((sum, m) => {
+      const product = products.find((p) => p.code === m.code);
+      const hl = product?.hl || 0;
+      return sum + m.qty * hl;
+    }, 0);
+}
+
 export function monthWeeklyBreakdown(movements, monthStartStr, endDateStr) {
   const inMonth = movements.filter(
     (m) => m.type === "venta" && m.date >= monthStartStr && m.date <= endDateStr

@@ -33,18 +33,21 @@ export default function InventoryApp() {
   const [exchangeRate, setExchangeRate] = useState(null);
   const [commissionPercent, setCommissionPercent] = useState(0);
   const [showPrices, setShowPrices] = useState(true);
+  const [hlGoal, setHlGoal] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [editMode, setEditMode] = useState(false);
   const [editInputs, setEditInputs] = useState({});
   const [editPriceInputs, setEditPriceInputs] = useState({});
   const [editNameInputs, setEditNameInputs] = useState({});
+  const [editHlInputs, setEditHlInputs] = useState({});
   const [newProductName, setNewProductName] = useState("");
+  const [newProductHl, setNewProductHl] = useState("");
   const [error, setError] = useState("");
   const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes"
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
-    prices, cumulativeRevenue, exchangeRate, commissionPercent, showPrices,
+    prices, cumulativeRevenue, exchangeRate, commissionPercent, showPrices, hlGoal,
   };
 
   useEffect(() => {
@@ -64,6 +67,7 @@ export default function InventoryApp() {
           setExchangeRate(parsed.exchangeRate ?? null);
           setCommissionPercent(parsed.commissionPercent || 0);
           setShowPrices(parsed.showPrices ?? true);
+          setHlGoal(parsed.hlGoal ?? null);
         }
       } catch (e) {
       } finally {
@@ -116,14 +120,17 @@ export default function InventoryApp() {
     const inputs = {};
     const priceInputs = {};
     const nameInputs = {};
+    const hlInputs = {};
     products.forEach((p) => {
       inputs[p.code] = String(stock[p.code] || 0);
       priceInputs[p.code] = String(prices[p.code] || 0);
       nameInputs[p.code] = p.name;
+      hlInputs[p.code] = p.hl != null ? String(p.hl) : "";
     });
     setEditInputs(inputs);
     setEditPriceInputs(priceInputs);
     setEditNameInputs(nameInputs);
+    setEditHlInputs(hlInputs);
     setEditMode(true);
   }
 
@@ -136,14 +143,20 @@ export default function InventoryApp() {
     }
     const code = generateProductCode(trimmed, products.map((p) => p.code));
     const color = nextProductColor(products.length);
-    const newProduct = { code, name: trimmed, short: trimmed, color };
+    const hlVal = parseFloat(newProductHl);
+    const newProduct = {
+      code, name: trimmed, short: trimmed, color,
+      ...(Number.isFinite(hlVal) && hlVal >= 0 ? { hl: hlVal } : {}),
+    };
     const nextProducts = [...products, newProduct];
     setProducts(nextProducts);
     setNewProductName("");
+    setNewProductHl("");
     if (editMode) {
       setEditInputs((s) => ({ ...s, [code]: "0" }));
       setEditPriceInputs((s) => ({ ...s, [code]: "0" }));
       setEditNameInputs((s) => ({ ...s, [code]: trimmed }));
+      setEditHlInputs((s) => ({ ...s, [code]: newProductHl }));
     }
     persist({ ...currentPersistedState, products: nextProducts });
   }
@@ -171,7 +184,11 @@ export default function InventoryApp() {
     });
     const nextProducts = products.map((p) => {
       const trimmedName = (editNameInputs[p.code] || "").trim();
-      return trimmedName ? { ...p, name: trimmedName } : p;
+      const hlVal = parseFloat(editHlInputs[p.code]);
+      const nextP = trimmedName ? { ...p, name: trimmedName } : { ...p };
+      if (Number.isFinite(hlVal) && hlVal >= 0) nextP.hl = hlVal;
+      else delete nextP.hl;
+      return nextP;
     });
     const nextMovements = [...adjustments, ...movements].slice(0, 500);
     setStock(nextStock);
@@ -452,6 +469,9 @@ export default function InventoryApp() {
                           Precio: {prices[p.code] ? formatCUP(prices[p.code]) : "no definido"}
                         </div>
                       )}
+                      <div style={{ fontSize: 11, color: "#8A8574" }}>
+                        HL/unidad: {p.hl != null ? p.hl : "no definido"}
+                      </div>
                     </div>
                   </div>
 
@@ -476,6 +496,19 @@ export default function InventoryApp() {
                           value={editPriceInputs[p.code]}
                           onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                           title="Precio en CUP"
+                          style={{
+                            width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
+                            border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",
+                            fontVariantNumeric: "tabular-nums", color: "#26241F",
+                          }}
+                        />
+                        <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em" }}>HL POR UNIDAD</div>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={editHlInputs[p.code] ?? ""}
+                          onChange={(e) => setEditHlInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                          title="Hectolitros por unidad"
                           style={{
                             width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
                             border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",
@@ -509,6 +542,18 @@ export default function InventoryApp() {
                 onKeyDown={(e) => { if (e.key === "Enter") addProduct(); }}
                 style={{
                   flex: "1 1 auto", minWidth: 160, border: "1px solid #E7E2D3", borderRadius: 7,
+                  padding: "9px 12px", fontSize: 14,
+                }}
+              />
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="HL/unidad"
+                value={newProductHl}
+                onChange={(e) => setNewProductHl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addProduct(); }}
+                style={{
+                  flex: "0 1 110px", minWidth: 90, border: "1px solid #E7E2D3", borderRadius: 7,
                   padding: "9px 12px", fontSize: 14,
                 }}
               />
@@ -581,6 +626,11 @@ export default function InventoryApp() {
             onCommissionPercentChange={(next) => {
               setCommissionPercent(next);
               persist({ ...currentPersistedState, commissionPercent: next });
+            }}
+            hlGoal={hlGoal}
+            onHlGoalChange={(next) => {
+              setHlGoal(next);
+              persist({ ...currentPersistedState, hlGoal: next });
             }}
           />
         )}
