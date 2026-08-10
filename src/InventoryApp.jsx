@@ -19,6 +19,10 @@ const DEFAULT_PRODUCTS = [
 const LOW_STOCK_THRESHOLD = 20;
 const STORAGE_KEY = "procovar-inventario-v1";
 
+function lowStockThresholdFor(product) {
+  return product.lowStockThreshold != null ? product.lowStockThreshold : LOW_STOCK_THRESHOLD;
+}
+
 export default function InventoryApp() {
   const [products, setProducts] = useState(DEFAULT_PRODUCTS);
   const [stock, setStock] = useState(() =>
@@ -41,6 +45,7 @@ export default function InventoryApp() {
   const [editPriceInputs, setEditPriceInputs] = useState({});
   const [editNameInputs, setEditNameInputs] = useState({});
   const [editHlInputs, setEditHlInputs] = useState({});
+  const [editLowStockInputs, setEditLowStockInputs] = useState({});
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
   const [error, setError] = useState("");
@@ -98,7 +103,7 @@ export default function InventoryApp() {
   }
 
   const totalStock = products.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
-  const lowStockCount = products.filter((p) => (stock[p.code] || 0) <= LOW_STOCK_THRESHOLD).length;
+  const lowStockCount = products.filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
   const todaysMovements = movements.filter((m) => m.date === todayStr());
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
@@ -121,16 +126,19 @@ export default function InventoryApp() {
     const priceInputs = {};
     const nameInputs = {};
     const hlInputs = {};
+    const lowStockInputs = {};
     products.forEach((p) => {
       inputs[p.code] = String(stock[p.code] || 0);
       priceInputs[p.code] = String(prices[p.code] || 0);
       nameInputs[p.code] = p.name;
       hlInputs[p.code] = p.hl != null ? String(p.hl) : "";
+      lowStockInputs[p.code] = p.lowStockThreshold != null ? String(p.lowStockThreshold) : "";
     });
     setEditInputs(inputs);
     setEditPriceInputs(priceInputs);
     setEditNameInputs(nameInputs);
     setEditHlInputs(hlInputs);
+    setEditLowStockInputs(lowStockInputs);
     setEditMode(true);
   }
 
@@ -157,6 +165,7 @@ export default function InventoryApp() {
       setEditPriceInputs((s) => ({ ...s, [code]: "0" }));
       setEditNameInputs((s) => ({ ...s, [code]: trimmed }));
       setEditHlInputs((s) => ({ ...s, [code]: newProductHl }));
+      setEditLowStockInputs((s) => ({ ...s, [code]: "" }));
     }
     persist({ ...currentPersistedState, products: nextProducts });
   }
@@ -185,9 +194,12 @@ export default function InventoryApp() {
     const nextProducts = products.map((p) => {
       const trimmedName = (editNameInputs[p.code] || "").trim();
       const hlVal = parseFloat(editHlInputs[p.code]);
+      const lowStockVal = parseInt(editLowStockInputs[p.code], 10);
       const nextP = trimmedName ? { ...p, name: trimmedName } : { ...p };
       if (Number.isFinite(hlVal) && hlVal >= 0) nextP.hl = hlVal;
       else delete nextP.hl;
+      if (Number.isFinite(lowStockVal) && lowStockVal >= 0) nextP.lowStockThreshold = lowStockVal;
+      else delete nextP.lowStockThreshold;
       return nextP;
     });
     const nextMovements = [...adjustments, ...movements].slice(0, 500);
@@ -396,8 +408,8 @@ export default function InventoryApp() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#FBEFE0", border: "1px solid #E9CFA0", color: "#8A5A1E", padding: "10px 14px", borderRadius: 8, fontSize: 13.5, marginBottom: 16 }}>
             <AlertTriangle size={16} strokeWidth={2} />
             {lowStockCount === 1
-              ? "1 producto con stock bajo (≤ 20 unidades)."
-              : `${lowStockCount} productos con stock bajo (≤ 20 unidades).`}
+              ? "1 producto con stock bajo."
+              : `${lowStockCount} productos con stock bajo.`}
           </div>
         )}
 
@@ -429,7 +441,7 @@ export default function InventoryApp() {
         <div style={{ display: "grid", gap: 10 }}>
           {products.map((p) => {
             const qty = stock[p.code] || 0;
-            const isLow = qty <= LOW_STOCK_THRESHOLD;
+            const isLow = qty <= lowStockThresholdFor(p);
             const lastMovement = movements.find((m) => m.code === p.code);
             return (
               <div
@@ -473,6 +485,9 @@ export default function InventoryApp() {
                       <div style={{ fontSize: 11, color: "#8A8574" }}>
                         HL/unidad: {p.hl != null ? p.hl : "no definido"}
                       </div>
+                      <div style={{ fontSize: 11, color: "#8A8574" }}>
+                        Aviso stock bajo: ≤ {lowStockThresholdFor(p)} uds
+                      </div>
                     </div>
                   </div>
 
@@ -510,6 +525,20 @@ export default function InventoryApp() {
                           value={editHlInputs[p.code] ?? ""}
                           onChange={(e) => setEditHlInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                           title="Hectolitros por unidad"
+                          style={{
+                            width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
+                            border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",
+                            fontVariantNumeric: "tabular-nums", color: "#26241F",
+                          }}
+                        />
+                        <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em" }}>AVISO STOCK BAJO</div>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={editLowStockInputs[p.code] ?? ""}
+                          onChange={(e) => setEditLowStockInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                          title="Cantidad de stock a partir de la cual avisar"
+                          placeholder={String(LOW_STOCK_THRESHOLD)}
                           style={{
                             width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
                             border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",

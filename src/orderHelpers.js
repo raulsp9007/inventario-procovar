@@ -23,10 +23,12 @@ export function groupOrders(movements, dateStr) {
 }
 
 export function formatOrderForWhatsApp(order, products) {
-  const nameLine = order.isDelivery ? `${order.customerName} (a domicilio)` : order.customerName;
-  const productLines = order.lines.map((line) => {
+  const lines = [];
+  if (order.isDelivery) lines.push("🛺 Domicilio 🛺");
+  lines.push(order.customerName);
+  order.lines.forEach((line) => {
     const product = products.find((p) => p.code === line.code);
-    return `${product ? product.name : line.code} - ${line.qty}`;
+    lines.push(`${product ? product.name : line.code} - ${line.qty}`);
   });
-  return [nameLine, ...productLines].join("\n");
+  return lines.join("\n");
 }
