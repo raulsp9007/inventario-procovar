@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RotateCcw, AlertTriangle, History, Settings2, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, History, Settings2, Eye, EyeOff } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
@@ -110,27 +110,6 @@ export default function InventoryApp() {
       timestamp: new Date().toISOString(),
       ...extra,
     };
-  }
-
-  function undoLast(code) {
-    const idx = movements.findIndex((m) => m.code === code);
-    if (idx === -1) return;
-    const m = movements[idx];
-    const current = stock[code] || 0;
-    const restored = m.type === "venta" ? current + m.qty : Math.max(0, current - m.qty);
-    const nextStock = { ...stock, [code]: restored };
-    const nextMovements = movements.filter((_, i) => i !== idx);
-    const nextCumulativeRevenue =
-      m.type === "venta" ? cumulativeRevenue - m.qty * (m.unitPrice || 0) : cumulativeRevenue;
-    setStock(nextStock);
-    setMovements(nextMovements);
-    setCumulativeRevenue(nextCumulativeRevenue);
-    persist({
-      ...currentPersistedState,
-      stock: nextStock,
-      movements: nextMovements,
-      cumulativeRevenue: nextCumulativeRevenue,
-    });
   }
 
   function openEdit() {
@@ -468,21 +447,6 @@ export default function InventoryApp() {
                   </div>
                 </div>
 
-                {!editMode && lastMovement && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, alignItems: "center" }}>
-                    <button
-                      onClick={() => undoLast(p.code)}
-                      title="Deshacer último movimiento"
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                        borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
-                      }}
-                    >
-                      <RotateCcw size={14} />
-                    </button>
-                  </div>
-                )}
               </div>
             );
           })}
