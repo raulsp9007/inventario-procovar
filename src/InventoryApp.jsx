@@ -49,6 +49,7 @@ export default function InventoryApp() {
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [showLowStockList, setShowLowStockList] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes"
   const currentPersistedState = {
@@ -421,11 +422,41 @@ export default function InventoryApp() {
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "20px 16px 0" }}>
         {lowStockCount > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#FBEFE0", border: "1px solid #E9CFA0", color: "#8A5A1E", padding: "10px 14px", borderRadius: 8, fontSize: 13.5, marginBottom: 16 }}>
-            <AlertTriangle size={16} strokeWidth={2} />
-            {lowStockCount === 1
-              ? "1 producto con stock bajo."
-              : `${lowStockCount} productos con stock bajo.`}
+          <div style={{ marginBottom: 16 }}>
+            <button
+              onClick={() => setShowLowStockList((s) => !s)}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
+                background: "#FBEFE0", border: "1px solid #E9CFA0", color: "#8A5A1E",
+                padding: "10px 14px", borderRadius: 8, fontSize: 13.5, cursor: "pointer",
+              }}
+            >
+              <AlertTriangle size={16} strokeWidth={2} />
+              {lowStockCount === 1
+                ? "1 producto con stock bajo."
+                : `${lowStockCount} productos con stock bajo.`}
+              {showLowStockList ? <ChevronUp size={14} style={{ marginLeft: "auto" }} /> : <ChevronDown size={14} style={{ marginLeft: "auto" }} />}
+            </button>
+            {showLowStockList && (
+              <div style={{ background: "#FFFFFF", border: "1px solid #E9CFA0", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+                {activeProducts
+                  .filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p))
+                  .map((p, i) => (
+                    <div
+                      key={p.code}
+                      style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "9px 14px", fontSize: 13, borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
+                      }}
+                    >
+                      <span>{p.name}</span>
+                      <span style={{ color: "#8A5A1E", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                        {stock[p.code] || 0} uds (aviso ≤ {lowStockThresholdFor(p)})
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 
