@@ -6,6 +6,7 @@ import { formatCUP } from "./money";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
 import Customers from "./Customers.jsx";
+import Today from "./Today.jsx";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 
 const DEFAULT_PRODUCTS = [
@@ -51,7 +52,7 @@ export default function InventoryApp() {
   const [showArchived, setShowArchived] = useState(false);
   const [showLowStockList, setShowLowStockList] = useState(false);
   const [error, setError] = useState("");
-  const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes"
+  const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes" | "hoy"
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, exchangeRate, commissionPercent, showPrices, hlGoal,
@@ -400,6 +401,17 @@ export default function InventoryApp() {
           }}
         >
           Clientes
+        </button>
+        <button
+          onClick={() => setView("hoy")}
+          style={{
+            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            borderRadius: 7, border: "1px solid #22261F",
+            background: view === "hoy" ? "#22261F" : "transparent",
+            color: view === "hoy" ? "#F7F4EC" : "#22261F",
+          }}
+        >
+          Hoy
         </button>
         <button
           onClick={() => {
@@ -788,6 +800,16 @@ export default function InventoryApp() {
 
         {view === "clientes" && (
           <Customers products={products} movements={movements} />
+        )}
+
+        {view === "hoy" && (
+          <Today
+            products={products}
+            movements={movements}
+            stock={stock}
+            showPrices={showPrices}
+            exchangeRate={exchangeRate}
+          />
         )}
 
         <div style={{ marginTop: 20, fontSize: 11.5, color: "#B4AF9E", textAlign: "center" }}>
