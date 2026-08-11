@@ -1,8 +1,28 @@
+import { useState } from "react";
 import { formatDate } from "./dateUtils";
 import { getCustomerStats } from "./customerHelpers";
 
+function sortStats(stats, sortBy) {
+  const sorted = [...stats];
+  if (sortBy === "name") {
+    sorted.sort((a, b) => a.customerName.localeCompare(b.customerName, "es"));
+  } else if (sortBy === "oldest") {
+    sorted.sort((a, b) => a.lastPurchaseDate.localeCompare(b.lastPurchaseDate));
+  } else {
+    sorted.sort((a, b) => b.lastPurchaseDate.localeCompare(a.lastPurchaseDate));
+  }
+  return sorted;
+}
+
 export default function Customers({ products, movements }) {
-  const stats = getCustomerStats(movements, products);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("recent");
+
+  const allStats = getCustomerStats(movements, products);
+  const filtered = search.trim()
+    ? allStats.filter((c) => c.customerName.toLowerCase().includes(search.trim().toLowerCase()))
+    : allStats;
+  const stats = sortStats(filtered, sortBy);
 
   return (
     <div>
@@ -10,9 +30,40 @@ export default function Customers({ products, movements }) {
         CLIENTES
       </div>
 
-      {stats.length === 0 ? (
+      {allStats.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+          <input
+            type="text"
+            placeholder="Buscar cliente"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              flex: "1 1 auto", minWidth: 160, border: "1px solid #E7E2D3", borderRadius: 7,
+              padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
+            }}
+          />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            style={{
+              flex: "0 0 auto", border: "1px solid #E7E2D3", borderRadius: 7,
+              padding: "9px 10px", fontSize: 13.5, background: "#FFFFFF",
+            }}
+          >
+            <option value="recent">Última compra: reciente primero</option>
+            <option value="oldest">Última compra: antigua primero</option>
+            <option value="name">Nombre (A-Z)</option>
+          </select>
+        </div>
+      )}
+
+      {allStats.length === 0 ? (
         <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
           Aún no hay clientes registrados.
+        </div>
+      ) : stats.length === 0 ? (
+        <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
+          Ningún cliente coincide con "{search}".
         </div>
       ) : (
         <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
