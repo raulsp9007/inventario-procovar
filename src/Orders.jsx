@@ -1,18 +1,23 @@
 import { useState } from "react";
-import { Trash2, Send, Pencil, ChevronDown, ChevronUp } from "lucide-react";
+import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck } from "lucide-react";
 import { todayStr, formatDate, getDateNDaysAgoStr } from "./dateUtils";
+import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
 
 const PAST_ORDERS_DAYS = 14;
 
-function openOrderWhatsApp(order, products) {
+function openOrderWhatsApp(order, products, phone) {
   const text = formatOrderForWhatsApp(order, products);
-  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  const url = `https://wa.me/${phone || ""}?text=${encodeURIComponent(text)}`;
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-export default function Orders({ products, movements, stock, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onError }) {
+function orderTotal(order) {
+  return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
+}
+
+export default function Orders({ products, movements, stock, showPrices, whatsappPhone, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onError }) {
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
   const [draftLines, setDraftLines] = useState([]);
@@ -144,7 +149,7 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
   function confirmBulkSend() {
     todaysOrders.forEach((order) => {
       if (!selectedIds.has(order.orderId)) return;
-      openOrderWhatsApp(order, products);
+      openOrderWhatsApp(order, products, whatsappPhone);
       onMarkSent(order.orderId, true);
     });
     setSelectMode(false);
@@ -179,12 +184,13 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
                 const product = products.find((p) => p.code === line.code);
                 return `${line.qty}x ${product ? product.short : line.code}`;
               }).join(", ")}
+              {showPrices && ` · ${formatCUP(orderTotal(order))}`}
             </div>
           </div>
         </div>
 
         {!inSelectMode && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
               <input
                 type="checkbox"
@@ -192,6 +198,14 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
                 onChange={(e) => onMarkSent(order.orderId, e.target.checked)}
               />
               Enviado
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={order.confirmed}
+                onChange={(e) => onMarkConfirmed(order.orderId, e.target.checked)}
+              />
+              <CheckCheck size={13} /> Confirmado
             </label>
             <button
               onClick={() => startEdit(order)}
@@ -206,7 +220,10 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
               <Pencil size={14} />
             </button>
             <button
-              onClick={() => openOrderWhatsApp(order, products)}
+              onClick={() => {
+                openOrderWhatsApp(order, products, whatsappPhone);
+                onMarkSent(order.orderId, true);
+              }}
               title="Enviar por WhatsApp"
               aria-label="Enviar por WhatsApp"
               style={{

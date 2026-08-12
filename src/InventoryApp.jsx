@@ -10,6 +10,7 @@ import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
 import Customers from "./Customers.jsx";
 import Today from "./Today.jsx";
+import Settings from "./Settings.jsx";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 
 const DEFAULT_PRODUCTS = [
@@ -43,6 +44,7 @@ export default function InventoryApp() {
   const [commissionPercent, setCommissionPercent] = useState(0);
   const [showPrices, setShowPrices] = useState(true);
   const [hlGoal, setHlGoal] = useState(null);
+  const [whatsappPhone, setWhatsappPhone] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [editMode, setEditMode] = useState(false);
@@ -61,7 +63,7 @@ export default function InventoryApp() {
   const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes" | "hoy"
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
-    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal,
+    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, whatsappPhone,
   };
 
   const persist = useCallback(async (nextState) => {
@@ -91,6 +93,7 @@ export default function InventoryApp() {
     const nextCommissionPercent = parsed.commissionPercent || 0;
     const nextShowPrices = parsed.showPrices ?? true;
     const nextHlGoal = parsed.hlGoal ?? null;
+    const nextWhatsappPhone = parsed.whatsappPhone || "";
     const migratedHl = parsed.cumulativeHl == null;
     // Migración: dato guardado (o backup) de antes de este campo — se siembra una sola vez
     // desde el HL ya vendido (derivado del historial), para no perder lo que ya se contó.
@@ -107,12 +110,14 @@ export default function InventoryApp() {
     setCommissionPercent(nextCommissionPercent);
     setShowPrices(nextShowPrices);
     setHlGoal(nextHlGoal);
+    setWhatsappPhone(nextWhatsappPhone);
 
     if (alwaysPersist || migratedHl) {
       persist({
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
+        whatsappPhone: nextWhatsappPhone,
       });
     }
   }
@@ -406,6 +411,14 @@ export default function InventoryApp() {
     persist({ ...currentPersistedState, movements: nextMovements });
   }
 
+  function markOrderConfirmed(orderId, confirmed) {
+    const nextMovements = movements.map((m) =>
+      m.orderId === orderId ? { ...m, confirmed } : m
+    );
+    setMovements(nextMovements);
+    persist({ ...currentPersistedState, movements: nextMovements });
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#F7F4EC", fontFamily: "'Inter', system-ui, sans-serif", color: "#26241F", paddingBottom: 48 }}>
       <style>{`
@@ -441,6 +454,7 @@ export default function InventoryApp() {
         <TabButton active={view === "pedidos"} onClick={() => setView("pedidos")}>Pedidos</TabButton>
         <TabButton active={view === "clientes"} onClick={() => setView("clientes")}>Clientes</TabButton>
         <TabButton active={view === "stock"} onClick={() => setView("stock")}>Productos</TabButton>
+        <TabButton active={view === "config"} onClick={() => setView("config")}>Configuración</TabButton>
         <button
           onClick={() => {
             const next = !showPrices;
@@ -572,10 +586,13 @@ export default function InventoryApp() {
             products={products}
             movements={movements}
             stock={stock}
+            showPrices={showPrices}
+            whatsappPhone={whatsappPhone}
             onConfirmOrder={confirmOrder}
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
             onMarkSent={markOrderSent}
+            onMarkConfirmed={markOrderConfirmed}
             onError={(message) => {
               setError(message);
               setTimeout(() => setError(""), 2500);
@@ -594,6 +611,16 @@ export default function InventoryApp() {
             stock={stock}
             showPrices={showPrices}
             exchangeRate={exchangeRate}
+          />
+        )}
+
+        {view === "config" && (
+          <Settings
+            whatsappPhone={whatsappPhone}
+            onWhatsappPhoneChange={(next) => {
+              setWhatsappPhone(next);
+              persist({ ...currentPersistedState, whatsappPhone: next });
+            }}
           />
         )}
 
