@@ -170,7 +170,7 @@ export default function InventoryApp() {
   const activeProducts = products.filter((p) => !p.archived);
   const archivedProducts = products.filter((p) => p.archived);
   const totalStock = activeProducts.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
-  const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
+  const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
   const todaysMovements = movements.filter((m) => m.date === todayStr());
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
@@ -494,7 +494,7 @@ export default function InventoryApp() {
             {showLowStockList && (
               <div style={{ background: "#FFFFFF", border: "1px solid #E9CFA0", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
                 {activeProducts
-                  .filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p))
+                  .filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p))
                   .map((p, i) => (
                     <div
                       key={p.code}
