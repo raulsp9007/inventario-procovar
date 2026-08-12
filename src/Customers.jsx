@@ -108,7 +108,7 @@ export default function Customers({ products, movements, showPrices }) {
                         >
                           <div>
                             <div style={{ fontSize: 12.5 }}>
-                              {order.isDelivery ? "📦 " : ""}{formatDate(order.date)}
+                              {order.isDelivery ? "🛺 " : ""}{formatDate(order.date)}
                             </div>
                             <div style={{ fontSize: 11.5, color: "#8A8574" }}>
                               {order.lines.map((line) => {

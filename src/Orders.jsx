@@ -181,7 +181,7 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
           )}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600 }}>
-              {order.isDelivery ? "📦 " : ""}{order.customerName}
+              {order.isDelivery ? "🛺 " : ""}{order.customerName}
             </div>
             <div style={{ color: "#9A9484", fontSize: 12.5 }}>
               {order.lines.map((line) => {
