@@ -7,8 +7,8 @@ import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
 
 const PAST_ORDERS_DAYS = 14;
 
-function openOrderWhatsApp(order, products, phone) {
-  const text = formatOrderForWhatsApp(order, products);
+function openOrderWhatsApp(order, products, phone, senderOptions) {
+  const text = formatOrderForWhatsApp(order, products, senderOptions);
   const url = `https://wa.me/${phone || ""}?text=${encodeURIComponent(text)}`;
   window.open(url, "_blank", "noopener,noreferrer");
 }
@@ -17,7 +17,8 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, showPrices, whatsappPhone, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onError }) {
+export default function Orders({ products, movements, stock, showPrices, whatsappPhone, senderName, sendSenderName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onError }) {
+  const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
   const [draftLines, setDraftLines] = useState([]);
@@ -152,7 +153,7 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
   function confirmBulkSend() {
     todaysOrders.forEach((order) => {
       if (!selectedIds.has(order.orderId)) return;
-      openOrderWhatsApp(order, products, whatsappPhone);
+      openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
       onMarkSent(order.orderId, true);
     });
     setSelectMode(false);
@@ -227,7 +228,7 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
               </button>
               <button
                 onClick={() => {
-                  openOrderWhatsApp(order, products, whatsappPhone);
+                  openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
                   onMarkSent(order.orderId, true);
                 }}
                 title="Enviar por WhatsApp"

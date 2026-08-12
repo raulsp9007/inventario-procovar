@@ -23,8 +23,9 @@ export function groupOrders(movements, dateStr) {
   return groupAllOrders(movements).filter((order) => order.date === dateStr);
 }
 
-export function formatOrderForWhatsApp(order, products) {
+export function formatOrderForWhatsApp(order, products, { senderName, sendSenderName } = {}) {
   const lines = [];
+  if (sendSenderName && senderName && senderName.trim()) lines.push(senderName.trim());
   if (order.isDelivery) lines.push("🛺 Domicilio 🛺");
   lines.push(order.customerName);
   order.lines.forEach((line) => {

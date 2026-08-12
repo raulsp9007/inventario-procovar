@@ -45,6 +45,8 @@ export default function InventoryApp() {
   const [showPrices, setShowPrices] = useState(true);
   const [hlGoal, setHlGoal] = useState(null);
   const [whatsappPhone, setWhatsappPhone] = useState("");
+  const [senderName, setSenderName] = useState("");
+  const [sendSenderName, setSendSenderName] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [editMode, setEditMode] = useState(false);
@@ -64,6 +66,7 @@ export default function InventoryApp() {
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, whatsappPhone,
+    senderName, sendSenderName,
   };
 
   const persist = useCallback(async (nextState) => {
@@ -94,6 +97,8 @@ export default function InventoryApp() {
     const nextShowPrices = parsed.showPrices ?? true;
     const nextHlGoal = parsed.hlGoal ?? null;
     const nextWhatsappPhone = parsed.whatsappPhone || "";
+    const nextSenderName = parsed.senderName || "";
+    const nextSendSenderName = parsed.sendSenderName ?? false;
     const migratedHl = parsed.cumulativeHl == null;
     // Migración: dato guardado (o backup) de antes de este campo — se siembra una sola vez
     // desde el HL ya vendido (derivado del historial), para no perder lo que ya se contó.
@@ -111,13 +116,15 @@ export default function InventoryApp() {
     setShowPrices(nextShowPrices);
     setHlGoal(nextHlGoal);
     setWhatsappPhone(nextWhatsappPhone);
+    setSenderName(nextSenderName);
+    setSendSenderName(nextSendSenderName);
 
     if (alwaysPersist || migratedHl) {
       persist({
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
-        whatsappPhone: nextWhatsappPhone,
+        whatsappPhone: nextWhatsappPhone, senderName: nextSenderName, sendSenderName: nextSendSenderName,
       });
     }
   }
@@ -588,6 +595,8 @@ export default function InventoryApp() {
             stock={stock}
             showPrices={showPrices}
             whatsappPhone={whatsappPhone}
+            senderName={senderName}
+            sendSenderName={sendSenderName}
             onConfirmOrder={confirmOrder}
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
@@ -620,6 +629,13 @@ export default function InventoryApp() {
             onWhatsappPhoneChange={(next) => {
               setWhatsappPhone(next);
               persist({ ...currentPersistedState, whatsappPhone: next });
+            }}
+            senderName={senderName}
+            sendSenderName={sendSenderName}
+            onSenderSettingsChange={(nextSenderName, nextSendSenderName) => {
+              setSenderName(nextSenderName);
+              setSendSenderName(nextSendSenderName);
+              persist({ ...currentPersistedState, senderName: nextSenderName, sendSenderName: nextSendSenderName });
             }}
           />
         )}

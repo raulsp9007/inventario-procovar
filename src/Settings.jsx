@@ -1,12 +1,20 @@
 import { useState } from "react";
 
-export default function Settings({ whatsappPhone, onWhatsappPhoneChange }) {
+export default function Settings({ whatsappPhone, onWhatsappPhoneChange, senderName, sendSenderName, onSenderSettingsChange }) {
   const [phoneInput, setPhoneInput] = useState(whatsappPhone || "");
+  const [nameInput, setNameInput] = useState(senderName || "");
+  const [sendChecked, setSendChecked] = useState(!!sendSenderName);
 
   function save() {
     const digits = phoneInput.replace(/\D/g, "");
     setPhoneInput(digits);
     onWhatsappPhoneChange(digits);
+  }
+
+  function saveSenderSettings(nextName, nextChecked) {
+    setNameInput(nextName);
+    setSendChecked(nextChecked);
+    onSenderSettingsChange(nextName, nextChecked);
   }
 
   return (
@@ -46,6 +54,38 @@ export default function Settings({ whatsappPhone, onWhatsappPhoneChange }) {
         {whatsappPhone && (
           <div style={{ fontSize: 12, color: "#8A8574", marginTop: 8 }}>
             Guardado: {whatsappPhone}
+          </div>
+        )}
+      </div>
+
+      <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Enviar mi nombre</div>
+        <div style={{ fontSize: 12, color: "#8A8574", marginBottom: 10 }}>
+          Si está activo, cada mensaje de WhatsApp de un pedido empieza con tu nombre.
+        </div>
+        <input
+          type="text"
+          placeholder="Tu nombre"
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          onBlur={() => saveSenderSettings(nameInput, sendChecked)}
+          onKeyDown={(e) => { if (e.key === "Enter") saveSenderSettings(nameInput, sendChecked); }}
+          style={{
+            width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
+            padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
+          }}
+        />
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={sendChecked}
+            onChange={(e) => saveSenderSettings(nameInput, e.target.checked)}
+          />
+          Enviar mi nombre en los mensajes
+        </label>
+        {sendSenderName && senderName && (
+          <div style={{ fontSize: 12, color: "#8A8574", marginTop: 8 }}>
+            Guardado: {senderName}
           </div>
         )}
       </div>
