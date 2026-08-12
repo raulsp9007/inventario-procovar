@@ -514,11 +514,11 @@ export default function InventoryApp() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flex: "1 1 200px", minWidth: 0 }}>
                     <div style={{
                       width: 6, height: 40, borderRadius: 3, background: p.color, flexShrink: 0,
                     }} />
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       {editMode ? (
                         <input
                           type="text"
@@ -526,7 +526,7 @@ export default function InventoryApp() {
                           onChange={(e) => setEditNameInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                           style={{
                             fontWeight: 700, fontSize: 15.5, border: "1px solid #D8D2C0", borderRadius: 7,
-                            padding: "4px 8px", marginBottom: 2,
+                            padding: "4px 8px", marginBottom: 2, width: "100%", boxSizing: "border-box",
                           }}
                         />
                       ) : (
@@ -536,82 +536,91 @@ export default function InventoryApp() {
                       {lastAdjustedAt[p.code] && (
                         <div style={{ fontSize: 11, color: "#B4AF9E" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
                       )}
-                      {showPrices && (
-                        <div style={{ fontSize: 11, color: "#8A8574" }}>
-                          Precio: {prices[p.code] ? formatCUP(prices[p.code]) : "no definido"}
+                      {!editMode && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 10px", fontSize: 11, color: "#8A8574", marginTop: 3 }}>
+                          {showPrices && (
+                            <span>Precio: {prices[p.code] ? formatCUP(prices[p.code]) : "no definido"}</span>
+                          )}
+                          <span>HL/unidad: {p.hl != null ? p.hl : "no definido"}</span>
+                          <span>Aviso stock bajo: ≤ {lowStockThresholdFor(p)} uds</span>
                         </div>
                       )}
-                      <div style={{ fontSize: 11, color: "#8A8574" }}>
-                        HL/unidad: {p.hl != null ? p.hl : "no definido"}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#8A8574" }}>
-                        Aviso stock bajo: ≤ {lowStockThresholdFor(p)} uds
-                      </div>
                     </div>
                   </div>
 
-                  <div style={{ textAlign: "right" }}>
-                    {editMode ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          value={editInputs[p.code]}
-                          onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                          style={{
-                            width: 90, textAlign: "right", fontSize: 20, fontWeight: 700,
-                            border: "1px solid #D8D2C0", borderRadius: 7, padding: "6px 10px",
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        />
-                        <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em" }}>PRECIO CUP</div>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          value={editPriceInputs[p.code]}
-                          onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                          title="Precio en CUP"
-                          style={{
-                            width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
-                            border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",
-                            fontVariantNumeric: "tabular-nums", color: "#26241F",
-                          }}
-                        />
-                        <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em" }}>HL POR UNIDAD</div>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          value={editHlInputs[p.code] ?? ""}
-                          onChange={(e) => setEditHlInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                          title="Hectolitros por unidad"
-                          style={{
-                            width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
-                            border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",
-                            fontVariantNumeric: "tabular-nums", color: "#26241F",
-                          }}
-                        />
-                        <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em" }}>AVISO STOCK BAJO</div>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          value={editLowStockInputs[p.code] ?? ""}
-                          onChange={(e) => setEditLowStockInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                          title="Cantidad de stock a partir de la cual avisar"
-                          placeholder={String(LOW_STOCK_THRESHOLD)}
-                          style={{
-                            width: 90, textAlign: "right", fontSize: 13, fontWeight: 600,
-                            border: "1px solid #D8D2C0", borderRadius: 7, padding: "5px 8px",
-                            fontVariantNumeric: "tabular-nums", color: "#26241F",
-                          }}
-                        />
-                      </div>
-                    ) : (
+                  {!editMode && (
+                    <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "#B4661E" : "#22261F" }}>
                         {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "#9A9484" }}>uds</span>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
+
+                {editMode && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px", marginTop: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em", marginBottom: 3 }}>STOCK ACTUAL</div>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={editInputs[p.code]}
+                        onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        style={{
+                          width: "100%", boxSizing: "border-box", fontSize: 18, fontWeight: 700,
+                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "7px 10px",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em", marginBottom: 3 }}>PRECIO CUP</div>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={editPriceInputs[p.code]}
+                        onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        title="Precio en CUP"
+                        style={{
+                          width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
+                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
+                          fontVariantNumeric: "tabular-nums", color: "#26241F",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em", marginBottom: 3 }}>HL POR UNIDAD</div>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={editHlInputs[p.code] ?? ""}
+                        onChange={(e) => setEditHlInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        title="Hectolitros por unidad"
+                        style={{
+                          width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
+                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
+                          fontVariantNumeric: "tabular-nums", color: "#26241F",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em", marginBottom: 3 }}>AVISO STOCK BAJO</div>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={editLowStockInputs[p.code] ?? ""}
+                        onChange={(e) => setEditLowStockInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        title="Cantidad de stock a partir de la cual avisar"
+                        placeholder={String(LOW_STOCK_THRESHOLD)}
+                        style={{
+                          width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
+                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
+                          fontVariantNumeric: "tabular-nums", color: "#26241F",
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {editMode && (
                   <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
