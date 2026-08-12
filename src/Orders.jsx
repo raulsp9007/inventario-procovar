@@ -24,10 +24,14 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
+  const [todayOrderSort, setTodayOrderSort] = useState("recent");
 
   const today = todayStr();
   const allOrders = groupAllOrders(movements);
   const todaysOrders = allOrders.filter((o) => o.date === today);
+  const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
+    todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
+  );
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
   const pastOrdersByDate = new Map();
   allOrders
@@ -417,13 +421,29 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
         </button>
       )}
 
+      {!selectMode && todaysOrders.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <select
+            value={todayOrderSort}
+            onChange={(e) => setTodayOrderSort(e.target.value)}
+            style={{
+              border: "1px solid #E7E2D3", borderRadius: 7,
+              padding: "7px 10px", fontSize: 12.5, background: "#FFFFFF", color: "#8A8574",
+            }}
+          >
+            <option value="recent">Más recientes primero</option>
+            <option value="oldest">Más antiguos primero</option>
+          </select>
+        </div>
+      )}
+
       {todaysOrders.length === 0 ? (
         <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
           Aún no hay pedidos hoy.
         </div>
       ) : (
         <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
-          {todaysOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: selectMode }))}
+          {sortedTodaysOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: selectMode }))}
         </div>
       )}
 
