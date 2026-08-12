@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { AlertTriangle, History, Settings2, Eye, EyeOff, Trash2, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { getData, setData } from "./storage";
-import { todayStr, formatDate, formatDateTime } from "./dateUtils";
-import { formatCUP, totalHlSold } from "./money";
+import { todayStr } from "./dateUtils";
+import { totalHlSold } from "./money";
 import { downloadBackup, parseBackupFile } from "./backup";
+import TabButton from "./TabButton.jsx";
+import ProductsView from "./ProductsView.jsx";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
 import Customers from "./Customers.jsx";
@@ -434,61 +436,11 @@ export default function InventoryApp() {
       </div>
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0", display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <button
-          onClick={() => setView("hoy")}
-          style={{
-            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            borderRadius: 7, border: "1px solid #22261F",
-            background: view === "hoy" ? "#22261F" : "transparent",
-            color: view === "hoy" ? "#F7F4EC" : "#22261F",
-          }}
-        >
-          Hoy
-        </button>
-        <button
-          onClick={() => setView("resumen")}
-          style={{
-            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            borderRadius: 7, border: "1px solid #22261F",
-            background: view === "resumen" ? "#22261F" : "transparent",
-            color: view === "resumen" ? "#F7F4EC" : "#22261F",
-          }}
-        >
-          Resumen semanal
-        </button>
-        <button
-          onClick={() => setView("pedidos")}
-          style={{
-            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            borderRadius: 7, border: "1px solid #22261F",
-            background: view === "pedidos" ? "#22261F" : "transparent",
-            color: view === "pedidos" ? "#F7F4EC" : "#22261F",
-          }}
-        >
-          Pedidos
-        </button>
-        <button
-          onClick={() => setView("clientes")}
-          style={{
-            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            borderRadius: 7, border: "1px solid #22261F",
-            background: view === "clientes" ? "#22261F" : "transparent",
-            color: view === "clientes" ? "#F7F4EC" : "#22261F",
-          }}
-        >
-          Clientes
-        </button>
-        <button
-          onClick={() => setView("stock")}
-          style={{
-            flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            borderRadius: 7, border: "1px solid #22261F",
-            background: view === "stock" ? "#22261F" : "transparent",
-            color: view === "stock" ? "#F7F4EC" : "#22261F",
-          }}
-        >
-          Productos
-        </button>
+        <TabButton active={view === "hoy"} onClick={() => setView("hoy")}>Hoy</TabButton>
+        <TabButton active={view === "resumen"} onClick={() => setView("resumen")}>Resumen semanal</TabButton>
+        <TabButton active={view === "pedidos"} onClick={() => setView("pedidos")}>Pedidos</TabButton>
+        <TabButton active={view === "clientes"} onClick={() => setView("clientes")}>Clientes</TabButton>
+        <TabButton active={view === "stock"} onClick={() => setView("stock")}>Productos</TabButton>
         <button
           onClick={() => {
             const next = !showPrices;
@@ -555,292 +507,39 @@ export default function InventoryApp() {
         )}
 
         {view === "stock" && (
-        <>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PRODUCTOS</div>
-          <button
-            onClick={editMode ? saveEdit : openEdit}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: editMode ? "#22261F" : "transparent",
-              color: editMode ? "#F7F4EC" : "#22261F",
-              border: "1px solid #22261F",
-              borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            <Settings2 size={14} />
-            {editMode ? "Guardar existencias" : "Ajustar existencias"}
-          </button>
-        </div>
-
-        <div style={{ display: "grid", gap: 10 }}>
-          {activeProducts.map((p) => {
-            const qty = stock[p.code] || 0;
-            const isLow = qty <= lowStockThresholdFor(p);
-            const lastMovement = movements.find((m) => m.code === p.code);
-            return (
-              <div
-                key={p.code}
-                className="rowfade"
-                style={{
-                  background: "#FFFFFF",
-                  border: `1px solid ${isLow ? "#E9CFA0" : "#E7E2D3"}`,
-                  borderRadius: 12,
-                  padding: "16px 18px",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flex: "1 1 200px", minWidth: 0 }}>
-                    <div style={{
-                      width: 6, height: 40, borderRadius: 3, background: p.color, flexShrink: 0,
-                    }} />
-                    <div style={{ minWidth: 0 }}>
-                      {editMode ? (
-                        <input
-                          type="text"
-                          value={editNameInputs[p.code] ?? p.name}
-                          onChange={(e) => setEditNameInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                          style={{
-                            fontWeight: 700, fontSize: 15.5, border: "1px solid #D8D2C0", borderRadius: 7,
-                            padding: "4px 8px", marginBottom: 2, width: "100%", boxSizing: "border-box",
-                          }}
-                        />
-                      ) : (
-                        <div style={{ fontWeight: 700, fontSize: 15.5 }}>{p.name}</div>
-                      )}
-                      <div style={{ fontSize: 12, color: "#9A9484" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
-                      {lastAdjustedAt[p.code] && (
-                        <div style={{ fontSize: 11, color: "#B4AF9E" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
-                      )}
-                      {!editMode && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 10px", fontSize: 11, color: "#8A8574", marginTop: 3 }}>
-                          {showPrices && (
-                            <span>Precio: {prices[p.code] ? formatCUP(prices[p.code]) : "no definido"}</span>
-                          )}
-                          <span>HL/unidad: {p.hl != null ? p.hl : "no definido"}</span>
-                          <span>Aviso stock bajo: ≤ {lowStockThresholdFor(p)} uds</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {!editMode && (
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "#B4661E" : "#22261F" }}>
-                        {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "#9A9484" }}>uds</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {editMode && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px", marginTop: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em", marginBottom: 3 }}>STOCK ACTUAL</div>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={editInputs[p.code]}
-                        onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                        style={{
-                          width: "100%", boxSizing: "border-box", fontSize: 18, fontWeight: 700,
-                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "7px 10px",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em", marginBottom: 3 }}>PRECIO CUP</div>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={editPriceInputs[p.code]}
-                        onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                        title="Precio en CUP"
-                        style={{
-                          width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
-                          fontVariantNumeric: "tabular-nums", color: "#26241F",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em", marginBottom: 3 }}>HL POR UNIDAD</div>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={editHlInputs[p.code] ?? ""}
-                        onChange={(e) => setEditHlInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                        title="Hectolitros por unidad"
-                        style={{
-                          width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
-                          fontVariantNumeric: "tabular-nums", color: "#26241F",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: "#9A9484", letterSpacing: "0.04em", marginBottom: 3 }}>AVISO STOCK BAJO</div>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={editLowStockInputs[p.code] ?? ""}
-                        onChange={(e) => setEditLowStockInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                        title="Cantidad de stock a partir de la cual avisar"
-                        placeholder={String(LOW_STOCK_THRESHOLD)}
-                        style={{
-                          width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                          border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
-                          fontVariantNumeric: "tabular-nums", color: "#26241F",
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {editMode && (
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
-                    <button
-                      onClick={() => archiveProduct(p.code)}
-                      title="Eliminar producto"
-                      aria-label="Eliminar producto"
-                      style={{
-                        display: "flex", alignItems: "center", gap: 6,
-                        background: "transparent", border: "1px solid #E7E2D3", color: "#8A5A1E",
-                        borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer",
-                      }}
-                    >
-                      <Trash2 size={13} /> Eliminar producto
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {editMode && (
-            <div
-              style={{
-                background: "#FFFFFF", border: "1px dashed #D8D2C0", borderRadius: 12,
-                padding: "14px 18px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
-              }}
-            >
-              <input
-                type="text"
-                placeholder="Nombre del producto nuevo"
-                value={newProductName}
-                onChange={(e) => setNewProductName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addProduct(); }}
-                style={{
-                  flex: "1 1 auto", minWidth: 160, border: "1px solid #E7E2D3", borderRadius: 7,
-                  padding: "9px 12px", fontSize: 14,
-                }}
-              />
-              <input
-                type="number"
-                inputMode="decimal"
-                placeholder="HL/unidad"
-                value={newProductHl}
-                onChange={(e) => setNewProductHl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addProduct(); }}
-                style={{
-                  flex: "0 1 110px", minWidth: 90, border: "1px solid #E7E2D3", borderRadius: 7,
-                  padding: "9px 12px", fontSize: 14,
-                }}
-              />
-              <button
-                onClick={addProduct}
-                style={{
-                  flex: "0 0 auto", background: "#22261F", color: "#F7F4EC", border: "none",
-                  borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                }}
-              >
-                + Agregar producto
-              </button>
-            </div>
-          )}
-        </div>
-
-        {editMode && archivedProducts.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <button
-              onClick={() => setShowArchived((s) => !s)}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
-                color: "#8A8574", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
-                padding: 0, marginBottom: showArchived ? 10 : 0,
-              }}
-            >
-              {showArchived ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              PRODUCTOS ELIMINADOS ({archivedProducts.length})
-            </button>
-
-            {showArchived && (
-              <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
-                {archivedProducts.map((p, i) => (
-                  <div
-                    key={p.code}
-                    style={{
-                      display: "flex", justifyContent: "space-between", alignItems: "center",
-                      gap: 8, padding: "10px 16px", fontSize: 13.5,
-                      borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
-                    }}
-                  >
-                    <span>{p.name}</span>
-                    <button
-                      onClick={() => restoreProduct(p.code)}
-                      style={{
-                        background: "transparent", border: "1px solid #E7E2D3", color: "#3C6E4A",
-                        borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer",
-                      }}
-                    >
-                      Restaurar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div style={{ marginTop: 28 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
-            <History size={14} /> HISTORIAL DE MOVIMIENTOS
-          </div>
-          {movements.length === 0 ? (
-            <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
-              Aún no hay movimientos registrados.
-            </div>
-          ) : (
-            <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
-              {movements.slice(0, 25).map((m, i) => {
-                const product = products.find((p) => p.code === m.code);
-                return (
-                  <div
-                    key={m.id}
-                    style={{
-                      display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
-                      gap: 6, padding: "10px 16px", fontSize: 13.5,
-                      borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 5, height: 5, borderRadius: "50%", background: product?.color || "#9A9484" }} />
-                      <span style={{ fontWeight: 600 }}>{product?.short || m.code}</span>
-                      <span style={{ color: "#9A9484" }}>{m.type === "venta" ? "venta" : "ajuste manual"}</span>
-                    </div>
-                    <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                      <span style={{ color: "#9A9484", fontSize: 12 }}>{formatDate(m.date)}</span>
-                      <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: m.type === "venta" ? "#B4661E" : (m.qty >= 0 ? "#3C6E4A" : "#B4661E") }}>
-                        {m.type === "venta" ? `-${m.qty}` : (m.qty >= 0 ? `+${m.qty}` : m.qty)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        </>
+          <ProductsView
+            products={products}
+            activeProducts={activeProducts}
+            archivedProducts={archivedProducts}
+            stock={stock}
+            prices={prices}
+            movements={movements}
+            lastAdjustedAt={lastAdjustedAt}
+            showPrices={showPrices}
+            lowStockThresholdFor={lowStockThresholdFor}
+            defaultLowStockThreshold={LOW_STOCK_THRESHOLD}
+            editMode={editMode}
+            onToggleEditMode={editMode ? saveEdit : openEdit}
+            editInputs={editInputs}
+            setEditInputs={setEditInputs}
+            editPriceInputs={editPriceInputs}
+            setEditPriceInputs={setEditPriceInputs}
+            editNameInputs={editNameInputs}
+            setEditNameInputs={setEditNameInputs}
+            editHlInputs={editHlInputs}
+            setEditHlInputs={setEditHlInputs}
+            editLowStockInputs={editLowStockInputs}
+            setEditLowStockInputs={setEditLowStockInputs}
+            newProductName={newProductName}
+            setNewProductName={setNewProductName}
+            newProductHl={newProductHl}
+            setNewProductHl={setNewProductHl}
+            onAddProduct={addProduct}
+            onArchiveProduct={archiveProduct}
+            onRestoreProduct={restoreProduct}
+            showArchived={showArchived}
+            setShowArchived={setShowArchived}
+          />
         )}
 
         {view === "resumen" && (
