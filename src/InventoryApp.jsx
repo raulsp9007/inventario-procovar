@@ -593,6 +593,7 @@ export default function InventoryApp() {
             products={products}
             movements={movements}
             stock={stock}
+            prices={prices}
             showPrices={showPrices}
             whatsappPhone={whatsappPhone}
             senderName={senderName}
