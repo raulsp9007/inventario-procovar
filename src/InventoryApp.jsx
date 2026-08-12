@@ -359,15 +359,15 @@ export default function InventoryApp() {
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0", display: "flex", flexWrap: "wrap", gap: 8 }}>
         <button
-          onClick={() => setView("stock")}
+          onClick={() => setView("hoy")}
           style={{
             flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
             borderRadius: 7, border: "1px solid #22261F",
-            background: view === "stock" ? "#22261F" : "transparent",
-            color: view === "stock" ? "#F7F4EC" : "#22261F",
+            background: view === "hoy" ? "#22261F" : "transparent",
+            color: view === "hoy" ? "#F7F4EC" : "#22261F",
           }}
         >
-          Stock
+          Hoy
         </button>
         <button
           onClick={() => setView("resumen")}
@@ -403,15 +403,15 @@ export default function InventoryApp() {
           Clientes
         </button>
         <button
-          onClick={() => setView("hoy")}
+          onClick={() => setView("stock")}
           style={{
             flex: 1, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
             borderRadius: 7, border: "1px solid #22261F",
-            background: view === "hoy" ? "#22261F" : "transparent",
-            color: view === "hoy" ? "#F7F4EC" : "#22261F",
+            background: view === "stock" ? "#22261F" : "transparent",
+            color: view === "stock" ? "#F7F4EC" : "#22261F",
           }}
         >
-          Hoy
+          Productos
         </button>
         <button
           onClick={() => {
