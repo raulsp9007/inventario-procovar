@@ -23,6 +23,7 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [showPast, setShowPast] = useState(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
 
   const today = todayStr();
   const allOrders = groupAllOrders(movements);
@@ -115,6 +116,18 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
     resetForm();
   }
 
+  function handleDeleteClick(orderId) {
+    if (confirmingDeleteId === orderId) {
+      onDeleteOrder(orderId);
+      setConfirmingDeleteId(null);
+      return;
+    }
+    setConfirmingDeleteId(orderId);
+    setTimeout(() => {
+      setConfirmingDeleteId((current) => (current === orderId ? null : current));
+    }, 3000);
+  }
+
   function toggleSelected(orderId) {
     setSelectedIds((s) => {
       const next = new Set(s);
@@ -201,16 +214,21 @@ export default function Orders({ products, movements, stock, onConfirmOrder, onE
               <Send size={14} />
             </button>
             <button
-              onClick={() => onDeleteOrder(order.orderId)}
-              title="Eliminar pedido"
-              aria-label="Eliminar pedido"
+              onClick={() => handleDeleteClick(order.orderId)}
+              title={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
+              aria-label={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
-                background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                gap: 4, width: confirmingDeleteId === order.orderId ? "auto" : 34, height: 34,
+                padding: confirmingDeleteId === order.orderId ? "0 10px" : 0,
+                background: confirmingDeleteId === order.orderId ? "#B4291E" : "transparent",
+                border: confirmingDeleteId === order.orderId ? "1px solid #B4291E" : "1px solid #E7E2D3",
+                color: confirmingDeleteId === order.orderId ? "#FFFFFF" : "#8A8574",
+                borderRadius: 7, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600,
               }}
             >
               <Trash2 size={14} />
+              {confirmingDeleteId === order.orderId && "¿Seguro?"}
             </button>
           </div>
         )}
