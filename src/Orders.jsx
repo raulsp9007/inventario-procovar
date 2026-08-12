@@ -30,17 +30,20 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [todayOrderSort, setTodayOrderSort] = useState("recent");
+  const [orderSearch, setOrderSearch] = useState("");
 
   const today = todayStr();
   const allOrders = groupAllOrders(movements);
-  const todaysOrders = allOrders.filter((o) => o.date === today);
+  const searchTerm = orderSearch.trim().toLowerCase();
+  const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
+  const todaysOrders = allOrders.filter((o) => o.date === today && matchesSearch(o));
   const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
     todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
   );
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
   const pastOrdersByDate = new Map();
   allOrders
-    .filter((o) => o.date !== today && o.date >= pastCutoff)
+    .filter((o) => o.date !== today && o.date >= pastCutoff && matchesSearch(o))
     .forEach((o) => {
       if (!pastOrdersByDate.has(o.date)) pastOrdersByDate.set(o.date, []);
       pastOrdersByDate.get(o.date).push(o);
@@ -161,21 +164,21 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
       <div
         key={order.orderId}
         style={{
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          gap: 8, padding: "12px 16px", fontSize: 13.5,
+          padding: "12px 16px", fontSize: 13.5,
           borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
           {inSelectMode && (
             <input
               type="checkbox"
               checked={order.sent || selectedIds.has(order.orderId)}
               disabled={order.sent}
               onChange={() => toggleSelected(order.orderId)}
+              style={{ marginTop: 2, flexShrink: 0 }}
             />
           )}
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600 }}>
               {order.isDelivery ? "📦 " : ""}{order.customerName}
             </div>
@@ -190,67 +193,71 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
         </div>
 
         {!inSelectMode && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={order.sent}
-                onChange={(e) => onMarkSent(order.orderId, e.target.checked)}
-              />
-              Enviado
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={order.confirmed}
-                onChange={(e) => onMarkConfirmed(order.orderId, e.target.checked)}
-              />
-              <CheckCheck size={13} /> Confirmado
-            </label>
-            <button
-              onClick={() => startEdit(order)}
-              title="Editar pedido"
-              aria-label="Editar pedido"
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
-              }}
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              onClick={() => {
-                openOrderWhatsApp(order, products, whatsappPhone);
-                onMarkSent(order.orderId, true);
-              }}
-              title="Enviar por WhatsApp"
-              aria-label="Enviar por WhatsApp"
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                background: "#25D366", color: "#FFFFFF", border: "none",
-                borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
-              }}
-            >
-              <Send size={14} />
-            </button>
-            <button
-              onClick={() => handleDeleteClick(order.orderId)}
-              title={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
-              aria-label={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                gap: 4, width: confirmingDeleteId === order.orderId ? "auto" : 34, height: 34,
-                padding: confirmingDeleteId === order.orderId ? "0 10px" : 0,
-                background: confirmingDeleteId === order.orderId ? "#B4291E" : "transparent",
-                border: confirmingDeleteId === order.orderId ? "1px solid #B4291E" : "1px solid #E7E2D3",
-                color: confirmingDeleteId === order.orderId ? "#FFFFFF" : "#8A8574",
-                borderRadius: 7, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600,
-              }}
-            >
-              <Trash2 size={14} />
-              {confirmingDeleteId === order.orderId && "¿Seguro?"}
-            </button>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={order.sent}
+                  onChange={(e) => onMarkSent(order.orderId, e.target.checked)}
+                />
+                Enviado
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={order.confirmed}
+                  onChange={(e) => onMarkConfirmed(order.orderId, e.target.checked)}
+                />
+                <CheckCheck size={13} /> Confirmado
+              </label>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              <button
+                onClick={() => startEdit(order)}
+                title="Editar pedido"
+                aria-label="Editar pedido"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
+                  borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={() => {
+                  openOrderWhatsApp(order, products, whatsappPhone);
+                  onMarkSent(order.orderId, true);
+                }}
+                title="Enviar por WhatsApp"
+                aria-label="Enviar por WhatsApp"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "#25D366", color: "#FFFFFF", border: "none",
+                  borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                <Send size={14} />
+              </button>
+              <button
+                onClick={() => handleDeleteClick(order.orderId)}
+                title={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
+                aria-label={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  gap: 4, width: confirmingDeleteId === order.orderId ? "auto" : 34, height: 34,
+                  padding: confirmingDeleteId === order.orderId ? "0 10px" : 0,
+                  background: confirmingDeleteId === order.orderId ? "#B4291E" : "transparent",
+                  border: confirmingDeleteId === order.orderId ? "1px solid #B4291E" : "1px solid #E7E2D3",
+                  color: confirmingDeleteId === order.orderId ? "#FFFFFF" : "#8A8574",
+                  borderRadius: 7, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600,
+                }}
+              >
+                <Trash2 size={14} />
+                {confirmingDeleteId === order.orderId && "¿Seguro?"}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -409,6 +416,17 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
         </button>
       </div>
 
+      <input
+        type="text"
+        placeholder="Buscar cliente en pedidos"
+        value={orderSearch}
+        onChange={(e) => setOrderSearch(e.target.value)}
+        style={{
+          width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
+          padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 14,
+        }}
+      />
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PEDIDOS DE HOY</div>
         <button
@@ -456,7 +474,7 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
 
       {todaysOrders.length === 0 ? (
         <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
-          Aún no hay pedidos hoy.
+          {searchTerm ? `Ningún pedido de hoy coincide con "${orderSearch}".` : "Aún no hay pedidos hoy."}
         </div>
       ) : (
         <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
