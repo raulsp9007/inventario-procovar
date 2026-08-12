@@ -584,7 +584,7 @@ export default function InventoryApp() {
         )}
 
         {view === "clientes" && (
-          <Customers products={products} movements={movements} />
+          <Customers products={products} movements={movements} showPrices={showPrices} />
         )}
 
         {view === "hoy" && (

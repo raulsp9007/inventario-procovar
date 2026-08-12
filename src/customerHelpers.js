@@ -13,6 +13,24 @@ export function matchCustomerNames(names, query) {
   return names.filter((name) => name.toLowerCase().includes(lower));
 }
 
+export function getCustomerOrders(movements, customerName) {
+  const orderMovements = movements.filter((m) => m.customerName === customerName && m.orderId);
+  const byId = new Map();
+  orderMovements.forEach((m) => {
+    if (!byId.has(m.orderId)) {
+      byId.set(m.orderId, {
+        orderId: m.orderId,
+        date: m.date,
+        timestamp: m.timestamp,
+        isDelivery: !!m.isDelivery,
+        lines: [],
+      });
+    }
+    byId.get(m.orderId).lines.push({ code: m.code, qty: m.qty, unitPrice: m.unitPrice || 0 });
+  });
+  return Array.from(byId.values()).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+}
+
 export function getCustomerStats(movements, products) {
   const byCustomer = new Map();
 

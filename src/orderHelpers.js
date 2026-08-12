@@ -13,7 +13,7 @@ export function groupAllOrders(movements) {
         lines: [],
       });
     }
-    byId.get(m.orderId).lines.push({ code: m.code, qty: m.qty });
+    byId.get(m.orderId).lines.push({ code: m.code, qty: m.qty, unitPrice: m.unitPrice || 0 });
   });
   return Array.from(byId.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }

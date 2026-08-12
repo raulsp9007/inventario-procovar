@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { formatDate } from "./dateUtils";
-import { getCustomerStats } from "./customerHelpers";
+import { formatCUP } from "./money";
+import { getCustomerStats, getCustomerOrders } from "./customerHelpers";
 
 function sortStats(stats, sortBy) {
   const sorted = [...stats];
@@ -14,9 +16,10 @@ function sortStats(stats, sortBy) {
   return sorted;
 }
 
-export default function Customers({ products, movements }) {
+export default function Customers({ products, movements, showPrices }) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("recent");
+  const [expandedCustomer, setExpandedCustomer] = useState(null);
 
   const allStats = getCustomerStats(movements, products);
   const filtered = search.trim()
@@ -69,20 +72,59 @@ export default function Customers({ products, movements }) {
         <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
           {stats.map((c, i) => {
             const product = products.find((p) => p.code === c.favoriteProductCode);
+            const isExpanded = expandedCustomer === c.customerName;
+            const orders = isExpanded ? getCustomerOrders(movements, c.customerName) : [];
             return (
               <div
                 key={c.customerName}
-                style={{
-                  display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
-                  gap: 6, padding: "12px 16px", fontSize: 13.5,
-                  borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
-                }}
+                style={{ borderTop: i === 0 ? "none" : "1px solid #F0EDE2" }}
               >
-                <span style={{ fontWeight: 600 }}>{c.customerName}</span>
-                <div style={{ display: "flex", gap: 12, alignItems: "center", color: "#8A8574", fontSize: 12.5 }}>
-                  <span>{product ? product.short : c.favoriteProductCode}</span>
-                  <span>{formatDate(c.lastPurchaseDate)}</span>
+                <div
+                  onClick={() => setExpandedCustomer(isExpanded ? null : c.customerName)}
+                  style={{
+                    display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
+                    gap: 6, padding: "12px 16px", fontSize: 13.5, cursor: "pointer",
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>{c.customerName}</span>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", color: "#8A8574", fontSize: 12.5 }}>
+                    <span>{product ? product.short : c.favoriteProductCode}</span>
+                    <span>{formatDate(c.lastPurchaseDate)}</span>
+                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
                 </div>
+
+                {isExpanded && (
+                  <div style={{ borderTop: "1px solid #F0EDE2", padding: "8px 16px 12px", background: "#FBFAF6" }}>
+                    {orders.map((order, oi) => {
+                      const total = order.lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
+                      return (
+                        <div
+                          key={order.orderId}
+                          style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            gap: 8, padding: "8px 0", borderTop: oi === 0 ? "none" : "1px solid #F0EDE2",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 12.5 }}>
+                              {order.isDelivery ? "📦 " : ""}{formatDate(order.date)}
+                            </div>
+                            <div style={{ fontSize: 11.5, color: "#8A8574" }}>
+                              {order.lines.map((line) => {
+                                const lp = products.find((p) => p.code === line.code);
+                                return `${line.qty}x ${lp ? lp.short : line.code}`;
+                              }).join(", ")}
+                            </div>
+                          </div>
+                          {showPrices && (
+                            <div style={{ fontSize: 12.5, fontWeight: 600, flexShrink: 0 }}>{formatCUP(total)}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
