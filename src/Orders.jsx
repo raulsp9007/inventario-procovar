@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck } from "lucide-react";
-import { todayStr, formatDate, getDateNDaysAgoStr } from "./dateUtils";
+import { todayStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
@@ -189,6 +189,9 @@ export default function Orders({ products, movements, stock, showPrices, whatsap
                 return `${line.qty}x ${product ? product.short : line.code}`;
               }).join(", ")}
               {showPrices && ` · ${formatCUP(orderTotal(order))}`}
+            </div>
+            <div style={{ color: "#B5AF9C", fontSize: 11.5, marginTop: 2 }}>
+              {formatDateTime(order.timestamp)}
             </div>
           </div>
         </div>
