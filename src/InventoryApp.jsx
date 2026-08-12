@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, History, Settings2, Eye, EyeOff, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { AlertTriangle, History, Settings2, Eye, EyeOff, Trash2, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP, totalHlSold } from "./money";
+import { downloadBackup, parseBackupFile } from "./backup";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
 import Customers from "./Customers.jsx";
@@ -53,50 +54,13 @@ export default function InventoryApp() {
   const [showArchived, setShowArchived] = useState(false);
   const [showLowStockList, setShowLowStockList] = useState(false);
   const [error, setError] = useState("");
+  const [pendingImport, setPendingImport] = useState(null);
+  const fileInputRef = useRef(null);
   const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes" | "hoy"
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal,
   };
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const result = await getData(STORAGE_KEY);
-        if (result && result.value) {
-          const parsed = JSON.parse(result.value);
-          // Campo nuevo agregado alguna vez: siempre con `|| default` / `?? default` acá.
-          // Así datos guardados en una versión anterior nunca rompen ni se borran.
-          const loadedMovements = parsed.movements || [];
-          const loadedProducts = parsed.products || DEFAULT_PRODUCTS;
-          setStock(parsed.stock || {});
-          setMovements(loadedMovements);
-          setLastAdjustedAt(parsed.lastAdjustedAt || {});
-          setProducts(loadedProducts);
-          setPrices(parsed.prices || {});
-          setCumulativeRevenue(parsed.cumulativeRevenue || 0);
-          setExchangeRate(parsed.exchangeRate ?? null);
-          setCommissionPercent(parsed.commissionPercent || 0);
-          setShowPrices(parsed.showPrices ?? true);
-          setHlGoal(parsed.hlGoal ?? null);
-
-          if (parsed.cumulativeHl != null) {
-            setCumulativeHl(parsed.cumulativeHl);
-          } else {
-            // Migración: usuario de antes de este campo — se siembra una sola vez
-            // desde el HL ya vendido (derivado del historial actual), para no perder
-            // lo que ya se contó. De acá en adelante cumulativeHl es la fuente de verdad.
-            const backfilledHl = totalHlSold(loadedMovements, loadedProducts);
-            setCumulativeHl(backfilledHl);
-            setData(STORAGE_KEY, JSON.stringify({ ...parsed, cumulativeHl: backfilledHl }));
-          }
-        }
-      } catch (e) {
-      } finally {
-        setLoaded(true);
-      }
-    })();
-  }, []);
 
   const persist = useCallback(async (nextState) => {
     setSaveState("saving");
@@ -110,6 +74,83 @@ export default function InventoryApp() {
       setTimeout(() => setError(""), 3000);
     }
   }, []);
+
+  // Campo nuevo agregado alguna vez: siempre con `|| default` / `?? default` acá.
+  // Así datos guardados en una versión anterior (o un backup importado viejo) nunca rompen ni se borran.
+  // Se usa tanto para la carga inicial como para aplicar un backup importado.
+  function applyPersistedData(parsed, { alwaysPersist = false } = {}) {
+    const loadedMovements = parsed.movements || [];
+    const loadedProducts = parsed.products || DEFAULT_PRODUCTS;
+    const nextStock = parsed.stock || {};
+    const nextLastAdjustedAt = parsed.lastAdjustedAt || {};
+    const nextPrices = parsed.prices || {};
+    const nextCumulativeRevenue = parsed.cumulativeRevenue || 0;
+    const nextExchangeRate = parsed.exchangeRate ?? null;
+    const nextCommissionPercent = parsed.commissionPercent || 0;
+    const nextShowPrices = parsed.showPrices ?? true;
+    const nextHlGoal = parsed.hlGoal ?? null;
+    const migratedHl = parsed.cumulativeHl == null;
+    // Migración: dato guardado (o backup) de antes de este campo — se siembra una sola vez
+    // desde el HL ya vendido (derivado del historial), para no perder lo que ya se contó.
+    const nextCumulativeHl = migratedHl ? totalHlSold(loadedMovements, loadedProducts) : parsed.cumulativeHl;
+
+    setStock(nextStock);
+    setMovements(loadedMovements);
+    setLastAdjustedAt(nextLastAdjustedAt);
+    setProducts(loadedProducts);
+    setPrices(nextPrices);
+    setCumulativeRevenue(nextCumulativeRevenue);
+    setCumulativeHl(nextCumulativeHl);
+    setExchangeRate(nextExchangeRate);
+    setCommissionPercent(nextCommissionPercent);
+    setShowPrices(nextShowPrices);
+    setHlGoal(nextHlGoal);
+
+    if (alwaysPersist || migratedHl) {
+      persist({
+        stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
+        prices: nextPrices, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
+        exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
+      });
+    }
+  }
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await getData(STORAGE_KEY);
+        if (result && result.value) {
+          applyPersistedData(JSON.parse(result.value));
+        }
+      } catch (e) {
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, []);
+
+  function handleImportFileChange(e) {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = parseBackupFile(reader.result);
+        setPendingImport(parsed);
+      } catch (err) {
+        setError("Archivo inválido, no se pudo leer como backup.");
+        setTimeout(() => setError(""), 3000);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function confirmImport() {
+    if (!pendingImport) return;
+    applyPersistedData(pendingImport, { alwaysPersist: true });
+    setPendingImport(null);
+  }
 
   if (!loaded) {
     return (
@@ -857,7 +898,65 @@ export default function InventoryApp() {
           />
         )}
 
-        <div style={{ marginTop: 20, fontSize: 11.5, color: "#B4AF9E", textAlign: "center" }}>
+        {pendingImport && (
+          <div style={{ marginTop: 20, background: "#FBEFE0", border: "1px solid #E9CFA0", borderRadius: 10, padding: "14px 16px" }}>
+            <div style={{ fontSize: 13.5, color: "#8A5A1E", marginBottom: 10 }}>
+              Vas a reemplazar TODOS los datos actuales con el archivo importado. Esta acción no se puede deshacer.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={confirmImport}
+                style={{
+                  background: "#8A5A1E", color: "#FFFFFF", border: "none", borderRadius: 7,
+                  padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Sí, reemplazar
+              </button>
+              <button
+                onClick={() => setPendingImport(null)}
+                style={{
+                  background: "transparent", color: "#8A5A1E", border: "1px solid #E9CFA0", borderRadius: 7,
+                  padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 20, display: "flex", justifyContent: "center", gap: 8 }}>
+          <button
+            onClick={() => downloadBackup(currentPersistedState)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "transparent", border: "1px solid #D8D2C0", color: "#8A8574",
+              borderRadius: 7, padding: "7px 12px", fontSize: 12, cursor: "pointer",
+            }}
+          >
+            <Download size={13} /> Exportar datos
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "transparent", border: "1px solid #D8D2C0", color: "#8A8574",
+              borderRadius: 7, padding: "7px 12px", fontSize: 12, cursor: "pointer",
+            }}
+          >
+            <Upload size={13} /> Importar datos
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            onChange={handleImportFileChange}
+            style={{ display: "none" }}
+          />
+        </div>
+
+        <div style={{ marginTop: 10, fontSize: 11.5, color: "#B4AF9E", textAlign: "center" }}>
           {saveState === "saving" ? "Guardando…" : saveState === "saved" ? "Guardado ✓" : "Los datos se guardan automáticamente en este dispositivo"}
         </div>
       </div>
