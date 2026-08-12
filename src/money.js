@@ -31,6 +31,7 @@ export function totalHlSold(movements, products) {
   return movements
     .filter((m) => m.type === "venta")
     .reduce((sum, m) => {
+      if (m.unitHl != null) return sum + m.qty * m.unitHl;
       const product = products.find((p) => p.code === m.code);
       const hl = product?.hl || 0;
       return sum + m.qty * hl;

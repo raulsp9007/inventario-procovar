@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, formatDate } from "./dateUtils";
-import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown, totalHlSold } from "./money";
+import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 
 export default function WeeklySummary({
   products,
   movements,
   cumulativeRevenue,
+  cumulativeHl,
   exchangeRate,
   commissionPercent,
   showPrices,
@@ -28,7 +29,7 @@ export default function WeeklySummary({
   const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
   const [commissionInput, setCommissionInput] = useState(() => (commissionPercent ? String(commissionPercent) : ""));
   const [hlGoalInput, setHlGoalInput] = useState(() => (hlGoal != null ? String(hlGoal) : ""));
-  const hlSold = totalHlSold(movements, products);
+  const hlSold = cumulativeHl || 0;
   const hlPct = hlGoal != null && hlGoal > 0 ? Math.round((hlSold / hlGoal) * 100) : null;
   const activeProducts = products.filter((p) => !p.archived);
 

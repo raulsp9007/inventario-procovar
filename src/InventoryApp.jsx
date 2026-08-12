@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AlertTriangle, History, Settings2, Eye, EyeOff, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, formatDate, formatDateTime } from "./dateUtils";
-import { formatCUP } from "./money";
+import { formatCUP, totalHlSold } from "./money";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
 import Customers from "./Customers.jsx";
@@ -35,6 +35,7 @@ export default function InventoryApp() {
     DEFAULT_PRODUCTS.reduce((acc, p) => ({ ...acc, [p.code]: 0 }), {})
   );
   const [cumulativeRevenue, setCumulativeRevenue] = useState(0);
+  const [cumulativeHl, setCumulativeHl] = useState(0);
   const [exchangeRate, setExchangeRate] = useState(null);
   const [commissionPercent, setCommissionPercent] = useState(0);
   const [showPrices, setShowPrices] = useState(true);
@@ -55,7 +56,7 @@ export default function InventoryApp() {
   const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes" | "hoy"
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
-    prices, cumulativeRevenue, exchangeRate, commissionPercent, showPrices, hlGoal,
+    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal,
   };
 
   useEffect(() => {
@@ -66,16 +67,29 @@ export default function InventoryApp() {
           const parsed = JSON.parse(result.value);
           // Campo nuevo agregado alguna vez: siempre con `|| default` / `?? default` acá.
           // Así datos guardados en una versión anterior nunca rompen ni se borran.
+          const loadedMovements = parsed.movements || [];
+          const loadedProducts = parsed.products || DEFAULT_PRODUCTS;
           setStock(parsed.stock || {});
-          setMovements(parsed.movements || []);
+          setMovements(loadedMovements);
           setLastAdjustedAt(parsed.lastAdjustedAt || {});
-          setProducts(parsed.products || DEFAULT_PRODUCTS);
+          setProducts(loadedProducts);
           setPrices(parsed.prices || {});
           setCumulativeRevenue(parsed.cumulativeRevenue || 0);
           setExchangeRate(parsed.exchangeRate ?? null);
           setCommissionPercent(parsed.commissionPercent || 0);
           setShowPrices(parsed.showPrices ?? true);
           setHlGoal(parsed.hlGoal ?? null);
+
+          if (parsed.cumulativeHl != null) {
+            setCumulativeHl(parsed.cumulativeHl);
+          } else {
+            // Migración: usuario de antes de este campo — se siembra una sola vez
+            // desde el HL ya vendido (derivado del historial actual), para no perder
+            // lo que ya se contó. De acá en adelante cumulativeHl es la fuente de verdad.
+            const backfilledHl = totalHlSold(loadedMovements, loadedProducts);
+            setCumulativeHl(backfilledHl);
+            setData(STORAGE_KEY, JSON.stringify({ ...parsed, cumulativeHl: backfilledHl }));
+          }
         }
       } catch (e) {
       } finally {
@@ -242,22 +256,29 @@ export default function InventoryApp() {
     const nextStock = { ...stock };
     const newMovements = [];
     let addedRevenue = 0;
+    let addedHl = 0;
     lines.forEach(({ code, qty }) => {
       const unitPrice = prices[code] || 0;
+      const product = products.find((p) => p.code === code);
+      const unitHl = product?.hl || 0;
       nextStock[code] = (nextStock[code] || 0) - qty;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, orderId, customerName, isDelivery }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery }));
       addedRevenue += qty * unitPrice;
+      addedHl += qty * unitHl;
     });
     const nextMovements = [...newMovements, ...movements].slice(0, 500);
     const nextCumulativeRevenue = cumulativeRevenue + addedRevenue;
+    const nextCumulativeHl = cumulativeHl + addedHl;
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
+    setCumulativeHl(nextCumulativeHl);
     persist({
       ...currentPersistedState,
       stock: nextStock,
       movements: nextMovements,
       cumulativeRevenue: nextCumulativeRevenue,
+      cumulativeHl: nextCumulativeHl,
     });
   }
 
@@ -266,20 +287,25 @@ export default function InventoryApp() {
     if (orderMovements.length === 0) return;
     const nextStock = { ...stock };
     let removedRevenue = 0;
+    let removedHl = 0;
     orderMovements.forEach((m) => {
       nextStock[m.code] = (nextStock[m.code] || 0) + m.qty;
       removedRevenue += m.qty * (m.unitPrice || 0);
+      removedHl += m.qty * (m.unitHl || 0);
     });
     const nextMovements = movements.filter((m) => m.orderId !== orderId);
     const nextCumulativeRevenue = cumulativeRevenue - removedRevenue;
+    const nextCumulativeHl = cumulativeHl - removedHl;
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
+    setCumulativeHl(nextCumulativeHl);
     persist({
       ...currentPersistedState,
       stock: nextStock,
       movements: nextMovements,
       cumulativeRevenue: nextCumulativeRevenue,
+      cumulativeHl: nextCumulativeHl,
     });
   }
 
@@ -290,33 +316,42 @@ export default function InventoryApp() {
 
     const restoredStock = { ...stock };
     let removedRevenue = 0;
+    let removedHl = 0;
     originalMovements.forEach((m) => {
       restoredStock[m.code] = (restoredStock[m.code] || 0) + m.qty;
       removedRevenue += m.qty * (m.unitPrice || 0);
+      removedHl += m.qty * (m.unitHl || 0);
     });
 
     const nextStock = { ...restoredStock };
     const newMovements = [];
     let addedRevenue = 0;
+    let addedHl = 0;
     lines.forEach(({ code, qty }) => {
       const unitPrice = prices[code] || 0;
+      const product = products.find((p) => p.code === code);
+      const unitHl = product?.hl || 0;
       nextStock[code] = (nextStock[code] || 0) - qty;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, orderId, customerName, isDelivery, sent: false, date: originalDate }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, sent: false, date: originalDate }));
       addedRevenue += qty * unitPrice;
+      addedHl += qty * unitHl;
     });
 
     const otherMovements = movements.filter((m) => m.orderId !== orderId);
     const nextMovements = [...newMovements, ...otherMovements].slice(0, 500);
     const nextCumulativeRevenue = cumulativeRevenue - removedRevenue + addedRevenue;
+    const nextCumulativeHl = cumulativeHl - removedHl + addedHl;
 
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
+    setCumulativeHl(nextCumulativeHl);
     persist({
       ...currentPersistedState,
       stock: nextStock,
       movements: nextMovements,
       cumulativeRevenue: nextCumulativeRevenue,
+      cumulativeHl: nextCumulativeHl,
     });
   }
 
@@ -772,6 +807,7 @@ export default function InventoryApp() {
             products={products}
             movements={movements}
             cumulativeRevenue={cumulativeRevenue}
+            cumulativeHl={cumulativeHl}
             exchangeRate={exchangeRate}
             commissionPercent={commissionPercent}
             showPrices={showPrices}
