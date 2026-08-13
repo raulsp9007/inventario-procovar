@@ -1,21 +1,24 @@
 import { todayStr } from "./dateUtils";
-import { formatCUP, formatUSD, convertToUSD, totalRevenueInRange, totalHlSold } from "./money";
+import { formatCUP, formatUSD, convertToUSD, totalHlSold } from "./money";
 
 export default function Today({ products, movements, stock, showPrices, exchangeRate }) {
   const today = todayStr();
   const todaysMovements = movements.filter((m) => m.date === today);
   const todaysSales = todaysMovements.filter((m) => m.type === "venta");
-  const unitsSold = todaysSales.reduce((sum, m) => sum + m.qty, 0);
-  const dayRevenue = totalRevenueInRange(movements, today, today);
+  const todaysSentSales = todaysSales.filter((m) => m.sent);
+  const todaysPendingSales = todaysSales.filter((m) => !m.sent);
+  const unitsSold = todaysSentSales.reduce((sum, m) => sum + m.qty, 0);
+  const dayRevenue = todaysSentSales.reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
   const dayRevenueUSD = convertToUSD(dayRevenue, exchangeRate);
-  const hlSoldToday = totalHlSold(todaysMovements, products);
-  const ordersToday = new Set(todaysSales.filter((m) => m.orderId).map((m) => m.orderId)).size;
+  const hlSoldToday = totalHlSold(todaysSentSales, products);
+  const ordersToday = new Set(todaysSentSales.filter((m) => m.orderId).map((m) => m.orderId)).size;
 
   const activeProducts = products.filter((p) => !p.archived);
   const rows = activeProducts
     .map((p) => ({
       product: p,
-      soldToday: todaysSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
+      soldToday: todaysSentSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
+      pendingToday: todaysPendingSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
       stockLeft: stock[p.code] || 0,
     }))
     .sort((a, b) => b.soldToday - a.soldToday);
@@ -79,6 +82,11 @@ export default function Today({ products, movements, stock, showPrices, exchange
                 <span style={{ fontSize: 12.5, color: "#8A8574" }}>
                   Vendido hoy: <span style={{ fontWeight: 700, color: "#26241F", fontVariantNumeric: "tabular-nums" }}>{row.soldToday}</span>
                 </span>
+                {row.pendingToday > 0 && (
+                  <span style={{ fontSize: 12.5, color: "#B57A2E" }}>
+                    Pendiente: <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{row.pendingToday}</span>
+                  </span>
+                )}
                 <span style={{ fontSize: 12.5, color: "#8A8574" }}>
                   Stock: <span style={{ fontWeight: 700, color: "#26241F", fontVariantNumeric: "tabular-nums" }}>{row.stockLeft}</span>
                 </span>
