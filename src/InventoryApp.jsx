@@ -411,8 +411,16 @@ export default function InventoryApp() {
   }
 
   function markOrderSent(orderId, sent) {
+    markOrdersSent([orderId], sent);
+  }
+
+  // Llamar una sola vez por varios pedidos a la vez (envío en bloque): cada
+  // llamada a setMovements/persist usa el `movements` de este render, así que
+  // encadenar markOrderSent una vez por pedido pisaba las marcas anteriores.
+  function markOrdersSent(orderIds, sent) {
+    const idSet = new Set(orderIds);
     const nextMovements = movements.map((m) =>
-      m.orderId === orderId ? { ...m, sent } : m
+      idSet.has(m.orderId) ? { ...m, sent } : m
     );
     setMovements(nextMovements);
     persist({ ...currentPersistedState, movements: nextMovements });
@@ -602,6 +610,7 @@ export default function InventoryApp() {
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
             onMarkSent={markOrderSent}
+            onMarkOrdersSent={markOrdersSent}
             onMarkConfirmed={markOrderConfirmed}
             onError={(message) => {
               setError(message);

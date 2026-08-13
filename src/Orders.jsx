@@ -21,7 +21,7 @@ function draftTotal(draftLines, prices) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (prices[l.code] || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onError }) {
+export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
@@ -155,11 +155,13 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   }
 
   function confirmBulkSend() {
+    const idsToSend = [];
     todaysOrders.forEach((order) => {
       if (!selectedIds.has(order.orderId)) return;
       openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
-      onMarkSent(order.orderId, true);
+      idsToSend.push(order.orderId);
     });
+    onMarkOrdersSent(idsToSend, true);
     setSelectMode(false);
     setSelectedIds(new Set());
   }
