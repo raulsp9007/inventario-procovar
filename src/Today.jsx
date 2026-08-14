@@ -21,6 +21,7 @@ export default function Today({ products, movements, stock, showPrices, exchange
       pendingToday: todaysPendingSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
       stockLeft: stock[p.code] || 0,
     }))
+    .map((row) => ({ ...row, disponibleLibre: row.stockLeft - row.pendingToday }))
     .sort((a, b) => b.soldToday - a.soldToday);
 
   return (
@@ -90,6 +91,11 @@ export default function Today({ products, movements, stock, showPrices, exchange
                 <span style={{ fontSize: 12.5, color: "#8A8574" }}>
                   Stock: <span style={{ fontWeight: 700, color: "#26241F", fontVariantNumeric: "tabular-nums" }}>{row.stockLeft}</span>
                 </span>
+                {row.pendingToday > 0 && (
+                  <span style={{ fontSize: 12.5, color: "#8A8574" }}>
+                    Disponible libre: <span style={{ fontWeight: 700, color: "#26241F", fontVariantNumeric: "tabular-nums" }}>{row.disponibleLibre}</span>
+                  </span>
+                )}
               </div>
             </div>
           ))}
