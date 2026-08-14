@@ -182,6 +182,10 @@ export default function InventoryApp() {
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
     .reduce((sum, m) => sum + m.qty, 0);
+  const todaysPendingSales = todaysMovements.filter((m) => m.type === "venta" && !m.sent);
+  function pendingTodayFor(code) {
+    return todaysPendingSales.filter((m) => m.code === code).reduce((sum, m) => sum + m.qty, 0);
+  }
 
   function makeMovement(code, type, qty, extra = {}) {
     return {
@@ -521,6 +525,7 @@ export default function InventoryApp() {
                       <span>{p.name}</span>
                       <span style={{ color: "#8A5A1E", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                         {stock[p.code] || 0} uds (aviso ≤ {lowStockThresholdFor(p)})
+                        {pendingTodayFor(p.code) > 0 && ` · Pendiente: ${pendingTodayFor(p.code)}`}
                       </span>
                     </div>
                   ))}
