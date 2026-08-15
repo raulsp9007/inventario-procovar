@@ -36,19 +36,26 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [todayOrderSort, setTodayOrderSort] = useState("recent");
   const [orderSearch, setOrderSearch] = useState("");
+  const [filterUnsent, setFilterUnsent] = useState(false);
+  const [filterUnconfirmed, setFilterUnconfirmed] = useState(false);
 
   const today = todayStr();
   const allOrders = groupAllOrders(movements);
   const searchTerm = orderSearch.trim().toLowerCase();
   const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
-  const todaysOrders = allOrders.filter((o) => o.date === today && matchesSearch(o));
+  const matchesStatusFilter = (order) =>
+    (!filterUnsent && !filterUnconfirmed) ||
+    (filterUnsent && !order.sent) ||
+    (filterUnconfirmed && !order.confirmed);
+  const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order);
+  const todaysOrders = allOrders.filter((o) => o.date === today && matchesFilters(o));
   const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
     todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
   );
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
   const pastOrdersByDate = new Map();
   allOrders
-    .filter((o) => o.date !== today && o.date >= pastCutoff && matchesSearch(o))
+    .filter((o) => o.date !== today && o.date >= pastCutoff && matchesFilters(o))
     .forEach((o) => {
       if (!pastOrdersByDate.has(o.date)) pastOrdersByDate.set(o.date, []);
       pastOrdersByDate.get(o.date).push(o);
@@ -438,9 +445,28 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         onChange={(e) => setOrderSearch(e.target.value)}
         style={{
           width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
-          padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 14,
+          padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
         }}
       />
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 14 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#8A8574", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={filterUnsent}
+            onChange={(e) => setFilterUnsent(e.target.checked)}
+          />
+          Solo no enviados
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#8A8574", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={filterUnconfirmed}
+            onChange={(e) => setFilterUnconfirmed(e.target.checked)}
+          />
+          Solo no confirmados
+        </label>
+      </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PEDIDOS DE HOY</div>
@@ -489,7 +515,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
       {todaysOrders.length === 0 ? (
         <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
-          {searchTerm ? `Ningún pedido de hoy coincide con "${orderSearch}".` : "Aún no hay pedidos hoy."}
+          {searchTerm || filterUnsent || filterUnconfirmed
+            ? "Ningún pedido de hoy coincide con la búsqueda/filtros."
+            : "Aún no hay pedidos hoy."}
         </div>
       ) : (
         <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>

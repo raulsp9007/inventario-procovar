@@ -10,6 +10,9 @@ export default defineConfig(({ mode, isPreview }) => {
 
   return {
     base,
+    server: {
+      port: Number(process.env.PORT) || 5173,
+    },
     plugins: [
       react(),
       VitePWA({
