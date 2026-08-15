@@ -1,11 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck } from "lucide-react";
-import { todayStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
+import { businessDayStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
 
 const PAST_ORDERS_DAYS = 14;
+const FILTERS_STORAGE_KEY = "procovar-pedidos-filtros";
+
+function loadSavedFilters() {
+  try {
+    const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
 
 function openOrderWhatsApp(order, products, phone, senderOptions) {
   const text = formatOrderForWhatsApp(order, products, senderOptions);
@@ -34,12 +44,18 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
-  const [todayOrderSort, setTodayOrderSort] = useState("recent");
+  const [todayOrderSort, setTodayOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
   const [orderSearch, setOrderSearch] = useState("");
-  const [filterUnsent, setFilterUnsent] = useState(false);
-  const [filterUnconfirmed, setFilterUnconfirmed] = useState(false);
+  const [filterUnsent, setFilterUnsent] = useState(() => !!loadSavedFilters().filterUnsent);
+  const [filterUnconfirmed, setFilterUnconfirmed] = useState(() => !!loadSavedFilters().filterUnconfirmed);
 
-  const today = todayStr();
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: todayOrderSort, filterUnsent, filterUnconfirmed }));
+    } catch {}
+  }, [todayOrderSort, filterUnsent, filterUnconfirmed]);
+
+  const today = businessDayStr();
   const allOrders = groupAllOrders(movements);
   const searchTerm = orderSearch.trim().toLowerCase();
   const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);

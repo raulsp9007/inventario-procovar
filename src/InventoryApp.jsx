@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { getData, setData } from "./storage";
-import { todayStr } from "./dateUtils";
+import { todayStr, businessDayStr } from "./dateUtils";
 import { totalHlSold } from "./money";
 import { downloadBackup, parseBackupFile } from "./backup";
 import TabButton from "./TabButton.jsx";
@@ -193,7 +193,7 @@ export default function InventoryApp() {
   const archivedProducts = products.filter((p) => p.archived);
   const totalStock = activeProducts.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
   const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
-  const todaysMovements = movements.filter((m) => m.date === todayStr());
+  const todaysMovements = movements.filter((m) => m.date === businessDayStr());
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
     .reduce((sum, m) => sum + m.qty, 0);
@@ -336,7 +336,7 @@ export default function InventoryApp() {
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
       nextStock[code] = (nextStock[code] || 0) - qty;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, date: businessDayStr() }));
       addedRevenue += qty * unitPrice;
       addedHl += qty * unitHl;
     });

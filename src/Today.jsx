@@ -1,8 +1,8 @@
-import { todayStr } from "./dateUtils";
+import { businessDayStr } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD, totalHlSold } from "./money";
 
 export default function Today({ products, movements, stock, showPrices, exchangeRate }) {
-  const today = todayStr();
+  const today = businessDayStr();
   const todaysMovements = movements.filter((m) => m.date === today);
   const todaysSales = todaysMovements.filter((m) => m.type === "venta");
   const todaysSentSales = todaysSales.filter((m) => m.sent);

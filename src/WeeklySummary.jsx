@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, formatDate } from "./dateUtils";
+import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, businessDayStr, formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 
 export default function WeeklySummary({
@@ -16,7 +16,7 @@ export default function WeeklySummary({
   onHlGoalChange,
 }) {
   const weekStart = getWeekStartStr();
-  const today = todayStr();
+  const today = businessDayStr();
   const { start: prevStart, end: prevEnd } = getPreviousWeekRangeStr();
   const monthStart = getMonthStartStr();
   const weekTotal = totalRevenueInRange(movements, weekStart, today);
