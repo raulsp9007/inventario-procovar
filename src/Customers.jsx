@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Check, X } from "lucide-react";
 import { formatDate } from "./dateUtils";
 import { formatCUP } from "./money";
 import { getCustomerStats, getCustomerOrders } from "./customerHelpers";
@@ -16,10 +16,22 @@ function sortStats(stats, sortBy) {
   return sorted;
 }
 
-export default function Customers({ products, movements, showPrices }) {
+export default function Customers({ products, movements, showPrices, onRenameCustomer }) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [expandedCustomer, setExpandedCustomer] = useState(null);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [nameInput, setNameInput] = useState("");
+
+  function startRename(customerName) {
+    setEditingCustomer(customerName);
+    setNameInput(customerName);
+  }
+
+  function saveRename(oldName) {
+    onRenameCustomer(oldName, nameInput);
+    setEditingCustomer(null);
+  }
 
   const allStats = getCustomerStats(movements, products);
   const filtered = search.trim()
@@ -79,20 +91,74 @@ export default function Customers({ products, movements, showPrices }) {
                 key={c.customerName}
                 style={{ borderTop: i === 0 ? "none" : "1px solid #F0EDE2" }}
               >
-                <div
-                  onClick={() => setExpandedCustomer(isExpanded ? null : c.customerName)}
-                  style={{
-                    display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
-                    gap: 6, padding: "12px 16px", fontSize: 13.5, cursor: "pointer",
-                  }}
-                >
-                  <span style={{ fontWeight: 600 }}>{c.customerName}</span>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center", color: "#8A8574", fontSize: 12.5 }}>
-                    <span>{product ? product.short : c.favoriteProductCode}</span>
-                    <span>{formatDate(c.lastPurchaseDate)}</span>
-                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {editingCustomer === c.customerName ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px" }}>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveRename(c.customerName); }}
+                      style={{
+                        flex: "1 1 auto", minWidth: 0, border: "1px solid #E7E2D3", borderRadius: 7,
+                        padding: "7px 10px", fontSize: 13.5, boxSizing: "border-box",
+                      }}
+                    />
+                    <button
+                      onClick={() => saveRename(c.customerName)}
+                      title="Guardar"
+                      aria-label="Guardar"
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "#22261F", color: "#F7F4EC", border: "none",
+                        borderRadius: 7, width: 32, height: 32, cursor: "pointer", flexShrink: 0,
+                      }}
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button
+                      onClick={() => setEditingCustomer(null)}
+                      title="Cancelar"
+                      aria-label="Cancelar"
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "transparent", color: "#8A8574", border: "1px solid #E7E2D3",
+                        borderRadius: 7, width: 32, height: 32, cursor: "pointer", flexShrink: 0,
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div
+                    onClick={() => setExpandedCustomer(isExpanded ? null : c.customerName)}
+                    style={{
+                      display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
+                      gap: 6, padding: "12px 16px", fontSize: 13.5, cursor: "pointer",
+                    }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                      {c.customerName}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startRename(c.customerName); }}
+                        title="Editar nombre"
+                        aria-label="Editar nombre"
+                        style={{
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          background: "transparent", border: "none", color: "#8A8574",
+                          cursor: "pointer", padding: 2,
+                        }}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </span>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center", color: "#8A8574", fontSize: 12.5 }}>
+                      <span>{product ? product.short : c.favoriteProductCode}</span>
+                      <span>{formatDate(c.lastPurchaseDate)}</span>
+                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </div>
+                  </div>
+                )}
 
                 {isExpanded && (
                   <div style={{ borderTop: "1px solid #F0EDE2", padding: "8px 16px 12px", background: "#FBFAF6" }}>

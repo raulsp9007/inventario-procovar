@@ -430,6 +430,16 @@ export default function InventoryApp() {
     persist({ ...currentPersistedState, movements: nextMovements });
   }
 
+  function renameCustomer(oldName, newName) {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    const nextMovements = movements.map((m) =>
+      m.customerName === oldName ? { ...m, customerName: trimmed } : m
+    );
+    setMovements(nextMovements);
+    persist({ ...currentPersistedState, movements: nextMovements });
+  }
+
   function markOrderConfirmed(orderId, confirmed) {
     const nextMovements = movements.map((m) =>
       m.orderId === orderId ? { ...m, confirmed } : m
@@ -625,7 +635,7 @@ export default function InventoryApp() {
         )}
 
         {view === "clientes" && (
-          <Customers products={products} movements={movements} showPrices={showPrices} />
+          <Customers products={products} movements={movements} showPrices={showPrices} onRenameCustomer={renameCustomer} />
         )}
 
         {view === "hoy" && (
