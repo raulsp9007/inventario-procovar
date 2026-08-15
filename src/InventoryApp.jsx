@@ -23,6 +23,8 @@ const DEFAULT_PRODUCTS = [
 
 const LOW_STOCK_THRESHOLD = 20;
 const STORAGE_KEY = "procovar-inventario-v1";
+const VALID_VIEWS = ["hoy", "resumen", "pedidos", "clientes", "stock", "config"];
+const VIEW_STORAGE_KEY = "procovar-active-tab";
 
 function lowStockThresholdFor(product) {
   return product.lowStockThreshold != null ? product.lowStockThreshold : LOW_STOCK_THRESHOLD;
@@ -62,7 +64,20 @@ export default function InventoryApp() {
   const [error, setError] = useState("");
   const [pendingImport, setPendingImport] = useState(null);
   const fileInputRef = useRef(null);
-  const [view, setView] = useState("stock"); // "stock" | "resumen" | "pedidos" | "clientes" | "hoy"
+  const [view, setViewState] = useState(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+      return VALID_VIEWS.includes(saved) ? saved : "stock";
+    } catch {
+      return "stock";
+    }
+  }); // "stock" | "resumen" | "pedidos" | "clientes" | "hoy" | "config"
+  function setView(next) {
+    setViewState(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {}
+  }
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, whatsappPhone,
