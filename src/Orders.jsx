@@ -637,73 +637,91 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </label>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PEDIDOS DE HOY</div>
-        <button
-          onClick={() => (selectMode ? confirmBulkSend() : setSelectMode(true))}
-          disabled={todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)}
-          style={{
-            display: "flex", alignItems: "center", gap: 6,
-            background: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "#E7E2D3" : "#25D366",
-            color: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "#9A9484" : "#FFFFFF",
-            border: "none", borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600,
-            cursor: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "default" : "pointer",
-          }}
-        >
-          <Send size={14} /> {selectMode ? `Confirmar envío (${selectedIds.size})` : "Enviar por WhatsApp"}
-        </button>
-      </div>
+      {(() => {
+        const hoySection = (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PEDIDOS DE HOY</div>
+              <button
+                onClick={() => (selectMode ? confirmBulkSend() : setSelectMode(true))}
+                disabled={todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "#E7E2D3" : "#25D366",
+                  color: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "#9A9484" : "#FFFFFF",
+                  border: "none", borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600,
+                  cursor: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "default" : "pointer",
+                }}
+              >
+                <Send size={14} /> {selectMode ? `Confirmar envío (${selectedIds.size})` : "Enviar por WhatsApp"}
+              </button>
+            </div>
 
-      {selectMode && (
-        <button
-          onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
-          style={{
-            background: "transparent", border: "none", color: "#8A8574", fontSize: 12.5,
-            cursor: "pointer", padding: "0 0 10px", textDecoration: "underline",
-          }}
-        >
-          Cancelar selección
-        </button>
-      )}
+            {selectMode && (
+              <button
+                onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+                style={{
+                  background: "transparent", border: "none", color: "#8A8574", fontSize: 12.5,
+                  cursor: "pointer", padding: "0 0 10px", textDecoration: "underline",
+                }}
+              >
+                Cancelar selección
+              </button>
+            )}
 
-      {!selectMode && todaysOrders.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <select
-            value={todayOrderSort}
-            onChange={(e) => setTodayOrderSort(e.target.value)}
-            style={{
-              border: "1px solid #E7E2D3", borderRadius: 7,
-              padding: "7px 10px", fontSize: 12.5, background: "#FFFFFF", color: "#8A8574",
-            }}
-          >
-            <option value="recent">Más recientes primero</option>
-            <option value="oldest">Más antiguos primero</option>
-          </select>
-        </div>
-      )}
+            {!selectMode && todaysOrders.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <select
+                  value={todayOrderSort}
+                  onChange={(e) => setTodayOrderSort(e.target.value)}
+                  style={{
+                    border: "1px solid #E7E2D3", borderRadius: 7,
+                    padding: "7px 10px", fontSize: 12.5, background: "#FFFFFF", color: "#8A8574",
+                  }}
+                >
+                  <option value="recent">Más recientes primero</option>
+                  <option value="oldest">Más antiguos primero</option>
+                </select>
+              </div>
+            )}
 
-      {todaysOrders.length === 0 ? (
-        <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
-          {searchTerm || filterUnsent || filterUnconfirmed
-            ? "Ningún pedido de hoy coincide con la búsqueda/filtros."
-            : "Aún no hay pedidos hoy."}
-        </div>
-      ) : (
-        <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
-          {sortedTodaysOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: selectMode }))}
-        </div>
-      )}
-
-      {tomorrowsOrders.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
-            PEDIDOS DE MAÑANA
+            {todaysOrders.length === 0 ? (
+              <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
+                {searchTerm || filterUnsent || filterUnconfirmed
+                  ? "Ningún pedido de hoy coincide con la búsqueda/filtros."
+                  : "Aún no hay pedidos hoy."}
+              </div>
+            ) : (
+              <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+                {sortedTodaysOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: selectMode }))}
+              </div>
+            )}
           </div>
-          <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
-            {sortedTomorrowsOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: false }))}
+        );
+
+        const mananaSection = tomorrowsOrders.length > 0 && (
+          <div>
+            <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
+              PEDIDOS DE MAÑANA
+            </div>
+            <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+              {sortedTomorrowsOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: false }))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+
+        return pastCutoffTime ? (
+          <>
+            {mananaSection && <div style={{ marginBottom: 20 }}>{mananaSection}</div>}
+            {hoySection}
+          </>
+        ) : (
+          <>
+            {hoySection}
+            {mananaSection && <div style={{ marginTop: 20 }}>{mananaSection}</div>}
+          </>
+        );
+      })()}
 
       {pastOrdersCount > 0 && (
         <div style={{ marginTop: 20 }}>
