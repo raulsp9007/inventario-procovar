@@ -383,10 +383,14 @@ export default function InventoryApp() {
     });
   }
 
-  function editOrder(orderId, { customerName, isDelivery, lines }) {
+  // dateOverride: usado por postponeOrder para reabrir el pedido con fecha de
+  // hoy/mañana en vez de preservar la fecha original. Edición normal (desde
+  // el formulario "Editar pedido") no lo pasa, así que sigue preservando la
+  // fecha como siempre.
+  function editOrder(orderId, { customerName, isDelivery, lines }, dateOverride) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
-    const originalDate = originalMovements[0].date;
+    const originalDate = dateOverride || originalMovements[0].date;
 
     const restoredStock = { ...stock };
     let removedRevenue = 0;
@@ -433,16 +437,18 @@ export default function InventoryApp() {
     markOrdersSent([orderId], sent);
   }
 
-  // Aplazar solo mueve la fecha de atribución del pedido. El stock ya está
-  // descontado desde que se confirmó (no está partido por día), así que no
-  // hace falta tocarlo. sent/confirmed vuelven a false: nueva fecha de
-  // entrega implica re-confirmar con el cliente.
-  function postponeOrder(orderId, newDateStr) {
-    const nextMovements = movements.map((m) =>
-      m.orderId === orderId ? { ...m, date: newDateStr, sent: false, confirmed: false } : m
-    );
-    setMovements(nextMovements);
-    persist({ ...currentPersistedState, movements: nextMovements });
+  // Aplazar un pedido viejo lo trata como si fuera un pedido nuevo hecho
+  // ahora mismo: mismos productos/cantidades, pero fecha automática
+  // (hoy/mañana según las 4pm) y precio/HL/tasa recalculados contra los
+  // valores actuales — reusa editOrder, que ya hace exactamente eso (resta
+  // el stock viejo, resta el nuevo contra el stock actual, recalcula
+  // acumulados) cuando se le pasa una fecha explícita.
+  function postponeOrder(orderId) {
+    const originalMovements = movements.filter((m) => m.orderId === orderId);
+    if (originalMovements.length === 0) return;
+    const { customerName, isDelivery } = originalMovements[0];
+    const lines = originalMovements.map((m) => ({ code: m.code, qty: m.qty }));
+    editOrder(orderId, { customerName, isDelivery, lines }, businessDayStr());
   }
 
   // Llamar una sola vez por varios pedidos a la vez (envío en bloque): cada
