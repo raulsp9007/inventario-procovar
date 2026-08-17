@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck } from "lucide-react";
+import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, CalendarClock } from "lucide-react";
 import { businessDayStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
@@ -31,7 +31,7 @@ function draftTotal(draftLines, prices) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (prices[l.code] || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError }) {
+export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, onConfirmOrder, onEditOrder, onDeleteOrder, onPostponeOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
@@ -44,6 +44,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
+  const [postponingOrderId, setPostponingOrderId] = useState(null);
+  const [postponeDateInput, setPostponeDateInput] = useState("");
+  const [postponeWarning, setPostponeWarning] = useState(null);
   const [todayOrderSort, setTodayOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
   const [orderSearch, setOrderSearch] = useState("");
   const [filterUnsent, setFilterUnsent] = useState(() => !!loadSavedFilters().filterUnsent);
@@ -168,6 +171,43 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     }, 3000);
   }
 
+  function startPostpone(order) {
+    setPostponingOrderId(order.orderId);
+    setPostponeDateInput(today);
+    setPostponeWarning(null);
+  }
+
+  function cancelPostpone() {
+    setPostponingOrderId(null);
+    setPostponeWarning(null);
+  }
+
+  function negativeStockLines(order) {
+    return order.lines
+      .map((l) => {
+        const product = products.find((p) => p.code === l.code);
+        return { name: product ? product.name : l.code, stockNow: stock[l.code] || 0 };
+      })
+      .filter((x) => x.stockNow < 0);
+  }
+
+  function confirmPostpone(order) {
+    if (!postponeDateInput) return;
+    const negatives = negativeStockLines(order);
+    if (negatives.length > 0) {
+      setPostponeWarning({ orderId: order.orderId, date: postponeDateInput, negatives });
+      return;
+    }
+    onPostponeOrder(order.orderId, postponeDateInput);
+    setPostponingOrderId(null);
+  }
+
+  function forcePostpone() {
+    onPostponeOrder(postponeWarning.orderId, postponeWarning.date);
+    setPostponeWarning(null);
+    setPostponingOrderId(null);
+  }
+
   function toggleSelected(orderId) {
     setSelectedIds((s) => {
       const next = new Set(s);
@@ -247,6 +287,20 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               <button
+                onClick={() => (postponingOrderId === order.orderId ? cancelPostpone() : startPostpone(order))}
+                title="Aplazar pedido"
+                aria-label="Aplazar pedido"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: postponingOrderId === order.orderId ? "#22261F" : "transparent",
+                  color: postponingOrderId === order.orderId ? "#F7F4EC" : "#8A8574",
+                  border: "1px solid #E7E2D3",
+                  borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                <CalendarClock size={14} />
+              </button>
+              <button
                 onClick={() => startEdit(order)}
                 title="Editar pedido"
                 aria-label="Editar pedido"
@@ -291,6 +345,71 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 {confirmingDeleteId === order.orderId && "¿Seguro?"}
               </button>
             </div>
+          </div>
+        )}
+
+        {postponingOrderId === order.orderId && (
+          <div style={{ marginTop: 10, padding: "10px", background: "#FBFAF6", border: "1px solid #E7E2D3", borderRadius: 8 }}>
+            {postponeWarning && postponeWarning.orderId === order.orderId ? (
+              <div>
+                <div style={{ fontSize: 12.5, color: "#8A5A1E", fontWeight: 600, marginBottom: 6 }}>
+                  ⚠️ Stock negativo en:
+                </div>
+                <div style={{ fontSize: 12.5, color: "#8A5A1E", marginBottom: 10 }}>
+                  {postponeWarning.negatives.map((n) => `${n.name} (${n.stockNow})`).join(", ")}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={forcePostpone}
+                    style={{
+                      background: "#B4291E", color: "#FFFFFF", border: "none", borderRadius: 7,
+                      padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    Aplazar de todos modos
+                  </button>
+                  <button
+                    onClick={cancelPostpone}
+                    style={{
+                      background: "transparent", color: "#8A8574", border: "1px solid #E7E2D3", borderRadius: 7,
+                      padding: "7px 12px", fontSize: 12.5, cursor: "pointer",
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                <input
+                  type="date"
+                  min={today}
+                  value={postponeDateInput}
+                  onChange={(e) => setPostponeDateInput(e.target.value)}
+                  style={{
+                    border: "1px solid #E7E2D3", borderRadius: 7, padding: "7px 10px", fontSize: 13.5,
+                  }}
+                />
+                <button
+                  onClick={() => confirmPostpone(order)}
+                  style={{
+                    background: "#22261F", color: "#F7F4EC", border: "none", borderRadius: 7,
+                    padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Confirmar
+                </button>
+                <button
+                  onClick={cancelPostpone}
+                  style={{
+                    background: "transparent", color: "#8A8574", border: "1px solid #E7E2D3", borderRadius: 7,
+                    padding: "7px 12px", fontSize: 12.5, cursor: "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

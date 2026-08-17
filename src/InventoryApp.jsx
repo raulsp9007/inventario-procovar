@@ -433,6 +433,18 @@ export default function InventoryApp() {
     markOrdersSent([orderId], sent);
   }
 
+  // Aplazar solo mueve la fecha de atribución del pedido. El stock ya está
+  // descontado desde que se confirmó (no está partido por día), así que no
+  // hace falta tocarlo. sent/confirmed vuelven a false: nueva fecha de
+  // entrega implica re-confirmar con el cliente.
+  function postponeOrder(orderId, newDateStr) {
+    const nextMovements = movements.map((m) =>
+      m.orderId === orderId ? { ...m, date: newDateStr, sent: false, confirmed: false } : m
+    );
+    setMovements(nextMovements);
+    persist({ ...currentPersistedState, movements: nextMovements });
+  }
+
   // Llamar una sola vez por varios pedidos a la vez (envío en bloque): cada
   // llamada a setMovements/persist usa el `movements` de este render, así que
   // encadenar markOrderSent una vez por pedido pisaba las marcas anteriores.
@@ -639,6 +651,7 @@ export default function InventoryApp() {
             onConfirmOrder={confirmOrder}
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
+            onPostponeOrder={postponeOrder}
             onMarkSent={markOrderSent}
             onMarkOrdersSent={markOrdersSent}
             onMarkConfirmed={markOrderConfirmed}
