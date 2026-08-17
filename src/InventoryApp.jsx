@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { getData, setData } from "./storage";
-import { todayStr, tomorrowStr, businessDayStr, isPastCutoffNow } from "./dateUtils";
+import { todayStr, tomorrowStr, businessDayStr, isPastCutoffNow, wasSentAfterCutoffToday } from "./dateUtils";
 import { totalHlSold } from "./money";
 import { downloadBackup, parseBackupFile } from "./backup";
 import TabButton from "./TabButton.jsx";
@@ -196,18 +196,21 @@ export default function InventoryApp() {
   const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
   // Pasadas las 4pm, todo pedido sin enviar (de cualquier fecha) pasa a
   // contar para "mañana" en vez de "hoy" -- así nunca se queda un pedido
-  // atascado en el día que ya cerró.
+  // atascado en el día que ya cerró. Lo mismo si el envío (marcar Enviado)
+  // pasó hoy después de las 4pm, aunque el pedido se haya armado antes.
   const pastCutoff = isPastCutoffNow();
   const todayCal = todayStr();
   const tomorrowCal = tomorrowStr();
+  const rolledToTomorrow = (m) =>
+    m.type === "venta" && ((pastCutoff && !m.sent) || wasSentAfterCutoffToday(m.sentAt));
   const todaysMovements = movements.filter((m) => {
     if (m.date !== todayCal) return false;
-    if (pastCutoff && m.type === "venta" && !m.sent) return false;
+    if (rolledToTomorrow(m)) return false;
     return true;
   });
   const mananaMovements = movements.filter((m) => {
     if (m.date === tomorrowCal) return true;
-    if (pastCutoff && m.type === "venta" && !m.sent) return true;
+    if (rolledToTomorrow(m)) return true;
     return false;
   });
   const todaysUnitsSold = todaysMovements
@@ -472,8 +475,9 @@ export default function InventoryApp() {
   // encadenar markOrderSent una vez por pedido pisaba las marcas anteriores.
   function markOrdersSent(orderIds, sent) {
     const idSet = new Set(orderIds);
+    const nowIso = new Date().toISOString();
     const nextMovements = movements.map((m) =>
-      idSet.has(m.orderId) ? { ...m, sent } : m
+      idSet.has(m.orderId) ? { ...m, sent, sentAt: sent ? nowIso : m.sentAt } : m
     );
     setMovements(nextMovements);
     persist({ ...currentPersistedState, movements: nextMovements });

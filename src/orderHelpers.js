@@ -8,6 +8,7 @@ export function groupAllOrders(movements) {
         customerName: m.customerName,
         isDelivery: !!m.isDelivery,
         sent: !!m.sent,
+        sentAt: m.sentAt || null,
         confirmed: !!m.confirmed,
         date: m.date,
         timestamp: m.timestamp,

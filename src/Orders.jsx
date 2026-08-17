@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, CalendarClock } from "lucide-react";
-import { todayStr, tomorrowStr, isPastCutoffNow, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
+import { todayStr, tomorrowStr, isPastCutoffNow, wasSentAfterCutoffToday, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
@@ -72,8 +72,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const tomorrow = tomorrowStr();
   // Pasadas las 4pm, cualquier pedido sin enviar (de cualquier fecha) pasa a
   // contar como pedido de mañana -- mismo criterio que las pestañas Hoy/Mañana.
+  // Lo mismo si el envío (marcar Enviado) pasó hoy después de las 4pm.
   const pastCutoffTime = isPastCutoffNow();
-  const belongsToTomorrow = (o) => o.date === tomorrow || (pastCutoffTime && !o.sent);
+  const belongsToTomorrow = (o) =>
+    o.date === tomorrow || (pastCutoffTime && !o.sent) || wasSentAfterCutoffToday(o.sentAt);
   const belongsToToday = (o) => o.date === today && !belongsToTomorrow(o);
   const allOrders = groupAllOrders(movements);
   const searchTerm = orderSearch.trim().toLowerCase();

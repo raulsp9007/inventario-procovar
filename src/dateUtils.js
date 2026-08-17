@@ -32,6 +32,15 @@ export function isPastCutoffNow(now = new Date()) {
   return now.getHours() >= CUTOFF_HOUR;
 }
 
+// El pedido se marcó "Enviado" hoy mismo, después de las 4pm -- aunque se
+// haya armado antes del corte, el envío real (lo que importa para saber
+// cuándo llega al cliente) pasó hoy después de la hora límite.
+export function wasSentAfterCutoffToday(sentAtIso) {
+  if (!sentAtIso) return false;
+  const d = new Date(sentAtIso);
+  return toDateStr(d) === todayStr() && d.getHours() >= CUTOFF_HOUR;
+}
+
 export function formatDate(dateStr) {
   const date = new Date(dateStr + "T00:00:00");
   return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
