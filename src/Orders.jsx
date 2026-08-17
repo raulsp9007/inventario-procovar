@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, CalendarClock } from "lucide-react";
-import { businessDayStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
+import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
@@ -57,7 +57,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     } catch {}
   }, [todayOrderSort, filterUnsent, filterUnconfirmed]);
 
-  const today = businessDayStr();
+  const today = todayStr();
+  const tomorrow = tomorrowStr();
   const allOrders = groupAllOrders(movements);
   const searchTerm = orderSearch.trim().toLowerCase();
   const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
@@ -70,10 +71,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
     todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
   );
+  const tomorrowsOrders = allOrders.filter((o) => o.date === tomorrow && matchesFilters(o));
+  const sortedTomorrowsOrders = [...tomorrowsOrders].sort((a, b) =>
+    todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
+  );
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
   const pastOrdersByDate = new Map();
   allOrders
-    .filter((o) => o.date !== today && o.date >= pastCutoff && matchesFilters(o))
+    .filter((o) => o.date !== today && o.date !== tomorrow && o.date >= pastCutoff && matchesFilters(o))
     .forEach((o) => {
       if (!pastOrdersByDate.has(o.date)) pastOrdersByDate.set(o.date, []);
       pastOrdersByDate.get(o.date).push(o);
@@ -666,6 +671,17 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       ) : (
         <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
           {sortedTodaysOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: selectMode }))}
+        </div>
+      )}
+
+      {tomorrowsOrders.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
+            PEDIDOS DE MAÑANA
+          </div>
+          <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+            {sortedTomorrowsOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: false }))}
+          </div>
         </div>
       )}
 

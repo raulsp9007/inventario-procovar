@@ -10,6 +10,7 @@ import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
 import Customers from "./Customers.jsx";
 import Today from "./Today.jsx";
+import Tomorrow from "./Tomorrow.jsx";
 import Settings from "./Settings.jsx";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 
@@ -23,7 +24,7 @@ const DEFAULT_PRODUCTS = [
 
 const LOW_STOCK_THRESHOLD = 20;
 const STORAGE_KEY = "procovar-inventario-v1";
-const VALID_VIEWS = ["hoy", "resumen", "pedidos", "clientes", "stock", "config"];
+const VALID_VIEWS = ["hoy", "manana", "resumen", "pedidos", "clientes", "stock", "config"];
 const VIEW_STORAGE_KEY = "procovar-active-tab";
 
 function lowStockThresholdFor(product) {
@@ -193,7 +194,7 @@ export default function InventoryApp() {
   const archivedProducts = products.filter((p) => p.archived);
   const totalStock = activeProducts.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
   const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
-  const todaysMovements = movements.filter((m) => m.date === businessDayStr());
+  const todaysMovements = movements.filter((m) => m.date === todayStr());
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
     .reduce((sum, m) => sum + m.qty, 0);
@@ -512,6 +513,7 @@ export default function InventoryApp() {
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0", display: "flex", flexWrap: "wrap", gap: 8 }}>
         <TabButton active={view === "hoy"} onClick={() => setView("hoy")}>Hoy</TabButton>
+        <TabButton active={view === "manana"} onClick={() => setView("manana")}>Mañana</TabButton>
         <TabButton active={view === "resumen"} onClick={() => setView("resumen")}>Resumen semanal</TabButton>
         <TabButton active={view === "pedidos"} onClick={() => setView("pedidos")}>Pedidos</TabButton>
         <TabButton active={view === "clientes"} onClick={() => setView("clientes")}>Clientes</TabButton>
@@ -675,6 +677,16 @@ export default function InventoryApp() {
 
         {view === "hoy" && (
           <Today
+            products={products}
+            movements={movements}
+            stock={stock}
+            showPrices={showPrices}
+            exchangeRate={exchangeRate}
+          />
+        )}
+
+        {view === "manana" && (
+          <Tomorrow
             products={products}
             movements={movements}
             stock={stock}

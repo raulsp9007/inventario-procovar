@@ -1,8 +1,11 @@
-import { businessDayStr } from "./dateUtils";
+import { todayStr } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD, totalHlSold } from "./money";
 
-export default function Today({ products, movements, stock, showPrices, exchangeRate }) {
-  const today = businessDayStr();
+export default function Today({
+  products, movements, stock, showPrices, exchangeRate,
+  dateStr, title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
+}) {
+  const today = dateStr || todayStr();
   const todaysMovements = movements.filter((m) => m.date === today);
   const todaysSales = todaysMovements.filter((m) => m.type === "venta");
   const todaysSentSales = todaysSales.filter((m) => m.sent);
@@ -27,7 +30,7 @@ export default function Today({ products, movements, stock, showPrices, exchange
   return (
     <div>
       <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
-        HOY
+        {title}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
@@ -47,7 +50,7 @@ export default function Today({ products, movements, stock, showPrices, exchange
         )}
 
         <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "14px 16px" }}>
-          <div style={{ fontSize: 11, color: "#8A8574", letterSpacing: "0.06em", marginBottom: 4 }}>PEDIDOS DE HOY</div>
+          <div style={{ fontSize: 11, color: "#8A8574", letterSpacing: "0.06em", marginBottom: 4 }}>{ordersLabel}</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{ordersToday}</div>
         </div>
 
@@ -81,7 +84,7 @@ export default function Today({ products, movements, stock, showPrices, exchange
               </div>
               <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                 <span style={{ fontSize: 12.5, color: "#8A8574" }}>
-                  Vendido hoy: <span style={{ fontWeight: 700, color: "#26241F", fontVariantNumeric: "tabular-nums" }}>{row.soldToday}</span>
+                  {soldLabel}: <span style={{ fontWeight: 700, color: "#26241F", fontVariantNumeric: "tabular-nums" }}>{row.soldToday}</span>
                 </span>
                 {row.pendingToday > 0 && (
                   <span style={{ fontSize: 12.5, color: "#B57A2E" }}>

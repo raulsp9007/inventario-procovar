@@ -10,6 +10,12 @@ export function todayStr() {
   return toDateStr(new Date());
 }
 
+export function tomorrowStr() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return toDateStr(d);
+}
+
 // Día "hábil" del negocio: pedidos hechos despues de las 4pm (hora del
 // dispositivo) cuentan para el día siguiente, no para hoy.
 const CUTOFF_HOUR = 16;
