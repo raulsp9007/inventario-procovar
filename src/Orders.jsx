@@ -31,7 +31,7 @@ function draftTotal(draftLines, prices) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (prices[l.code] || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, onConfirmOrder, onEditOrder, onDeleteOrder, onPostponeOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError }) {
+export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onPostponeOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
@@ -45,6 +45,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [postponeWarning, setPostponeWarning] = useState(null);
+  const [bigOrderWarning, setBigOrderWarning] = useState(null);
   const [todayOrderSort, setTodayOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
   const [orderSearch, setOrderSearch] = useState("");
   const [filterUnsent, setFilterUnsent] = useState(() => !!loadSavedFilters().filterUnsent);
@@ -95,6 +96,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setDraftLines([]);
     setPendingQty("");
     setEditingOrderId(null);
+    setBigOrderWarning(null);
   }
 
   function startEdit(order) {
@@ -149,12 +151,36 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       }
     }
     const draft = { customerName: customerName.trim(), isDelivery, lines };
+    const bigLines = lines
+      .map((l) => {
+        const product = products.find((p) => p.code === l.code);
+        const threshold = product ? lowStockThresholdFor(product) : null;
+        return { name: product ? product.name : l.code, qty: l.qty, threshold };
+      })
+      .filter((x) => x.threshold != null && x.qty > x.threshold);
+    if (bigLines.length > 0) {
+      setBigOrderWarning({ draft, bigLines });
+      return;
+    }
+    submitDraft(draft);
+  }
+
+  function submitDraft(draft) {
     if (editingOrderId) {
       onEditOrder(editingOrderId, draft);
     } else {
       onConfirmOrder(draft);
     }
     resetForm();
+  }
+
+  function confirmBigOrderAnyway() {
+    submitDraft(bigOrderWarning.draft);
+    setBigOrderWarning(null);
+  }
+
+  function cancelBigOrderWarning() {
+    setBigOrderWarning(null);
   }
 
   function handleDeleteClick(orderId) {
@@ -512,6 +538,37 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           </div>
         ) : (
           <div style={{ fontSize: 12.5, color: "#9A9484" }}>Todos los productos ya están en el pedido.</div>
+        )}
+
+        {bigOrderWarning && (
+          <div style={{ marginTop: 12, padding: "10px", background: "#FBEFE0", border: "1px solid #E9CFA0", borderRadius: 8 }}>
+            <div style={{ fontSize: 12.5, color: "#8A5A1E", fontWeight: 600, marginBottom: 6 }}>
+              ⚠️ Pedido grande:
+            </div>
+            <div style={{ fontSize: 12.5, color: "#8A5A1E", marginBottom: 10 }}>
+              {bigOrderWarning.bigLines.map((l) => `${l.name}: ${l.qty} uds (aviso ≤ ${l.threshold})`).join(", ")}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={confirmBigOrderAnyway}
+                style={{
+                  background: "#22261F", color: "#F7F4EC", border: "none", borderRadius: 7,
+                  padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Confirmar de todas formas
+              </button>
+              <button
+                onClick={cancelBigOrderWarning}
+                style={{
+                  background: "transparent", color: "#8A8574", border: "1px solid #E7E2D3", borderRadius: 7,
+                  padding: "7px 12px", fontSize: 12.5, cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         )}
 
         <button

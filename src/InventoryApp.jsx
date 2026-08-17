@@ -658,6 +658,7 @@ export default function InventoryApp() {
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
             onPostponeOrder={postponeOrder}
+            lowStockThresholdFor={lowStockThresholdFor}
             onMarkSent={markOrderSent}
             onMarkOrdersSent={markOrdersSent}
             onMarkConfirmed={markOrderConfirmed}
