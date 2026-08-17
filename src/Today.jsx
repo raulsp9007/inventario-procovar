@@ -1,13 +1,12 @@
-import { todayStr } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD, totalHlSold } from "./money";
 
+// `movements` ya viene filtrado por el llamador (InventoryApp.jsx) según qué
+// pedidos le tocan a esta pestaña -- este componente solo resume/muestra.
 export default function Today({
   products, movements, stock, showPrices, exchangeRate,
-  dateStr, title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
+  title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
 }) {
-  const today = dateStr || todayStr();
-  const todaysMovements = movements.filter((m) => m.date === today);
-  const todaysSales = todaysMovements.filter((m) => m.type === "venta");
+  const todaysSales = movements.filter((m) => m.type === "venta");
   const todaysSentSales = todaysSales.filter((m) => m.sent);
   const todaysPendingSales = todaysSales.filter((m) => !m.sent);
   const unitsSold = todaysSentSales.reduce((sum, m) => sum + m.qty, 0);

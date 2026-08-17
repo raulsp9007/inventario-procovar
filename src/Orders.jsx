@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, CalendarClock } from "lucide-react";
-import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
+import { todayStr, tomorrowStr, isPastCutoffNow, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
@@ -59,6 +59,11 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   const today = todayStr();
   const tomorrow = tomorrowStr();
+  // Pasadas las 4pm, cualquier pedido sin enviar (de cualquier fecha) pasa a
+  // contar como pedido de mañana -- mismo criterio que las pestañas Hoy/Mañana.
+  const pastCutoffTime = isPastCutoffNow();
+  const belongsToTomorrow = (o) => o.date === tomorrow || (pastCutoffTime && !o.sent);
+  const belongsToToday = (o) => o.date === today && !belongsToTomorrow(o);
   const allOrders = groupAllOrders(movements);
   const searchTerm = orderSearch.trim().toLowerCase();
   const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
@@ -67,18 +72,18 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     (filterUnsent && !order.sent) ||
     (filterUnconfirmed && !order.confirmed);
   const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order);
-  const todaysOrders = allOrders.filter((o) => o.date === today && matchesFilters(o));
+  const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
   const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
     todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
   );
-  const tomorrowsOrders = allOrders.filter((o) => o.date === tomorrow && matchesFilters(o));
+  const tomorrowsOrders = allOrders.filter((o) => belongsToTomorrow(o) && matchesFilters(o));
   const sortedTomorrowsOrders = [...tomorrowsOrders].sort((a, b) =>
     todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
   );
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
   const pastOrdersByDate = new Map();
   allOrders
-    .filter((o) => o.date !== today && o.date !== tomorrow && o.date >= pastCutoff && matchesFilters(o))
+    .filter((o) => !belongsToToday(o) && !belongsToTomorrow(o) && o.date >= pastCutoff && matchesFilters(o))
     .forEach((o) => {
       if (!pastOrdersByDate.has(o.date)) pastOrdersByDate.set(o.date, []);
       pastOrdersByDate.get(o.date).push(o);

@@ -28,6 +28,10 @@ export function businessDayStr(now = new Date()) {
   return toDateStr(d);
 }
 
+export function isPastCutoffNow(now = new Date()) {
+  return now.getHours() >= CUTOFF_HOUR;
+}
+
 export function formatDate(dateStr) {
   const date = new Date(dateStr + "T00:00:00");
   return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });

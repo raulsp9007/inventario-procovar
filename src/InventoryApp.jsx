@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { getData, setData } from "./storage";
-import { todayStr, businessDayStr } from "./dateUtils";
+import { todayStr, tomorrowStr, businessDayStr, isPastCutoffNow } from "./dateUtils";
 import { totalHlSold } from "./money";
 import { downloadBackup, parseBackupFile } from "./backup";
 import TabButton from "./TabButton.jsx";
@@ -194,7 +194,22 @@ export default function InventoryApp() {
   const archivedProducts = products.filter((p) => p.archived);
   const totalStock = activeProducts.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
   const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
-  const todaysMovements = movements.filter((m) => m.date === todayStr());
+  // Pasadas las 4pm, todo pedido sin enviar (de cualquier fecha) pasa a
+  // contar para "mañana" en vez de "hoy" -- así nunca se queda un pedido
+  // atascado en el día que ya cerró.
+  const pastCutoff = isPastCutoffNow();
+  const todayCal = todayStr();
+  const tomorrowCal = tomorrowStr();
+  const todaysMovements = movements.filter((m) => {
+    if (m.date !== todayCal) return false;
+    if (pastCutoff && m.type === "venta" && !m.sent) return false;
+    return true;
+  });
+  const mananaMovements = movements.filter((m) => {
+    if (m.date === tomorrowCal) return true;
+    if (pastCutoff && m.type === "venta" && !m.sent) return true;
+    return false;
+  });
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
     .reduce((sum, m) => sum + m.qty, 0);
@@ -678,7 +693,7 @@ export default function InventoryApp() {
         {view === "hoy" && (
           <Today
             products={products}
-            movements={movements}
+            movements={todaysMovements}
             stock={stock}
             showPrices={showPrices}
             exchangeRate={exchangeRate}
@@ -688,7 +703,7 @@ export default function InventoryApp() {
         {view === "manana" && (
           <Tomorrow
             products={products}
-            movements={movements}
+            movements={mananaMovements}
             stock={stock}
             showPrices={showPrices}
             exchangeRate={exchangeRate}
