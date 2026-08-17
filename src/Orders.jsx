@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, CalendarClock } from "lucide-react";
 import { todayStr, tomorrowStr, isPastCutoffNow, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
@@ -50,12 +50,23 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [orderSearch, setOrderSearch] = useState("");
   const [filterUnsent, setFilterUnsent] = useState(() => !!loadSavedFilters().filterUnsent);
   const [filterUnconfirmed, setFilterUnconfirmed] = useState(() => !!loadSavedFilters().filterUnconfirmed);
+  // Bloquea envíos repetidos (doble clic/doble toque) mientras el formulario
+  // todavía no reflejó el reset -- el estado de React (customerName, etc.)
+  // se actualiza en batch, así que un segundo click puede leer el mismo
+  // formulario "todavía lleno" antes de que se limpie. El ref cambia de
+  // inmediato y solo se libera cuando el re-render con el formulario ya
+  // vacío efectivamente ocurre (ver useEffect debajo).
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     try {
       localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: todayOrderSort, filterUnsent, filterUnconfirmed }));
     } catch {}
   }, [todayOrderSort, filterUnsent, filterUnconfirmed]);
+
+  useEffect(() => {
+    submittingRef.current = false;
+  }, [customerName]);
 
   const today = todayStr();
   const tomorrow = tomorrowStr();
@@ -137,6 +148,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   }
 
   function confirmOrder() {
+    if (submittingRef.current) return;
     if (!customerName.trim()) {
       onError("Ingresa el nombre del cliente.");
       return;
@@ -172,6 +184,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       setBigOrderWarning({ draft, bigLines });
       return;
     }
+    submittingRef.current = true;
     submitDraft(draft);
   }
 
@@ -185,6 +198,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   }
 
   function confirmBigOrderAnyway() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     submitDraft(bigOrderWarning.draft);
     setBigOrderWarning(null);
   }
