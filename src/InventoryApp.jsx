@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, tomorrowStr, businessDayStr, isPastCutoffNow, wasSentAfterCutoffToday } from "./dateUtils";
@@ -182,6 +182,32 @@ export default function InventoryApp() {
     setPendingImport(null);
   }
 
+  // Pasadas las 4pm, todo pedido sin enviar (de cualquier fecha) pasa a
+  // contar para "mañana" en vez de "hoy" -- así nunca se queda un pedido
+  // atascado en el día que ya cerró. Lo mismo si el envío (marcar Enviado)
+  // pasó hoy después de las 4pm, aunque el pedido se haya armado antes.
+  // Este useMemo tiene que vivir ANTES del `if (!loaded) return`, si no el
+  // hook se salta en el primer render (loaded=false) y React tira "Rendered
+  // more hooks than during the previous render" apenas loaded pasa a true.
+  const pastCutoff = isPastCutoffNow();
+  const todayCal = todayStr();
+  const tomorrowCal = tomorrowStr();
+  const { todaysMovements, mananaMovements } = useMemo(() => {
+    const rolledToTomorrow = (m) =>
+      m.type === "venta" && ((pastCutoff && !m.sent) || wasSentAfterCutoffToday(m.sentAt));
+    const todaysMovements = movements.filter((m) => {
+      if (m.date !== todayCal) return false;
+      if (rolledToTomorrow(m)) return false;
+      return true;
+    });
+    const mananaMovements = movements.filter((m) => {
+      if (m.date === tomorrowCal) return true;
+      if (rolledToTomorrow(m)) return true;
+      return false;
+    });
+    return { todaysMovements, mananaMovements };
+  }, [movements, pastCutoff, todayCal, tomorrowCal]);
+
   if (!loaded) {
     return (
       <div style={{ minHeight: "100vh", background: "#F7F4EC", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
@@ -194,25 +220,6 @@ export default function InventoryApp() {
   const archivedProducts = products.filter((p) => p.archived);
   const totalStock = activeProducts.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
   const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
-  // Pasadas las 4pm, todo pedido sin enviar (de cualquier fecha) pasa a
-  // contar para "mañana" en vez de "hoy" -- así nunca se queda un pedido
-  // atascado en el día que ya cerró. Lo mismo si el envío (marcar Enviado)
-  // pasó hoy después de las 4pm, aunque el pedido se haya armado antes.
-  const pastCutoff = isPastCutoffNow();
-  const todayCal = todayStr();
-  const tomorrowCal = tomorrowStr();
-  const rolledToTomorrow = (m) =>
-    m.type === "venta" && ((pastCutoff && !m.sent) || wasSentAfterCutoffToday(m.sentAt));
-  const todaysMovements = movements.filter((m) => {
-    if (m.date !== todayCal) return false;
-    if (rolledToTomorrow(m)) return false;
-    return true;
-  });
-  const mananaMovements = movements.filter((m) => {
-    if (m.date === tomorrowCal) return true;
-    if (rolledToTomorrow(m)) return true;
-    return false;
-  });
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
     .reduce((sum, m) => sum + m.qty, 0);

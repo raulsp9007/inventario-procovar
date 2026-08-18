@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, CalendarClock } from "lucide-react";
 import { todayStr, tomorrowStr, isPastCutoffNow, wasSentAfterCutoffToday, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
@@ -78,32 +78,47 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const belongsToTomorrow = (o) =>
     o.date === tomorrow || (pastCutoffTime && !o.sent) || wasSentAfterCutoffToday(o.sentAt);
   const belongsToToday = (o) => o.date === today && !belongsToTomorrow(o);
-  const allOrders = groupAllOrders(movements);
   const searchTerm = orderSearch.trim().toLowerCase();
-  const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
-  const matchesStatusFilter = (order) =>
-    (!filterUnsent && !filterUnconfirmed) ||
-    (filterUnsent && !order.sent) ||
-    (filterUnconfirmed && !order.confirmed);
-  const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order);
-  const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
-  const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
-    todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
-  );
-  const tomorrowsOrders = allOrders.filter((o) => belongsToTomorrow(o) && matchesFilters(o));
-  const sortedTomorrowsOrders = [...tomorrowsOrders].sort((a, b) =>
-    todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
-  );
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
-  const pastOrdersByDate = new Map();
-  allOrders
-    .filter((o) => !belongsToToday(o) && !belongsToTomorrow(o) && o.date >= pastCutoff && matchesFilters(o))
-    .forEach((o) => {
-      if (!pastOrdersByDate.has(o.date)) pastOrdersByDate.set(o.date, []);
-      pastOrdersByDate.get(o.date).push(o);
-    });
-  const pastDatesDesc = Array.from(pastOrdersByDate.keys()).sort((a, b) => b.localeCompare(a));
-  const pastOrdersCount = pastDatesDesc.reduce((sum, d) => sum + pastOrdersByDate.get(d).length, 0);
+
+  // groupAllOrders + los 3 filtros/sorts escanean todos los movimientos en
+  // cada uno -- se memoizan juntos para no repetir el trabajo en cada
+  // render que no cambia ninguno de estos valores (ej. tipear en un input
+  // que no es la búsqueda).
+  const {
+    allOrders, todaysOrders, sortedTodaysOrders,
+    tomorrowsOrders, sortedTomorrowsOrders,
+    pastOrdersByDate, pastDatesDesc, pastOrdersCount,
+  } = useMemo(() => {
+    const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
+    const matchesStatusFilter = (order) =>
+      (!filterUnsent && !filterUnconfirmed) ||
+      (filterUnsent && !order.sent) ||
+      (filterUnconfirmed && !order.confirmed);
+    const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order);
+
+    const allOrders = groupAllOrders(movements);
+    const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
+    const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
+      todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
+    );
+    const tomorrowsOrders = allOrders.filter((o) => belongsToTomorrow(o) && matchesFilters(o));
+    const sortedTomorrowsOrders = [...tomorrowsOrders].sort((a, b) =>
+      todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
+    );
+    const pastOrdersByDate = new Map();
+    allOrders
+      .filter((o) => !belongsToToday(o) && !belongsToTomorrow(o) && o.date >= pastCutoff && matchesFilters(o))
+      .forEach((o) => {
+        if (!pastOrdersByDate.has(o.date)) pastOrdersByDate.set(o.date, []);
+        pastOrdersByDate.get(o.date).push(o);
+      });
+    const pastDatesDesc = Array.from(pastOrdersByDate.keys()).sort((a, b) => b.localeCompare(a));
+    const pastOrdersCount = pastDatesDesc.reduce((sum, d) => sum + pastOrdersByDate.get(d).length, 0);
+
+    return { allOrders, todaysOrders, sortedTodaysOrders, tomorrowsOrders, sortedTomorrowsOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movements, today, tomorrow, pastCutoffTime, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, todayOrderSort]);
 
   const availableProducts = products.filter((p) => !p.archived && !draftLines.some((l) => l.code === p.code));
   const effectiveSelectedProductCode = availableProducts.some((p) => p.code === selectedProductCode)
