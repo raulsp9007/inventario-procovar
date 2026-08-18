@@ -91,17 +91,17 @@ export default function ProductsView({
                     ) : (
                       <div style={{ fontWeight: 700, fontSize: 15.5 }}>{p.name}</div>
                     )}
-                    <div style={{ fontSize: 12, color: "#9A9484" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
-                    {lastAdjustedAt[p.code] && (
-                      <div style={{ fontSize: 11, color: "#B4AF9E" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
-                    )}
-                    {!editMode && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 10px", fontSize: 11, color: "#8A8574", marginTop: 3 }}>
-                        {showPrices && (
-                          <span>Precio: {prices[p.code] ? formatCUP(prices[p.code]) : "no definido"}</span>
+                    {editMode && (
+                      <>
+                        <div style={{ fontSize: 12, color: "#9A9484" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
+                        {lastAdjustedAt[p.code] && (
+                          <div style={{ fontSize: 11, color: "#B4AF9E" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
                         )}
-                        <span>HL/unidad: {p.hl != null ? p.hl : "no definido"}</span>
-                        <span>Aviso stock bajo: ≤ {lowStockThresholdFor(p)} uds</span>
+                      </>
+                    )}
+                    {!editMode && showPrices && (
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#3C6E4A", marginTop: 2 }}>
+                        {prices[p.code] ? formatCUP(prices[p.code]) : "Precio no definido"}
                       </div>
                     )}
                   </div>
