@@ -45,6 +45,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
+  const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
   const [postponeWarning, setPostponeWarning] = useState(null);
   const [bigOrderWarning, setBigOrderWarning] = useState(null);
   const [todayOrderSort, setTodayOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
@@ -97,7 +98,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       (filterUnconfirmed && !order.confirmed);
     const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order);
 
-    const allOrders = groupAllOrders(movements);
+    const allOrders = groupAllOrders(movements).filter((o) => !pendingDeletes.has(o.orderId));
     const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
     const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
       todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
@@ -118,7 +119,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
     return { allOrders, todaysOrders, sortedTodaysOrders, tomorrowsOrders, sortedTomorrowsOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, today, tomorrow, pastCutoffTime, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, todayOrderSort]);
+  }, [movements, today, tomorrow, pastCutoffTime, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, todayOrderSort, pendingDeletes]);
 
   const availableProducts = products.filter((p) => !p.archived && !draftLines.some((l) => l.code === p.code));
   const effectiveSelectedProductCode = availableProducts.some((p) => p.code === selectedProductCode)
@@ -228,16 +229,43 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setBigOrderWarning(null);
   }
 
-  function handleDeleteClick(orderId) {
-    if (confirmingDeleteId === orderId) {
-      onDeleteOrder(orderId);
+  function handleDeleteClick(order) {
+    if (confirmingDeleteId === order.orderId) {
       setConfirmingDeleteId(null);
+      stageDelete(order);
       return;
     }
-    setConfirmingDeleteId(orderId);
+    setConfirmingDeleteId(order.orderId);
     setTimeout(() => {
-      setConfirmingDeleteId((current) => (current === orderId ? null : current));
+      setConfirmingDeleteId((current) => (current === order.orderId ? null : current));
     }, 3000);
+  }
+
+  // Borrado real recién pasa cuando expiran los 5s sin que se apriete
+  // "Deshacer" -- nada se pierde hasta ese momento, el pedido solo se
+  // esconde de las listas mientras tanto (pendingDeletes). Se guarda el
+  // customerName ademas del timeout para poder mostrarlo en el aviso sin
+  // tener que buscarlo en una lista de la que ya lo filtramos.
+  function stageDelete(order) {
+    const timeoutId = setTimeout(() => {
+      onDeleteOrder(order.orderId);
+      setPendingDeletes((m) => {
+        const next = new Map(m);
+        next.delete(order.orderId);
+        return next;
+      });
+    }, 5000);
+    setPendingDeletes((m) => new Map(m).set(order.orderId, { timeoutId, customerName: order.customerName }));
+  }
+
+  function undoDelete(orderId) {
+    setPendingDeletes((m) => {
+      const entry = m.get(orderId);
+      if (entry) clearTimeout(entry.timeoutId);
+      const next = new Map(m);
+      next.delete(orderId);
+      return next;
+    });
   }
 
   function negativeStockLines(order) {
@@ -390,7 +418,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 <Send size={16} />
               </button>
               <button
-                onClick={() => handleDeleteClick(order.orderId)}
+                onClick={() => handleDeleteClick(order)}
                 title={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
                 aria-label={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
                 style={{
@@ -673,6 +701,32 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           Solo no confirmados
         </label>
       </div>
+
+      {pendingDeletes.size > 0 && (
+        <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+          {Array.from(pendingDeletes.entries()).map(([orderId, { customerName: deletedName }]) => (
+            <div
+              key={orderId}
+              style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                background: "#22261F", color: "#F7F4EC", borderRadius: 8, padding: "10px 14px", fontSize: 13,
+              }}
+            >
+              <span>Pedido de {deletedName} eliminado.</span>
+              <button
+                onClick={() => undoDelete(orderId)}
+                style={{
+                  background: "transparent", border: "1px solid #F7F4EC", color: "#F7F4EC",
+                  borderRadius: 7, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                Deshacer
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {(() => {
         const hoySection = (
