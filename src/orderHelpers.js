@@ -30,6 +30,7 @@ export function formatOrderForWhatsApp(order, products, { senderName, sendSender
   if (sendSenderName && senderName && senderName.trim()) lines.push(senderName.trim());
   if (order.isDelivery) lines.push("🛺 Domicilio 🛺");
   lines.push(order.customerName);
+  if (order.note && order.note.trim()) lines.push(order.note.trim());
   order.lines.forEach((line) => {
     const product = products.find((p) => p.code === line.code);
     lines.push(`${product ? product.name : line.code} - ${line.qty}`);
