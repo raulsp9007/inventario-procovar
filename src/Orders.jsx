@@ -342,10 +342,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                  borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                 }}
               >
-                <CalendarClock size={14} />
+                <CalendarClock size={16} />
               </button>
               <button
                 onClick={() => startEdit(order)}
@@ -354,10 +354,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
-                  borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                 }}
               >
-                <Pencil size={14} />
+                <Pencil size={16} />
               </button>
               <button
                 onClick={() => {
@@ -369,10 +369,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: "#25D366", color: "#FFFFFF", border: "none",
-                  borderRadius: 7, width: 34, height: 34, cursor: "pointer", flexShrink: 0,
+                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                 }}
               >
-                <Send size={14} />
+                <Send size={16} />
               </button>
               <button
                 onClick={() => handleDeleteClick(order.orderId)}
@@ -380,7 +380,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 aria-label={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  gap: 4, width: confirmingDeleteId === order.orderId ? "auto" : 34, height: 34,
+                  gap: 4, width: confirmingDeleteId === order.orderId ? "auto" : 40, height: 40,
                   padding: confirmingDeleteId === order.orderId ? "0 10px" : 0,
                   background: confirmingDeleteId === order.orderId ? "#B4291E" : "transparent",
                   border: confirmingDeleteId === order.orderId ? "1px solid #B4291E" : "1px solid #E7E2D3",
