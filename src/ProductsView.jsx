@@ -1,4 +1,4 @@
-import { Settings2, Trash2, History, ChevronDown, ChevronUp } from "lucide-react";
+import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
 import FieldLabel from "./FieldLabel.jsx";
@@ -33,6 +33,7 @@ export default function ProductsView({
   onAddProduct,
   onArchiveProduct,
   onRestoreProduct,
+  onMoveProduct,
   showArchived,
   setShowArchived,
 }) {
@@ -56,7 +57,7 @@ export default function ProductsView({
       </div>
 
       <div style={{ display: "grid", gap: 10 }}>
-        {activeProducts.map((p) => {
+        {activeProducts.map((p, i) => {
           const qty = stock[p.code] || 0;
           const isLow = qty <= lowStockThresholdFor(p);
           const lastMovement = movements.find((m) => m.code === p.code);
@@ -111,6 +112,39 @@ export default function ProductsView({
                     <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "#B4661E" : "#22261F" }}>
                       {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "#9A9484" }}>uds</span>
                     </div>
+                  </div>
+                )}
+
+                {editMode && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+                    <button
+                      onClick={() => onMoveProduct(p.code, -1)}
+                      disabled={i === 0}
+                      title="Subir"
+                      aria-label="Subir"
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "transparent", border: "1px solid #E7E2D3",
+                        color: i === 0 ? "#D8D2C0" : "#8A8574",
+                        borderRadius: 7, width: 30, height: 30, cursor: i === 0 ? "default" : "pointer",
+                      }}
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button
+                      onClick={() => onMoveProduct(p.code, 1)}
+                      disabled={i === activeProducts.length - 1}
+                      title="Bajar"
+                      aria-label="Bajar"
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "transparent", border: "1px solid #E7E2D3",
+                        color: i === activeProducts.length - 1 ? "#D8D2C0" : "#8A8574",
+                        borderRadius: 7, width: 30, height: 30, cursor: i === activeProducts.length - 1 ? "default" : "pointer",
+                      }}
+                    >
+                      <ArrowDown size={14} />
+                    </button>
                   </div>
                 )}
               </div>

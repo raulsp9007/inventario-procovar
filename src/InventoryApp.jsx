@@ -344,6 +344,22 @@ export default function InventoryApp() {
     persist({ ...currentPersistedState, products: nextProducts });
   }
 
+  // Intercambia el producto con su vecino activo más cercano en esa dirección
+  // (salta los archivados, que no se muestran ni se reordenan a mano).
+  function moveProduct(code, direction) {
+    const currentIndex = products.findIndex((p) => p.code === code);
+    if (currentIndex === -1) return;
+    let targetIndex = currentIndex + direction;
+    while (targetIndex >= 0 && targetIndex < products.length && products[targetIndex].archived) {
+      targetIndex += direction;
+    }
+    if (targetIndex < 0 || targetIndex >= products.length) return;
+    const nextProducts = [...products];
+    [nextProducts[currentIndex], nextProducts[targetIndex]] = [nextProducts[targetIndex], nextProducts[currentIndex]];
+    setProducts(nextProducts);
+    persist({ ...currentPersistedState, products: nextProducts });
+  }
+
   function confirmOrder({ customerName, isDelivery, note, lines }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const nextStock = { ...stock };
@@ -635,6 +651,7 @@ export default function InventoryApp() {
             onAddProduct={addProduct}
             onArchiveProduct={archiveProduct}
             onRestoreProduct={restoreProduct}
+            onMoveProduct={moveProduct}
             showArchived={showArchived}
             setShowArchived={setShowArchived}
           />
