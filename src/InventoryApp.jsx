@@ -344,7 +344,7 @@ export default function InventoryApp() {
     persist({ ...currentPersistedState, products: nextProducts });
   }
 
-  function confirmOrder({ customerName, isDelivery, lines }) {
+  function confirmOrder({ customerName, isDelivery, note, lines }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const nextStock = { ...stock };
     const newMovements = [];
@@ -355,7 +355,7 @@ export default function InventoryApp() {
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
       nextStock[code] = (nextStock[code] || 0) - qty;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, date: businessDayStr() }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, note, date: businessDayStr() }));
       addedRevenue += qty * unitPrice;
       addedHl += qty * unitHl;
     });
@@ -406,7 +406,7 @@ export default function InventoryApp() {
   // hoy/mañana en vez de preservar la fecha original. Edición normal (desde
   // el formulario "Editar pedido") no lo pasa, así que sigue preservando la
   // fecha como siempre.
-  function editOrder(orderId, { customerName, isDelivery, lines }, dateOverride) {
+  function editOrder(orderId, { customerName, isDelivery, note, lines }, dateOverride) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
     const originalDate = dateOverride || originalMovements[0].date;
@@ -429,7 +429,7 @@ export default function InventoryApp() {
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
       nextStock[code] = (nextStock[code] || 0) - qty;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, sent: false, date: originalDate }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, note, sent: false, date: originalDate }));
       addedRevenue += qty * unitPrice;
       addedHl += qty * unitHl;
     });
@@ -465,9 +465,9 @@ export default function InventoryApp() {
   function postponeOrder(orderId) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
-    const { customerName, isDelivery } = originalMovements[0];
+    const { customerName, isDelivery, note } = originalMovements[0];
     const lines = originalMovements.map((m) => ({ code: m.code, qty: m.qty }));
-    editOrder(orderId, { customerName, isDelivery, lines }, businessDayStr());
+    editOrder(orderId, { customerName, isDelivery, note, lines }, businessDayStr());
   }
 
   // Llamar una sola vez por varios pedidos a la vez (envío en bloque): cada

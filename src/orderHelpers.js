@@ -7,6 +7,7 @@ export function groupAllOrders(movements) {
         orderId: m.orderId,
         customerName: m.customerName,
         isDelivery: !!m.isDelivery,
+        note: m.note || "",
         sent: !!m.sent,
         sentAt: m.sentAt || null,
         confirmed: !!m.confirmed,

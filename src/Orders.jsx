@@ -35,6 +35,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
+  const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
@@ -116,6 +117,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function resetForm() {
     setCustomerName("");
     setIsDelivery(false);
+    setNote("");
     setDraftLines([]);
     setPendingQty("");
     setEditingOrderId(null);
@@ -125,6 +127,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function startEdit(order) {
     setCustomerName(order.customerName);
     setIsDelivery(order.isDelivery);
+    setNote(order.note || "");
     setDraftLines(order.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
     setPendingQty("");
     setEditingOrderId(order.orderId);
@@ -174,7 +177,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         return;
       }
     }
-    const draft = { customerName: customerName.trim(), isDelivery, lines };
+    const draft = { customerName: customerName.trim(), isDelivery, note: note.trim(), lines };
     const bigLines = lines
       .map((l) => {
         const product = products.find((p) => p.code === l.code);
@@ -303,6 +306,11 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             <div style={{ color: "#B5AF9C", fontSize: 11.5, marginTop: 2 }}>
               {formatDateTime(order.timestamp)}
             </div>
+            {order.note && (
+              <div style={{ color: "#8A5A1E", fontSize: 12.5, marginTop: 4, fontStyle: "italic" }}>
+                📝 {order.note}
+              </div>
+            )}
           </div>
         </div>
 
@@ -485,6 +493,18 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           />
           Entrega a domicilio
         </label>
+
+        <textarea
+          placeholder="Nota (opcional)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          style={{
+            width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
+            padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
+            marginBottom: 14, resize: "vertical", fontFamily: "inherit",
+          }}
+        />
 
         {draftLines.length > 0 && (
           <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
