@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, CalendarClock } from "lucide-react";
-import { todayStr, tomorrowStr, isPastCutoffNow, wasSentAfterCutoffToday, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
+import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck } from "lucide-react";
+import { todayStr, tomorrowStr, isPastCutoffNow, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
-import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
 import Banner from "./Banner.jsx";
 
@@ -16,6 +16,10 @@ function loadSavedFilters() {
   } catch {
     return {};
   }
+}
+
+function defaultBucket() {
+  return isPastCutoffNow() ? "manana" : "hoy";
 }
 
 function openOrderWhatsApp(order, products, phone, senderOptions) {
@@ -32,22 +36,22 @@ function draftTotal(draftLines, prices) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (prices[l.code] || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onPostponeOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError }) {
+export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
   const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
+  const [draftBucket, setDraftBucket] = useState(defaultBucket);
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectMode, setSelectMode] = useState(false);
+  const [selectSection, setSelectSection] = useState(null); // null | "hoy" | "manana"
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
-  const [postponeWarning, setPostponeWarning] = useState(null);
   const [bigOrderWarning, setBigOrderWarning] = useState(null);
   const [todayOrderSort, setTodayOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
   const [orderSearch, setOrderSearch] = useState("");
@@ -73,13 +77,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   const today = todayStr();
   const tomorrow = tomorrowStr();
-  // Pasadas las 4pm, cualquier pedido sin enviar (de cualquier fecha) pasa a
-  // contar como pedido de mañana -- mismo criterio que las pestañas Hoy/Mañana.
-  // Lo mismo si el envío (marcar Enviado) pasó hoy después de las 4pm.
-  const pastCutoffTime = isPastCutoffNow();
-  const belongsToTomorrow = (o) =>
-    o.date === tomorrow || (pastCutoffTime && !o.sent) || wasSentAfterCutoffToday(o.sentAt);
-  const belongsToToday = (o) => o.date === today && !belongsToTomorrow(o);
+  const belongsToToday = (o) => o.date === today;
+  const belongsToTomorrow = (o) => o.date === tomorrow;
   const searchTerm = orderSearch.trim().toLowerCase();
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
 
@@ -120,7 +119,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
     return { allOrders, todaysOrders, sortedTodaysOrders, tomorrowsOrders, sortedTomorrowsOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, today, tomorrow, pastCutoffTime, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, todayOrderSort, pendingDeletes]);
+  }, [movements, today, tomorrow, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, todayOrderSort, pendingDeletes]);
+
+  const activeProductsForPanel = products.filter((p) => !p.archived);
 
   const availableProducts = products.filter((p) => !p.archived && !draftLines.some((l) => l.code === p.code));
   const effectiveSelectedProductCode = availableProducts.some((p) => p.code === selectedProductCode)
@@ -139,6 +140,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setPendingQty("");
     setEditingOrderId(null);
     setBigOrderWarning(null);
+    setDraftBucket(defaultBucket());
   }
 
   function startEdit(order) {
@@ -148,6 +150,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setDraftLines(order.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
     setPendingQty("");
     setEditingOrderId(order.orderId);
+    setDraftBucket(order.bucket);
   }
 
   function addDraftLine() {
@@ -169,6 +172,21 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setDraftLines((lines) => lines.filter((l) => l.code !== code));
   }
 
+  // Techo real para una línea del pedido en edición/creación:
+  // - Si es para Hoy: stock actual (+ lo que este mismo pedido ya tenía
+  //   comprometido, si se está editando uno que ya estaba comprometido).
+  // - Si es para Mañana: lo mismo, menos lo que ya reservaron OTROS pedidos
+  //   de mañana sin enviar (no se puede prometer más de lo que hay físico).
+  function computeAvailable(code) {
+    const editingOrder = editingOrderId ? allOrders.find((o) => o.orderId === editingOrderId) : null;
+    const creditBack = editingOrder && isCommittedOrder(editingOrder)
+      ? (editingOrder.lines.find((l) => l.code === code)?.qty || 0)
+      : 0;
+    const base = (stock[code] || 0) + creditBack;
+    if (draftBucket === "hoy") return base;
+    return base - reservedForTomorrow(allOrders, code, editingOrderId);
+  }
+
   function confirmOrder() {
     if (submittingRef.current) return;
     if (!customerName.trim()) {
@@ -182,19 +200,16 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       onError("Agrega al menos un producto al pedido.");
       return;
     }
-    const editingOrder = editingOrderId ? allOrders.find((o) => o.orderId === editingOrderId) : null;
     for (const line of lines) {
-      const reserved = editingOrder
-        ? (editingOrder.lines.find((l) => l.code === line.code)?.qty || 0)
-        : 0;
-      const available = (stock[line.code] || 0) + reserved;
+      const available = computeAvailable(line.code);
       if (line.qty > available) {
         const product = products.find((p) => p.code === line.code);
-        onError(`No hay suficiente stock de ${product ? product.name : line.code}.`);
+        const motivo = draftBucket === "manana" ? " para mañana (ya reservado por otros pedidos)" : "";
+        onError(`No hay suficiente stock de ${product ? product.name : line.code}${motivo}.`);
         return;
       }
     }
-    const draft = { customerName: customerName.trim(), isDelivery, note: note.trim(), lines };
+    const draft = { customerName: customerName.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket };
     const bigLines = lines
       .map((l) => {
         const product = products.find((p) => p.code === l.code);
@@ -269,33 +284,6 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     });
   }
 
-  function negativeStockLines(order) {
-    return order.lines
-      .map((l) => {
-        const product = products.find((p) => p.code === l.code);
-        return { name: product ? product.name : l.code, stockNow: stock[l.code] || 0 };
-      })
-      .filter((x) => x.stockNow < 0);
-  }
-
-  function handlePostponeClick(order) {
-    const negatives = negativeStockLines(order);
-    if (negatives.length > 0) {
-      setPostponeWarning({ orderId: order.orderId, negatives });
-      return;
-    }
-    onPostponeOrder(order.orderId);
-  }
-
-  function forcePostpone() {
-    onPostponeOrder(postponeWarning.orderId);
-    setPostponeWarning(null);
-  }
-
-  function cancelPostponeWarning() {
-    setPostponeWarning(null);
-  }
-
   function toggleSelected(orderId) {
     setSelectedIds((s) => {
       const next = new Set(s);
@@ -305,15 +293,25 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     });
   }
 
-  function confirmBulkSend() {
+  function startSelect(section) {
+    setSelectSection(section);
+    setSelectedIds(new Set());
+  }
+
+  function cancelSelect() {
+    setSelectSection(null);
+    setSelectedIds(new Set());
+  }
+
+  function confirmBulkSend(orders) {
     const idsToSend = [];
-    todaysOrders.forEach((order) => {
+    orders.forEach((order) => {
       if (!selectedIds.has(order.orderId)) return;
       openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
       idsToSend.push(order.orderId);
     });
     onMarkOrdersSent(idsToSend, true);
-    setSelectMode(false);
+    setSelectSection(null);
     setSelectedIds(new Set());
   }
 
@@ -380,18 +378,6 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               <button
-                onClick={() => handlePostponeClick(order)}
-                title="Aplazar pedido (a hoy/mañana)"
-                aria-label="Aplazar pedido"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
-                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
-                }}
-              >
-                <CalendarClock size={16} />
-              </button>
-              <button
                 onClick={() => startEdit(order)}
                 title="Editar pedido"
                 aria-label="Editar pedido"
@@ -438,19 +424,71 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             </div>
           </div>
         )}
+      </div>
+    );
+  }
 
-        {postponeWarning && postponeWarning.orderId === order.orderId && (
-          <Banner
-            variant="warning"
-            style={{ marginTop: 10, fontSize: 12.5 }}
-            actions={[
-              { label: "Aplazar de todos modos", kind: "danger", onClick: forcePostpone },
-              { label: "Cancelar", kind: "secondary", onClick: cancelPostponeWarning },
-            ]}
+  // Misma estructura para PEDIDOS DE HOY y PEDIDOS DE MAÑANA: título +
+  // envío masivo opcional + orden + lista (o mensaje vacío). `section` es
+  // "hoy" | "manana", usado para saber si el modo selección activo es el
+  // de esta sección.
+  function renderOrdersSection({ section, title, orders, sorted, emptyText }) {
+    const inSelectMode = selectSection === section;
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>{title}</div>
+          <button
+            onClick={() => (inSelectMode ? confirmBulkSend(orders) : startSelect(section))}
+            disabled={orders.length === 0 || (inSelectMode && selectedIds.size === 0)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: (orders.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "var(--border)" : "var(--whatsapp)",
+              color: (orders.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "var(--text-faint)" : "var(--on-accent)",
+              border: "none", borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600,
+              cursor: (orders.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "default" : "pointer",
+            }}
           >
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠️ Stock negativo en:</div>
-            {postponeWarning.negatives.map((n) => `${n.name} (${n.stockNow})`).join(", ")}
-          </Banner>
+            <Send size={14} /> {inSelectMode ? `Confirmar envío (${selectedIds.size})` : "Enviar por WhatsApp"}
+          </button>
+        </div>
+
+        {inSelectMode && (
+          <button
+            onClick={cancelSelect}
+            style={{
+              background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 12.5,
+              cursor: "pointer", padding: "0 0 10px", textDecoration: "underline",
+            }}
+          >
+            Cancelar selección
+          </button>
+        )}
+
+        {!inSelectMode && orders.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <select
+              value={todayOrderSort}
+              onChange={(e) => setTodayOrderSort(e.target.value)}
+              style={{
+                border: "1px solid var(--border)", borderRadius: 7,
+                padding: "7px 10px", fontSize: 12.5, background: "var(--surface)", color: "var(--text-muted)",
+              }}
+            >
+              <option value="recent">Más recientes primero</option>
+              <option value="oldest">Más antiguos primero</option>
+            </select>
+          </div>
+        )}
+
+        {orders.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
+            {searchTerm || filterUnsent || filterUnconfirmed ? `Ningún pedido coincide con la búsqueda/filtros.` : emptyText}
+          </div>
+        ) : (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+            {sorted.map((order, i) => renderOrderRow(order, i, { inSelectMode }))}
+          </div>
         )}
       </div>
     );
@@ -475,6 +513,29 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         )}
       </div>
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button
+            onClick={() => setDraftBucket("hoy")}
+            style={{
+              flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+              background: draftBucket === "hoy" ? "var(--ink)" : "transparent",
+              color: draftBucket === "hoy" ? "var(--cream)" : "var(--text)",
+            }}
+          >
+            Hoy
+          </button>
+          <button
+            onClick={() => setDraftBucket("manana")}
+            style={{
+              flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+              background: draftBucket === "manana" ? "var(--ink)" : "transparent",
+              color: draftBucket === "manana" ? "var(--cream)" : "var(--text)",
+            }}
+          >
+            Mañana
+          </button>
+        </div>
+
         <div style={{ position: "relative", marginBottom: 10 }}>
           <input
             type="text"
@@ -685,91 +746,47 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </div>
       )}
 
-      {(() => {
-        const hoySection = (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>PEDIDOS DE HOY</div>
-              <button
-                onClick={() => (selectMode ? confirmBulkSend() : setSelectMode(true))}
-                disabled={todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  background: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "var(--border)" : "var(--whatsapp)",
-                  color: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "var(--text-faint)" : "var(--on-accent)",
-                  border: "none", borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600,
-                  cursor: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "default" : "pointer",
-                }}
-              >
-                <Send size={14} /> {selectMode ? `Confirmar envío (${selectedIds.size})` : "Enviar por WhatsApp"}
-              </button>
+      {renderOrdersSection({
+        section: "hoy",
+        title: "PEDIDOS DE HOY",
+        orders: todaysOrders,
+        sorted: sortedTodaysOrders,
+        emptyText: "Aún no hay pedidos hoy.",
+      })}
+
+      <div style={{ marginTop: 20 }}>
+        {activeProductsForPanel.length > 0 && (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+            <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
+              DISPONIBLE PARA MAÑANA
             </div>
-
-            {selectMode && (
-              <button
-                onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
-                style={{
-                  background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 12.5,
-                  cursor: "pointer", padding: "0 0 10px", textDecoration: "underline",
-                }}
-              >
-                Cancelar selección
-              </button>
-            )}
-
-            {!selectMode && todaysOrders.length > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <select
-                  value={todayOrderSort}
-                  onChange={(e) => setTodayOrderSort(e.target.value)}
+            {activeProductsForPanel.map((p, i) => {
+              const reserved = reservedForTomorrow(allOrders, p.code);
+              const libre = (stock[p.code] || 0) - reserved;
+              return (
+                <div
+                  key={p.code}
                   style={{
-                    border: "1px solid var(--border)", borderRadius: 7,
-                    padding: "7px 10px", fontSize: 12.5, background: "var(--surface)", color: "var(--text-muted)",
+                    display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0",
+                    borderTop: i === 0 ? "none" : "1px solid var(--divider)",
                   }}
                 >
-                  <option value="recent">Más recientes primero</option>
-                  <option value="oldest">Más antiguos primero</option>
-                </select>
-              </div>
-            )}
-
-            {todaysOrders.length === 0 ? (
-              <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
-                {searchTerm || filterUnsent || filterUnconfirmed
-                  ? "Ningún pedido de hoy coincide con la búsqueda/filtros."
-                  : "Aún no hay pedidos hoy."}
-              </div>
-            ) : (
-              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-                {sortedTodaysOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: selectMode }))}
-              </div>
-            )}
+                  <span>{p.name}</span>
+                  <b style={{ fontVariantNumeric: "tabular-nums" }}>{libre} uds libres</b>
+                </div>
+              );
+            })}
           </div>
-        );
+        )}
 
-        const mananaSection = tomorrowsOrders.length > 0 && (
-          <div>
-            <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
-              PEDIDOS DE MAÑANA
-            </div>
-            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-              {sortedTomorrowsOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: false }))}
-            </div>
-          </div>
-        );
-
-        return pastCutoffTime ? (
-          <>
-            {mananaSection && <div style={{ marginBottom: 20 }}>{mananaSection}</div>}
-            {hoySection}
-          </>
-        ) : (
-          <>
-            {hoySection}
-            {mananaSection && <div style={{ marginTop: 20 }}>{mananaSection}</div>}
-          </>
-        );
-      })()}
+        {renderOrdersSection({
+          section: "manana",
+          title: "PEDIDOS DE MAÑANA",
+          orders: tomorrowsOrders,
+          sorted: sortedTomorrowsOrders,
+          emptyText: "Aún no hay pedidos reservados para mañana.",
+        })}
+      </div>
 
       {pastOrdersCount > 0 && (
         <div style={{ marginTop: 20 }}>
