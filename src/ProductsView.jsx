@@ -2,6 +2,8 @@ import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown 
 import { formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
 import FieldLabel from "./FieldLabel.jsx";
+import IconButton from "./IconButton.jsx";
+import Card from "./Card.jsx";
 
 export default function ProductsView({
   products,
@@ -117,34 +119,20 @@ export default function ProductsView({
 
                 {editMode && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-                    <button
+                    <IconButton
+                      icon={<ArrowUp size={14} />}
                       onClick={() => onMoveProduct(p.code, -1)}
                       disabled={i === 0}
                       title="Subir"
-                      aria-label="Subir"
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "transparent", border: "1px solid #E7E2D3",
-                        color: i === 0 ? "#D8D2C0" : "#8A8574",
-                        borderRadius: 7, width: 30, height: 30, cursor: i === 0 ? "default" : "pointer",
-                      }}
-                    >
-                      <ArrowUp size={14} />
-                    </button>
-                    <button
+                      size={30}
+                    />
+                    <IconButton
+                      icon={<ArrowDown size={14} />}
                       onClick={() => onMoveProduct(p.code, 1)}
                       disabled={i === activeProducts.length - 1}
                       title="Bajar"
-                      aria-label="Bajar"
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "transparent", border: "1px solid #E7E2D3",
-                        color: i === activeProducts.length - 1 ? "#D8D2C0" : "#8A8574",
-                        borderRadius: 7, width: 30, height: 30, cursor: i === activeProducts.length - 1 ? "default" : "pointer",
-                      }}
-                    >
-                      <ArrowDown size={14} />
-                    </button>
+                      size={30}
+                    />
                   </div>
                 )}
               </div>
@@ -291,7 +279,7 @@ export default function ProductsView({
           </button>
 
           {showArchived && (
-            <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+            <Card>
               {archivedProducts.map((p, i) => (
                 <div
                   key={p.code}
@@ -313,7 +301,7 @@ export default function ProductsView({
                   </button>
                 </div>
               ))}
-            </div>
+            </Card>
           )}
         </div>
       )}
@@ -327,7 +315,7 @@ export default function ProductsView({
             Aún no hay movimientos registrados.
           </div>
         ) : (
-          <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+          <Card>
             {movements.slice(0, 25).map((m, i) => {
               const product = products.find((p) => p.code === m.code);
               return (
@@ -353,7 +341,7 @@ export default function ProductsView({
                 </div>
               );
             })}
-          </div>
+          </Card>
         )}
       </div>
     </>
