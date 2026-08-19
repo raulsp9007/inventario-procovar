@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck } from "lucide-react";
-import { todayStr, tomorrowStr, isPastCutoffNow, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
+import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
@@ -16,10 +16,6 @@ function loadSavedFilters() {
   } catch {
     return {};
   }
-}
-
-function defaultBucket() {
-  return isPastCutoffNow() ? "manana" : "hoy";
 }
 
 function openOrderWhatsApp(order, products, phone, senderOptions) {
@@ -42,7 +38,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [isDelivery, setIsDelivery] = useState(false);
   const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
-  const [draftBucket, setDraftBucket] = useState(defaultBucket);
+  const [draftBucket, setDraftBucket] = useState("hoy");
   const [draftDate, setDraftDate] = useState(() => tomorrowStr());
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
@@ -141,7 +137,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setPendingQty("");
     setEditingOrderId(null);
     setBigOrderWarning(null);
-    setDraftBucket(defaultBucket());
+    setDraftBucket("hoy");
     setDraftDate(tomorrowStr());
   }
 
