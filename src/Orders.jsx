@@ -772,7 +772,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </div>
       )}
 
-      {renderOrdersSection({
+      {draftBucket === "hoy" && renderOrdersSection({
         section: "hoy",
         title: "PEDIDOS DE HOY",
         sorted: sortedTodaysOrders,
@@ -781,41 +781,39 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         onSortChange: setHoyOrderSort,
       })}
 
-      <div style={{ marginTop: 20 }}>
-        {activeProductsForPanel.length > 0 && (
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
-            <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
-              DISPONIBLE PARA RESERVAR
-            </div>
-            {activeProductsForPanel.map((p, i) => {
-              const reserved = reservedForTomorrow(allOrders, p.code);
-              const libre = (stock[p.code] || 0) - reserved;
-              return (
-                <div
-                  key={p.code}
-                  style={{
-                    display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0",
-                    borderTop: i === 0 ? "none" : "1px solid var(--divider)",
-                  }}
-                >
-                  <span>{p.name}</span>
-                  <b style={{ fontVariantNumeric: "tabular-nums" }}>{libre} uds libres</b>
-                </div>
-              );
-            })}
+      {draftBucket === "manana" && activeProductsForPanel.length > 0 && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+          <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
+            DISPONIBLE PARA RESERVAR
           </div>
-        )}
+          {activeProductsForPanel.map((p, i) => {
+            const reserved = reservedForTomorrow(allOrders, p.code);
+            const libre = (stock[p.code] || 0) - reserved;
+            return (
+              <div
+                key={p.code}
+                style={{
+                  display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0",
+                  borderTop: i === 0 ? "none" : "1px solid var(--divider)",
+                }}
+              >
+                <span>{p.name}</span>
+                <b style={{ fontVariantNumeric: "tabular-nums" }}>{libre} uds libres</b>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-        {renderOrdersSection({
-          section: "manana",
-          title: "PRÓXIMOS PEDIDOS",
-          sorted: sortedUpcomingOrders,
-          emptyText: "Aún no hay pedidos programados.",
-          sortValue: mananaOrderSort,
-          onSortChange: setMananaOrderSort,
-          showDate: true,
-        })}
-      </div>
+      {draftBucket === "manana" && renderOrdersSection({
+        section: "manana",
+        title: "PRÓXIMOS PEDIDOS",
+        sorted: sortedUpcomingOrders,
+        emptyText: "Aún no hay pedidos programados.",
+        sortValue: mananaOrderSort,
+        onSortChange: setMananaOrderSort,
+        showDate: true,
+      })}
 
       {pastOrdersCount > 0 && (
         <div style={{ marginTop: 20 }}>
