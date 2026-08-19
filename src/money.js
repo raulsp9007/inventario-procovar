@@ -1,4 +1,5 @@
 import { getWeekStartStr } from "./dateUtils.js";
+import { isCommittedMovement } from "./orderHelpers.js";
 
 export function formatCUP(amount) {
   const n = Number(amount) || 0;
@@ -17,19 +18,19 @@ export function convertToUSD(cupAmount, exchangeRate) {
 
 export function revenueInRange(movements, code, start, end) {
   return movements
-    .filter((m) => m.code === code && m.type === "venta" && m.date >= start && m.date <= end)
+    .filter((m) => m.code === code && m.type === "venta" && isCommittedMovement(m) && m.date >= start && m.date <= end)
     .reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
 }
 
 export function totalRevenueInRange(movements, start, end) {
   return movements
-    .filter((m) => m.type === "venta" && m.date >= start && m.date <= end)
+    .filter((m) => m.type === "venta" && isCommittedMovement(m) && m.date >= start && m.date <= end)
     .reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
 }
 
 export function totalHlSold(movements, products) {
   return movements
-    .filter((m) => m.type === "venta")
+    .filter((m) => m.type === "venta" && isCommittedMovement(m))
     .reduce((sum, m) => {
       if (m.unitHl != null) return sum + m.qty * m.unitHl;
       const product = products.find((p) => p.code === m.code);
@@ -40,7 +41,7 @@ export function totalHlSold(movements, products) {
 
 export function monthWeeklyBreakdown(movements, monthStartStr, endDateStr) {
   const inMonth = movements.filter(
-    (m) => m.type === "venta" && m.date >= monthStartStr && m.date <= endDateStr
+    (m) => m.type === "venta" && isCommittedMovement(m) && m.date >= monthStartStr && m.date <= endDateStr
   );
   const totals = new Map();
   inMonth.forEach((m) => {
