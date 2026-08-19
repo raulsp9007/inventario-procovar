@@ -5,6 +5,7 @@ import { todayStr, tomorrowStr, businessDayStr, isPastCutoffNow, wasSentAfterCut
 import { totalHlSold } from "./money";
 import { downloadBackup, parseBackupFile } from "./backup";
 import TabButton from "./TabButton.jsx";
+import Banner from "./Banner.jsx";
 import ProductsView from "./ProductsView.jsx";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
@@ -622,9 +623,7 @@ export default function InventoryApp() {
         )}
 
         {error && (
-          <div style={{ background: "#FBE4E0", border: "1px solid #E9A79C", color: "#8A2E1E", padding: "9px 14px", borderRadius: 8, fontSize: 13.5, marginBottom: 16 }}>
-            {error}
-          </div>
+          <Banner variant="error" style={{ marginBottom: 16 }}>{error}</Banner>
         )}
 
         {view === "stock" && (
@@ -756,31 +755,16 @@ export default function InventoryApp() {
         )}
 
         {pendingImport && (
-          <div style={{ marginTop: 20, background: "#FBEFE0", border: "1px solid #E9CFA0", borderRadius: 10, padding: "14px 16px" }}>
-            <div style={{ fontSize: 13.5, color: "#8A5A1E", marginBottom: 10 }}>
-              Vas a reemplazar TODOS los datos actuales con el archivo importado. Esta acción no se puede deshacer.
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={confirmImport}
-                style={{
-                  background: "#8A5A1E", color: "#FFFFFF", border: "none", borderRadius: 7,
-                  padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                }}
-              >
-                Sí, reemplazar
-              </button>
-              <button
-                onClick={() => setPendingImport(null)}
-                style={{
-                  background: "transparent", color: "#8A5A1E", border: "1px solid #E9CFA0", borderRadius: 7,
-                  padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
+          <Banner
+            variant="warning"
+            style={{ marginTop: 20 }}
+            actions={[
+              { label: "Sí, reemplazar", kind: "primary", onClick: confirmImport },
+              { label: "Cancelar", kind: "secondary", onClick: () => setPendingImport(null) },
+            ]}
+          >
+            Vas a reemplazar TODOS los datos actuales con el archivo importado. Esta acción no se puede deshacer.
+          </Banner>
         )}
 
         <div style={{ marginTop: 20, display: "flex", justifyContent: "center", gap: 8 }}>

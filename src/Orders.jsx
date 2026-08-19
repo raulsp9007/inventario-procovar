@@ -4,6 +4,7 @@ import { todayStr, tomorrowStr, isPastCutoffNow, wasSentAfterCutoffToday, format
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
+import Banner from "./Banner.jsx";
 
 const PAST_ORDERS_DAYS = 14;
 const FILTERS_STORAGE_KEY = "procovar-pedidos-filtros";
@@ -439,34 +440,17 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         )}
 
         {postponeWarning && postponeWarning.orderId === order.orderId && (
-          <div style={{ marginTop: 10, padding: "10px", background: "#FBFAF6", border: "1px solid #E7E2D3", borderRadius: 8 }}>
-            <div style={{ fontSize: 12.5, color: "#8A5A1E", fontWeight: 600, marginBottom: 6 }}>
-              ⚠️ Stock negativo en:
-            </div>
-            <div style={{ fontSize: 12.5, color: "#8A5A1E", marginBottom: 10 }}>
-              {postponeWarning.negatives.map((n) => `${n.name} (${n.stockNow})`).join(", ")}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={forcePostpone}
-                style={{
-                  background: "#B4291E", color: "#FFFFFF", border: "none", borderRadius: 7,
-                  padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                }}
-              >
-                Aplazar de todos modos
-              </button>
-              <button
-                onClick={cancelPostponeWarning}
-                style={{
-                  background: "transparent", color: "#8A8574", border: "1px solid #E7E2D3", borderRadius: 7,
-                  padding: "7px 12px", fontSize: 12.5, cursor: "pointer",
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
+          <Banner
+            variant="warning"
+            style={{ marginTop: 10, fontSize: 12.5 }}
+            actions={[
+              { label: "Aplazar de todos modos", kind: "danger", onClick: forcePostpone },
+              { label: "Cancelar", kind: "secondary", onClick: cancelPostponeWarning },
+            ]}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠️ Stock negativo en:</div>
+            {postponeWarning.negatives.map((n) => `${n.name} (${n.stockNow})`).join(", ")}
+          </Banner>
         )}
       </div>
     );
@@ -631,34 +615,17 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         )}
 
         {bigOrderWarning && (
-          <div style={{ marginTop: 12, padding: "10px", background: "#FBEFE0", border: "1px solid #E9CFA0", borderRadius: 8 }}>
-            <div style={{ fontSize: 12.5, color: "#8A5A1E", fontWeight: 600, marginBottom: 6 }}>
-              ⚠️ Pedido grande:
-            </div>
-            <div style={{ fontSize: 12.5, color: "#8A5A1E", marginBottom: 10 }}>
-              {bigOrderWarning.bigLines.map((l) => `${l.name}: ${l.qty} uds (aviso ≤ ${l.threshold})`).join(", ")}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={confirmBigOrderAnyway}
-                style={{
-                  background: "#22261F", color: "#F7F4EC", border: "none", borderRadius: 7,
-                  padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                }}
-              >
-                Confirmar de todas formas
-              </button>
-              <button
-                onClick={cancelBigOrderWarning}
-                style={{
-                  background: "transparent", color: "#8A8574", border: "1px solid #E7E2D3", borderRadius: 7,
-                  padding: "7px 12px", fontSize: 12.5, cursor: "pointer",
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
+          <Banner
+            variant="warning"
+            style={{ marginTop: 12, fontSize: 12.5 }}
+            actions={[
+              { label: "Confirmar de todas formas", kind: "dark", onClick: confirmBigOrderAnyway },
+              { label: "Cancelar", kind: "secondary", onClick: cancelBigOrderWarning },
+            ]}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠️ Pedido grande:</div>
+            {bigOrderWarning.bigLines.map((l) => `${l.name}: ${l.qty} uds (aviso ≤ ${l.threshold})`).join(", ")}
+          </Banner>
         )}
 
         <button
@@ -705,25 +672,15 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       {pendingDeletes.size > 0 && (
         <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
           {Array.from(pendingDeletes.entries()).map(([orderId, { customerName: deletedName }]) => (
-            <div
+            <Banner
               key={orderId}
-              style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
-                background: "#22261F", color: "#F7F4EC", borderRadius: 8, padding: "10px 14px", fontSize: 13,
-              }}
+              variant="dark"
+              layout="row"
+              style={{ fontSize: 13 }}
+              actions={[{ label: "Deshacer", kind: "secondary", onClick: () => undoDelete(orderId) }]}
             >
-              <span>Pedido de {deletedName} eliminado.</span>
-              <button
-                onClick={() => undoDelete(orderId)}
-                style={{
-                  background: "transparent", border: "1px solid #F7F4EC", color: "#F7F4EC",
-                  borderRadius: 7, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                  flexShrink: 0,
-                }}
-              >
-                Deshacer
-              </button>
-            </div>
+              Pedido de {deletedName} eliminado.
+            </Banner>
           ))}
         </div>
       )}
