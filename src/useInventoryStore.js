@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getData, setData } from "./storage";
-import { todayStr, tomorrowStr, businessDayStr, isPastCutoffNow, wasSentAfterCutoffToday } from "./dateUtils";
+import { todayStr, tomorrowStr } from "./dateUtils";
+import { isCommittedMovement } from "./orderHelpers";
 import { totalHlSold } from "./money";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
@@ -198,32 +199,23 @@ export function useInventoryStore() {
     setPendingImport(null);
   }
 
-  // Pasadas las 4pm, todo pedido sin enviar (de cualquier fecha) pasa a
-  // contar para "mañana" en vez de "hoy" -- así nunca se queda un pedido
-  // atascado en el día que ya cerró. Lo mismo si el envío (marcar Enviado)
-  // pasó hoy después de las 4pm, aunque el pedido se haya armado antes.
-  // Este useMemo tiene que vivir ANTES del `if (!loaded) return` en el
-  // componente que consume este hook, si no el hook se salta en el primer
-  // render (loaded=false) y React tira "Rendered more hooks than during the
-  // previous render" apenas loaded pasa a true.
-  const pastCutoff = isPastCutoffNow();
+  // "Hoy" = movimientos comprometidos de hoy (bucket Hoy, o Mañana ya
+  // enviado, con date === hoy). "Mañana" = pedidos reservados de mañana
+  // TODAVÍA sin comprometer (sin enviar) -- una vez enviados, dejan de
+  // aparecer acá porque ya no son "pendientes de envío".
   const todayCal = todayStr();
   const tomorrowCal = tomorrowStr();
   const { todaysMovements, mananaMovements } = useMemo(() => {
-    const rolledToTomorrow = (m) =>
-      m.type === "venta" && ((pastCutoff && !m.sent) || wasSentAfterCutoffToday(m.sentAt));
     const todaysMovements = movements.filter((m) => {
       if (m.date !== todayCal) return false;
-      if (rolledToTomorrow(m)) return false;
-      return true;
+      return m.type !== "venta" || isCommittedMovement(m);
     });
     const mananaMovements = movements.filter((m) => {
-      if (m.date === tomorrowCal) return true;
-      if (rolledToTomorrow(m)) return true;
-      return false;
+      if (m.date !== tomorrowCal) return false;
+      return m.type !== "venta" || !isCommittedMovement(m);
     });
     return { todaysMovements, mananaMovements };
-  }, [movements, pastCutoff, todayCal, tomorrowCal]);
+  }, [movements, todayCal, tomorrowCal]);
 
   const activeProducts = products.filter((p) => !p.archived);
   const archivedProducts = products.filter((p) => p.archived);
@@ -376,8 +368,10 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, products: nextProducts });
   }
 
-  function confirmOrder({ customerName, isDelivery, note, lines }) {
+  function confirmOrder({ customerName, isDelivery, note, lines, bucket }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const committed = bucket === "hoy";
+    const date = bucket === "hoy" ? todayStr() : tomorrowStr();
     const nextStock = { ...stock };
     const newMovements = [];
     let addedRevenue = 0;
@@ -386,10 +380,12 @@ export function useInventoryStore() {
       const unitPrice = prices[code] || 0;
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      nextStock[code] = (nextStock[code] || 0) - qty;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, note, date: businessDayStr() }));
-      addedRevenue += qty * unitPrice;
-      addedHl += qty * unitHl;
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, note, bucket, date }));
+      if (committed) {
+        nextStock[code] = (nextStock[code] || 0) - qty;
+        addedRevenue += qty * unitPrice;
+        addedHl += qty * unitHl;
+      }
     });
     const nextMovements = [...newMovements, ...movements].slice(0, 500);
     const nextCumulativeRevenue = cumulativeRevenue + addedRevenue;
@@ -410,14 +406,19 @@ export function useInventoryStore() {
   function deleteOrder(orderId) {
     const orderMovements = movements.filter((m) => m.orderId === orderId);
     if (orderMovements.length === 0) return;
+    const wasBucket = orderMovements[0].bucket || "hoy";
+    const wasCommitted = wasBucket === "hoy" || (wasBucket === "manana" && !!orderMovements[0].sent);
+
     const nextStock = { ...stock };
     let removedRevenue = 0;
     let removedHl = 0;
-    orderMovements.forEach((m) => {
-      nextStock[m.code] = (nextStock[m.code] || 0) + m.qty;
-      removedRevenue += m.qty * (m.unitPrice || 0);
-      removedHl += m.qty * (m.unitHl || 0);
-    });
+    if (wasCommitted) {
+      orderMovements.forEach((m) => {
+        nextStock[m.code] = (nextStock[m.code] || 0) + m.qty;
+        removedRevenue += m.qty * (m.unitPrice || 0);
+        removedHl += m.qty * (m.unitHl || 0);
+      });
+    }
     const nextMovements = movements.filter((m) => m.orderId !== orderId);
     const nextCumulativeRevenue = cumulativeRevenue - removedRevenue;
     const nextCumulativeHl = cumulativeHl - removedHl;
@@ -434,23 +435,30 @@ export function useInventoryStore() {
     });
   }
 
-  // dateOverride: usado por postponeOrder para reabrir el pedido con fecha de
-  // hoy/mañana en vez de preservar la fecha original. Edición normal (desde
-  // el formulario "Editar pedido") no lo pasa, así que sigue preservando la
-  // fecha como siempre.
-  function editOrder(orderId, { customerName, isDelivery, note, lines }, dateOverride) {
+  // La fecha se recalcula siempre desde el bucket actual (hoy/mañana de
+  // HOY, no la fecha original) -- así editar un pedido viejo estancado lo
+  // "refresca" al día correspondiente sin necesitar un botón Aplazar aparte.
+  function editOrder(orderId, { customerName, isDelivery, note, lines, bucket }) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
-    const originalDate = dateOverride || originalMovements[0].date;
+    const wasSent = !!originalMovements[0].sent;
+    const wasBucket = originalMovements[0].bucket || "hoy";
+    const wasCommitted = wasBucket === "hoy" || (wasBucket === "manana" && wasSent);
 
     const restoredStock = { ...stock };
     let removedRevenue = 0;
     let removedHl = 0;
-    originalMovements.forEach((m) => {
-      restoredStock[m.code] = (restoredStock[m.code] || 0) + m.qty;
-      removedRevenue += m.qty * (m.unitPrice || 0);
-      removedHl += m.qty * (m.unitHl || 0);
-    });
+    if (wasCommitted) {
+      originalMovements.forEach((m) => {
+        restoredStock[m.code] = (restoredStock[m.code] || 0) + m.qty;
+        removedRevenue += m.qty * (m.unitPrice || 0);
+        removedHl += m.qty * (m.unitHl || 0);
+      });
+    }
+
+    const nextSent = wasSent;
+    const willBeCommitted = bucket === "hoy" || (bucket === "manana" && nextSent);
+    const date = bucket === "hoy" ? todayStr() : tomorrowStr();
 
     const nextStock = { ...restoredStock };
     const newMovements = [];
@@ -460,10 +468,12 @@ export function useInventoryStore() {
       const unitPrice = prices[code] || 0;
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      nextStock[code] = (nextStock[code] || 0) - qty;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, note, sent: false, date: originalDate }));
-      addedRevenue += qty * unitPrice;
-      addedHl += qty * unitHl;
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, note, bucket, date, sent: nextSent }));
+      if (willBeCommitted) {
+        nextStock[code] = (nextStock[code] || 0) - qty;
+        addedRevenue += qty * unitPrice;
+        addedHl += qty * unitHl;
+      }
     });
 
     const otherMovements = movements.filter((m) => m.orderId !== orderId);
@@ -488,31 +498,49 @@ export function useInventoryStore() {
     markOrdersSent([orderId], sent);
   }
 
-  // Aplazar un pedido viejo lo trata como si fuera un pedido nuevo hecho
-  // ahora mismo: mismos productos/cantidades, pero fecha automática
-  // (hoy/mañana según las 4pm) y precio/HL/tasa recalculados contra los
-  // valores actuales — reusa editOrder, que ya hace exactamente eso (resta
-  // el stock viejo, resta el nuevo contra el stock actual, recalcula
-  // acumulados) cuando se le pasa una fecha explícita.
-  function postponeOrder(orderId) {
-    const originalMovements = movements.filter((m) => m.orderId === orderId);
-    if (originalMovements.length === 0) return;
-    const { customerName, isDelivery, note } = originalMovements[0];
-    const lines = originalMovements.map((m) => ({ code: m.code, qty: m.qty }));
-    editOrder(orderId, { customerName, isDelivery, note, lines }, businessDayStr());
-  }
-
-  // Llamar una sola vez por varios pedidos a la vez (envío en bloque): cada
-  // llamada a setMovements/persist usa el `movements` de este render, así que
-  // encadenar markOrderSent una vez por pedido pisaba las marcas anteriores.
+  // Llamar una sola vez por varios pedidos a la vez (envío en bloque, Hoy o
+  // Mañana): calcula todos los deltas de stock/ingreso/HL sobre el
+  // `movements` de este render antes de aplicar el set, así no se pisan
+  // entre sí. Los pedidos de Hoy nunca cambian de "comprometido" al
+  // (des)marcar Enviado -- ya estaban comprometidos desde que se crearon.
   function markOrdersSent(orderIds, sent) {
     const idSet = new Set(orderIds);
     const nowIso = new Date().toISOString();
+    const nextStock = { ...stock };
+    let revenueDelta = 0;
+    let hlDelta = 0;
+
+    idSet.forEach((orderId) => {
+      const orderMovements = movements.filter((m) => m.orderId === orderId);
+      if (orderMovements.length === 0) return;
+      const bucket = orderMovements[0].bucket || "hoy";
+      if (bucket !== "manana") return;
+      const wasSent = !!orderMovements[0].sent;
+      if (wasSent === sent) return;
+      const sign = sent ? 1 : -1;
+      orderMovements.forEach((m) => {
+        nextStock[m.code] = (nextStock[m.code] || 0) - sign * m.qty;
+        revenueDelta += sign * m.qty * (m.unitPrice || 0);
+        hlDelta += sign * m.qty * (m.unitHl || 0);
+      });
+    });
+
     const nextMovements = movements.map((m) =>
       idSet.has(m.orderId) ? { ...m, sent, sentAt: sent ? nowIso : m.sentAt } : m
     );
+    const nextCumulativeRevenue = cumulativeRevenue + revenueDelta;
+    const nextCumulativeHl = cumulativeHl + hlDelta;
+    setStock(nextStock);
     setMovements(nextMovements);
-    persist({ ...currentPersistedState, movements: nextMovements });
+    setCumulativeRevenue(nextCumulativeRevenue);
+    setCumulativeHl(nextCumulativeHl);
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+      cumulativeHl: nextCumulativeHl,
+    });
   }
 
   function renameCustomer(oldName, newName) {
@@ -551,7 +579,7 @@ export function useInventoryStore() {
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
-    confirmOrder, deleteOrder, editOrder, markOrderSent, postponeOrder, markOrdersSent,
+    confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
     renameCustomer, markOrderConfirmed,
   };
 }
