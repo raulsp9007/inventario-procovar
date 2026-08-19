@@ -53,7 +53,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
   const [bigOrderWarning, setBigOrderWarning] = useState(null);
-  const [todayOrderSort, setTodayOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
+  const [hoyOrderSort, setHoyOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
+  const [mananaOrderSort, setMananaOrderSort] = useState(() => (loadSavedFilters().sortManana === "oldest" ? "oldest" : "recent"));
   const [orderSearch, setOrderSearch] = useState("");
   const [filterUnsent, setFilterUnsent] = useState(() => !!loadSavedFilters().filterUnsent);
   const [filterUnconfirmed, setFilterUnconfirmed] = useState(() => !!loadSavedFilters().filterUnconfirmed);
@@ -67,9 +68,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   useEffect(() => {
     try {
-      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: todayOrderSort, filterUnsent, filterUnconfirmed }));
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: hoyOrderSort, sortManana: mananaOrderSort, filterUnsent, filterUnconfirmed }));
     } catch {}
-  }, [todayOrderSort, filterUnsent, filterUnconfirmed]);
+  }, [hoyOrderSort, mananaOrderSort, filterUnsent, filterUnconfirmed]);
 
   useEffect(() => {
     submittingRef.current = false;
@@ -101,11 +102,11 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const allOrders = groupAllOrders(movements).filter((o) => !pendingDeletes.has(o.orderId));
     const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
     const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
-      todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
+      hoyOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
     );
     const tomorrowsOrders = allOrders.filter((o) => belongsToTomorrow(o) && matchesFilters(o));
     const sortedTomorrowsOrders = [...tomorrowsOrders].sort((a, b) =>
-      todayOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
+      mananaOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
     );
     const pastOrdersByDate = new Map();
     allOrders
@@ -119,7 +120,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
     return { allOrders, todaysOrders, sortedTodaysOrders, tomorrowsOrders, sortedTomorrowsOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, today, tomorrow, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, todayOrderSort, pendingDeletes]);
+  }, [movements, today, tomorrow, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, hoyOrderSort, mananaOrderSort, pendingDeletes]);
 
   const activeProductsForPanel = products.filter((p) => !p.archived);
 
@@ -432,21 +433,21 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   // envío masivo opcional + orden + lista (o mensaje vacío). `section` es
   // "hoy" | "manana", usado para saber si el modo selección activo es el
   // de esta sección.
-  function renderOrdersSection({ section, title, orders, sorted, emptyText }) {
+  function renderOrdersSection({ section, title, sorted, emptyText, sortValue, onSortChange }) {
     const inSelectMode = selectSection === section;
     return (
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>{title}</div>
           <button
-            onClick={() => (inSelectMode ? confirmBulkSend(orders) : startSelect(section))}
-            disabled={orders.length === 0 || (inSelectMode && selectedIds.size === 0)}
+            onClick={() => (inSelectMode ? confirmBulkSend(sorted) : startSelect(section))}
+            disabled={sorted.length === 0 || (inSelectMode && selectedIds.size === 0)}
             style={{
               display: "flex", alignItems: "center", gap: 6,
-              background: (orders.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "var(--border)" : "var(--whatsapp)",
-              color: (orders.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "var(--text-faint)" : "var(--on-accent)",
+              background: (sorted.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "var(--border)" : "var(--whatsapp)",
+              color: (sorted.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "var(--text-faint)" : "var(--on-accent)",
               border: "none", borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600,
-              cursor: (orders.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "default" : "pointer",
+              cursor: (sorted.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "default" : "pointer",
             }}
           >
             <Send size={14} /> {inSelectMode ? `Confirmar envío (${selectedIds.size})` : "Enviar por WhatsApp"}
@@ -465,11 +466,11 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           </button>
         )}
 
-        {!inSelectMode && orders.length > 0 && (
+        {!inSelectMode && sorted.length > 0 && (
           <div style={{ marginBottom: 10 }}>
             <select
-              value={todayOrderSort}
-              onChange={(e) => setTodayOrderSort(e.target.value)}
+              value={sortValue}
+              onChange={(e) => onSortChange(e.target.value)}
               style={{
                 border: "1px solid var(--border)", borderRadius: 7,
                 padding: "7px 10px", fontSize: 12.5, background: "var(--surface)", color: "var(--text-muted)",
@@ -481,7 +482,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           </div>
         )}
 
-        {orders.length === 0 ? (
+        {sorted.length === 0 ? (
           <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
             {searchTerm || filterUnsent || filterUnconfirmed ? `Ningún pedido coincide con la búsqueda/filtros.` : emptyText}
           </div>
@@ -749,9 +750,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       {renderOrdersSection({
         section: "hoy",
         title: "PEDIDOS DE HOY",
-        orders: todaysOrders,
         sorted: sortedTodaysOrders,
         emptyText: "Aún no hay pedidos hoy.",
+        sortValue: hoyOrderSort,
+        onSortChange: setHoyOrderSort,
       })}
 
       <div style={{ marginTop: 20 }}>
@@ -782,9 +784,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         {renderOrdersSection({
           section: "manana",
           title: "PEDIDOS DE MAÑANA",
-          orders: tomorrowsOrders,
           sorted: sortedTomorrowsOrders,
           emptyText: "Aún no hay pedidos reservados para mañana.",
+          sortValue: mananaOrderSort,
+          onSortChange: setMananaOrderSort,
         })}
       </div>
 
