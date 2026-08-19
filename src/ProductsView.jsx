@@ -1,9 +1,11 @@
+import { useMemo } from "react";
 import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
 import FieldLabel from "./FieldLabel.jsx";
 import IconButton from "./IconButton.jsx";
 import Card from "./Card.jsx";
+import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
 
 export default function ProductsView({
   products,
@@ -39,6 +41,8 @@ export default function ProductsView({
   showArchived,
   setShowArchived,
 }) {
+  const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
+
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -114,6 +118,11 @@ export default function ProductsView({
                     <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "var(--accent-orange-text)" : "var(--text)" }}>
                       {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)" }}>uds</span>
                     </div>
+                    {reservedForTomorrow(allOrders, p.code) > 0 && (
+                      <div style={{ fontSize: 11.5, color: "var(--accent-orange-soft-text)", marginTop: 2 }}>
+                        Reservado mañana: {reservedForTomorrow(allOrders, p.code)} · Libre: {qty - reservedForTomorrow(allOrders, p.code)}
+                      </div>
+                    )}
                   </div>
                 )}
 
