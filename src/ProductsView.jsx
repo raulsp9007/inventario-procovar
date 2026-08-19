@@ -135,7 +135,7 @@ export default function ProductsView({
                     </div>
                     {reservedForTomorrow(allOrders, p.code) > 0 && (
                       <div style={{ fontSize: 11.5, color: "var(--accent-orange-soft-text)", marginTop: 2 }}>
-                        Reservado mañana: {reservedForTomorrow(allOrders, p.code)} · Libre: {qty - reservedForTomorrow(allOrders, p.code)}
+                        Reservado: {reservedForTomorrow(allOrders, p.code)} · Libre: {qty - reservedForTomorrow(allOrders, p.code)}
                       </div>
                     )}
                   </div>

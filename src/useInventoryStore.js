@@ -398,10 +398,10 @@ export function useInventoryStore() {
     });
   }
 
-  function confirmOrder({ customerName, isDelivery, note, lines, bucket }) {
+  function confirmOrder({ customerName, isDelivery, note, lines, bucket, date: chosenDate }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const committed = bucket === "hoy";
-    const date = bucket === "hoy" ? todayStr() : tomorrowStr();
+    const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
     const nextStock = { ...stock };
     const newMovements = [];
     let addedRevenue = 0;
@@ -467,7 +467,7 @@ export function useInventoryStore() {
   // La fecha se recalcula siempre desde el bucket actual (hoy/mañana de
   // HOY, no la fecha original) -- así editar un pedido viejo estancado lo
   // "refresca" al día correspondiente sin necesitar un botón Aplazar aparte.
-  function editOrder(orderId, { customerName, isDelivery, note, lines, bucket }) {
+  function editOrder(orderId, { customerName, isDelivery, note, lines, bucket, date: chosenDate }) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
     const wasSent = !!originalMovements[0].sent;
@@ -486,7 +486,7 @@ export function useInventoryStore() {
 
     const nextSent = wasSent;
     const willBeCommitted = bucket === "hoy" || (bucket === "manana" && nextSent);
-    const date = bucket === "hoy" ? todayStr() : tomorrowStr();
+    const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
 
     const nextStock = { ...restoredStock };
     const newMovements = [];

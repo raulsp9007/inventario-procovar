@@ -43,6 +43,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
   const [draftBucket, setDraftBucket] = useState(defaultBucket);
+  const [draftDate, setDraftDate] = useState(() => tomorrowStr());
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -77,9 +78,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   }, [customerName]);
 
   const today = todayStr();
-  const tomorrow = tomorrowStr();
   const belongsToToday = (o) => o.date === today;
-  const belongsToTomorrow = (o) => o.date === tomorrow;
+  const isUpcoming = (o) => o.date > today;
   const searchTerm = orderSearch.trim().toLowerCase();
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
 
@@ -89,7 +89,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   // que no es la búsqueda).
   const {
     allOrders, todaysOrders, sortedTodaysOrders,
-    tomorrowsOrders, sortedTomorrowsOrders,
+    upcomingOrders, sortedUpcomingOrders,
     pastOrdersByDate, pastDatesDesc, pastOrdersCount,
   } = useMemo(() => {
     const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
@@ -104,13 +104,13 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
       hoyOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
     );
-    const tomorrowsOrders = allOrders.filter((o) => belongsToTomorrow(o) && matchesFilters(o));
-    const sortedTomorrowsOrders = [...tomorrowsOrders].sort((a, b) =>
+    const upcomingOrders = allOrders.filter((o) => isUpcoming(o) && matchesFilters(o));
+    const sortedUpcomingOrders = [...upcomingOrders].sort((a, b) =>
       mananaOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
     );
     const pastOrdersByDate = new Map();
     allOrders
-      .filter((o) => !belongsToToday(o) && !belongsToTomorrow(o) && o.date >= pastCutoff && matchesFilters(o))
+      .filter((o) => o.date < today && o.date >= pastCutoff && matchesFilters(o))
       .forEach((o) => {
         if (!pastOrdersByDate.has(o.date)) pastOrdersByDate.set(o.date, []);
         pastOrdersByDate.get(o.date).push(o);
@@ -118,9 +118,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const pastDatesDesc = Array.from(pastOrdersByDate.keys()).sort((a, b) => b.localeCompare(a));
     const pastOrdersCount = pastDatesDesc.reduce((sum, d) => sum + pastOrdersByDate.get(d).length, 0);
 
-    return { allOrders, todaysOrders, sortedTodaysOrders, tomorrowsOrders, sortedTomorrowsOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount };
+    return { allOrders, todaysOrders, sortedTodaysOrders, upcomingOrders, sortedUpcomingOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, today, tomorrow, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, hoyOrderSort, mananaOrderSort, pendingDeletes]);
+  }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, hoyOrderSort, mananaOrderSort, pendingDeletes]);
 
   const activeProductsForPanel = products.filter((p) => !p.archived);
 
@@ -142,6 +142,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setEditingOrderId(null);
     setBigOrderWarning(null);
     setDraftBucket(defaultBucket());
+    setDraftDate(tomorrowStr());
   }
 
   function startEdit(order) {
@@ -152,6 +153,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setPendingQty("");
     setEditingOrderId(order.orderId);
     setDraftBucket(order.bucket);
+    setDraftDate(order.bucket === "manana" ? order.date : tomorrowStr());
   }
 
   function addDraftLine() {
@@ -201,16 +203,20 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       onError("Agrega al menos un producto al pedido.");
       return;
     }
+    if (draftBucket === "manana" && (!draftDate || draftDate <= today)) {
+      onError("Elegí una fecha futura para el pedido programado.");
+      return;
+    }
     for (const line of lines) {
       const available = computeAvailable(line.code);
       if (line.qty > available) {
         const product = products.find((p) => p.code === line.code);
-        const motivo = draftBucket === "manana" ? " para mañana (ya reservado por otros pedidos)" : "";
+        const motivo = draftBucket === "manana" ? ` para el ${formatDate(draftDate)} (ya reservado por otros pedidos)` : "";
         onError(`No hay suficiente stock de ${product ? product.name : line.code}${motivo}.`);
         return;
       }
     }
-    const draft = { customerName: customerName.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket };
+    const draft = { customerName: customerName.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
     const bigLines = lines
       .map((l) => {
         const product = products.find((p) => p.code === l.code);
@@ -316,7 +322,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setSelectedIds(new Set());
   }
 
-  function renderOrderRow(order, i, { inSelectMode }) {
+  function renderOrderRow(order, i, { inSelectMode, showDate }) {
     return (
       <div
         key={order.orderId}
@@ -336,8 +342,16 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             />
           )}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600 }}>
+            <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               {order.isDelivery ? "🛺 " : ""}{order.customerName}
+              {showDate && (
+                <span style={{
+                  fontSize: 11, fontWeight: 600, color: "var(--accent-orange-soft-text)",
+                  border: "1px solid var(--border-warn)", borderRadius: 5, padding: "1px 6px",
+                }}>
+                  {formatDate(order.date)}
+                </span>
+              )}
             </div>
             <div style={{ color: "var(--text-faint)", fontSize: 12.5 }}>
               {order.lines.map((line) => {
@@ -433,7 +447,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   // envío masivo opcional + orden + lista (o mensaje vacío). `section` es
   // "hoy" | "manana", usado para saber si el modo selección activo es el
   // de esta sección.
-  function renderOrdersSection({ section, title, sorted, emptyText, sortValue, onSortChange }) {
+  function renderOrdersSection({ section, title, sorted, emptyText, sortValue, onSortChange, showDate }) {
     const inSelectMode = selectSection === section;
     return (
       <div>
@@ -488,7 +502,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           </div>
         ) : (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-            {sorted.map((order, i) => renderOrderRow(order, i, { inSelectMode }))}
+            {sorted.map((order, i) => renderOrderRow(order, i, { inSelectMode, showDate }))}
           </div>
         )}
       </div>
@@ -514,7 +528,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         )}
       </div>
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: draftBucket === "manana" ? 8 : 12 }}>
           <button
             onClick={() => setDraftBucket("hoy")}
             style={{
@@ -533,9 +547,22 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               color: draftBucket === "manana" ? "var(--cream)" : "var(--text)",
             }}
           >
-            Mañana
+            Programar
           </button>
         </div>
+
+        {draftBucket === "manana" && (
+          <input
+            type="date"
+            value={draftDate}
+            min={tomorrowStr()}
+            onChange={(e) => setDraftDate(e.target.value)}
+            style={{
+              width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
+              padding: "9px 10px", fontSize: 14, marginBottom: 12, background: "var(--surface)", color: "var(--text)",
+            }}
+          />
+        )}
 
         <div style={{ position: "relative", marginBottom: 10 }}>
           <input
@@ -762,7 +789,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         {activeProductsForPanel.length > 0 && (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
-              DISPONIBLE PARA MAÑANA
+              DISPONIBLE PARA RESERVAR
             </div>
             {activeProductsForPanel.map((p, i) => {
               const reserved = reservedForTomorrow(allOrders, p.code);
@@ -785,11 +812,12 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
         {renderOrdersSection({
           section: "manana",
-          title: "PEDIDOS DE MAÑANA",
-          sorted: sortedTomorrowsOrders,
-          emptyText: "Aún no hay pedidos reservados para mañana.",
+          title: "PRÓXIMOS PEDIDOS",
+          sorted: sortedUpcomingOrders,
+          emptyText: "Aún no hay pedidos programados.",
           sortValue: mananaOrderSort,
           onSortChange: setMananaOrderSort,
+          showDate: true,
         })}
       </div>
 
