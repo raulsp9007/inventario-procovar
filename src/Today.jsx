@@ -1,14 +1,19 @@
 import { formatCUP, formatUSD, convertToUSD, totalHlSold } from "./money";
+import Banner from "./Banner.jsx";
 
 // `movements` ya viene filtrado por el llamador (InventoryApp.jsx) según qué
 // pedidos le tocan a esta pestaña -- este componente solo resume/muestra.
+// `pendingMode` (pestaña Mañana): todo lo que llega ya es "reservado, sin
+// comprometer" -- se cuenta todo como un solo total, sin separar
+// enviado/pendiente (acá no hay "enviado" todavía).
 export default function Today({
   products, movements, stock, showPrices, exchangeRate,
   title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
+  pendingMode = false,
 }) {
   const todaysSales = movements.filter((m) => m.type === "venta");
-  const todaysSentSales = todaysSales.filter((m) => m.sent);
-  const todaysPendingSales = todaysSales.filter((m) => !m.sent);
+  const todaysSentSales = pendingMode ? todaysSales : todaysSales.filter((m) => m.sent);
+  const todaysPendingSales = pendingMode ? [] : todaysSales.filter((m) => !m.sent);
   const unitsSold = todaysSentSales.reduce((sum, m) => sum + m.qty, 0);
   const dayRevenue = todaysSentSales.reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
   const dayRevenueUSD = convertToUSD(dayRevenue, exchangeRate);
@@ -32,15 +37,21 @@ export default function Today({
         {title}
       </div>
 
+      {pendingMode && (
+        <Banner variant="warning" style={{ marginBottom: 14 }}>
+          Reservado, pendiente de envío -- no está descontado del stock ni sumado al ingreso todavía.
+        </Banner>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>UNIDADES VENDIDAS</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>{pendingMode ? "UNIDADES RESERVADAS" : "UNIDADES VENDIDAS"}</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{unitsSold}</div>
         </div>
 
         {showPrices && (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>INGRESO DEL DÍA</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>{pendingMode ? "INGRESO RESERVADO" : "INGRESO DEL DÍA"}</div>
             <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(dayRevenue)}</div>
             {dayRevenueUSD !== null && (
               <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{formatUSD(dayRevenueUSD)}</div>
@@ -54,7 +65,7 @@ export default function Today({
         </div>
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>HL VENDIDOS</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>HL {pendingMode ? "RESERVADOS" : "VENDIDOS"}</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{hlSoldToday.toFixed(2)}</div>
         </div>
       </div>
