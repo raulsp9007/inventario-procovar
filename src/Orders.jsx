@@ -637,12 +637,12 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         )}
 
         {availableProducts.length > 0 ? (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <select
               value={effectiveSelectedProductCode}
               onChange={(e) => setSelectedProductCode(e.target.value)}
               style={{
-                flex: "1 1 auto", border: "1px solid var(--border)", borderRadius: 7,
+                width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
                 padding: "9px 10px", fontSize: 14, background: "var(--surface)",
               }}
             >
@@ -650,27 +650,29 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 <option key={p.code} value={p.code}>{p.name}</option>
               ))}
             </select>
-            <input
-              type="number"
-              inputMode="numeric"
-              placeholder="Cant."
-              value={pendingQty}
-              onChange={(e) => setPendingQty(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addDraftLine(); }}
-              style={{
-                width: 70, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
-                padding: "9px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
-              }}
-            />
-            <button
-              onClick={addDraftLine}
-              style={{
-                flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
-                borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-              }}
-            >
-              Agregar
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="Cant."
+                value={pendingQty}
+                onChange={(e) => setPendingQty(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addDraftLine(); }}
+                style={{
+                  flex: "1 1 auto", minWidth: 0, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
+                  padding: "9px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
+                }}
+              />
+              <button
+                onClick={addDraftLine}
+                style={{
+                  flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
+                  borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Agregar
+              </button>
+            </div>
           </div>
         ) : (
           <div style={{ fontSize: 12.5, color: "var(--text-faint)" }}>Todos los productos ya están en el pedido.</div>
