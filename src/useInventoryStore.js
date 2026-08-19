@@ -200,9 +200,11 @@ export function useInventoryStore() {
   }
 
   // "Hoy" = movimientos comprometidos de hoy (bucket Hoy, o Mañana ya
-  // enviado, con date === hoy). "Mañana" = pedidos reservados de mañana
-  // TODAVÍA sin comprometer (sin enviar) -- una vez enviados, dejan de
-  // aparecer acá porque ya no son "pendientes de envío".
+  // enviado, con date === hoy). "Mañana" = todo lo que todavía está
+  // pendiente de enviar y es relevante para mañana: pedidos de HOY sin
+  // enviar (por si no salen hoy, ya los tenés a la vista para mañana) +
+  // reservas para mañana sin comprometer todavía -- una vez enviados,
+  // ambos dejan de aparecer acá porque ya no son "pendientes de envío".
   const todayCal = todayStr();
   const tomorrowCal = tomorrowStr();
   const { todaysMovements, mananaMovements } = useMemo(() => {
@@ -211,8 +213,10 @@ export function useInventoryStore() {
       return m.type !== "venta" || isCommittedMovement(m);
     });
     const mananaMovements = movements.filter((m) => {
-      if (m.date !== tomorrowCal) return false;
-      return m.type !== "venta" || !isCommittedMovement(m);
+      if (m.type !== "venta") return false;
+      if (m.date === todayCal) return !m.sent;
+      if (m.date === tomorrowCal) return !isCommittedMovement(m);
+      return false;
     });
     return { todaysMovements, mananaMovements };
   }, [movements, todayCal, tomorrowCal]);

@@ -5,8 +5,8 @@ export default function Tomorrow(props) {
     <Today
       {...props}
       title="MAÑANA"
-      ordersLabel="PEDIDOS DE MAÑANA"
-      soldLabel="Reservado para mañana"
+      ordersLabel="PEDIDOS PENDIENTES"
+      soldLabel="Pendiente"
       pendingMode
     />
   );
