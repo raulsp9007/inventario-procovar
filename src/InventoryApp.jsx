@@ -30,7 +30,7 @@ export default function InventoryApp() {
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
-    confirmOrder, deleteOrder, editOrder, markOrderSent, postponeOrder, markOrdersSent,
+    confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
     renameCustomer, markOrderConfirmed,
   } = useInventoryStore();
 
@@ -231,7 +231,6 @@ export default function InventoryApp() {
             onConfirmOrder={confirmOrder}
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
-            onPostponeOrder={postponeOrder}
             lowStockThresholdFor={lowStockThresholdFor}
             onMarkSent={markOrderSent}
             onMarkOrdersSent={markOrdersSent}
