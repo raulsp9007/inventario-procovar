@@ -11,6 +11,7 @@ export function groupAllOrders(movements) {
         sent: !!m.sent,
         sentAt: m.sentAt || null,
         confirmed: !!m.confirmed,
+        bucket: m.bucket || "hoy",
         date: m.date,
         timestamp: m.timestamp,
         lines: [],
@@ -36,4 +37,28 @@ export function formatOrderForWhatsApp(order, products, { senderName, sendSender
     lines.push(`${product ? product.name : line.code} - ${line.qty}`);
   });
   return lines.join("\n");
+}
+
+// "Comprometido" = ya afecta stock/ingreso/HL. Hoy siempre; Mañana solo si
+// ya se marcó Enviado (o se envió por WhatsApp, que también marca Enviado).
+export function isCommittedOrder(order) {
+  const bucket = order.bucket || "hoy";
+  return bucket === "hoy" || (bucket === "manana" && !!order.sent);
+}
+
+export function isCommittedMovement(m) {
+  const bucket = m.bucket || "hoy";
+  return bucket === "hoy" || (bucket === "manana" && !!m.sent);
+}
+
+// Unidades ya reservadas en pedidos de mañana sin enviar (no descuentan
+// stock todavía, pero igual comprometen disponibilidad futura). Se excluye
+// opcionalmente un pedido (el que se está editando) para no contarse a sí mismo.
+export function reservedForTomorrow(orders, code, excludeOrderId = null) {
+  return orders
+    .filter((o) => o.bucket === "manana" && !o.sent && o.orderId !== excludeOrderId)
+    .reduce((sum, o) => {
+      const line = o.lines.find((l) => l.code === code);
+      return sum + (line ? line.qty : 0);
+    }, 0);
 }
