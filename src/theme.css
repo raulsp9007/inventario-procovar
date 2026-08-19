@@ -1,0 +1,75 @@
+/* Variables de color -- claro por default (igual a los hex que ya usaba
+   la app), oscuro vía [data-theme="dark"] en <html>. El toggle vive en
+   InventoryApp.jsx y persiste en localStorage bajo una key separada de
+   los datos de negocio ("procovar-theme" vs "procovar-inventario-v1"). */
+:root {
+  --bg: #F7F4EC;
+  --surface: #FFFFFF;
+  --panel-alt: #FBFAF6;
+  --divider: #F0EDE2;
+  --border: #E7E2D3;
+  --border-strong: #D8D2C0;
+  --border-warn: #E9CFA0;
+
+  --text: #22261F;
+  --text-muted: #8A8574;
+  --text-faint: #9A9484;
+  --text-faint-2: #B4AF9E;
+
+  --ink: #22261F;
+  --cream: #F7F4EC;
+  --on-accent: #FFFFFF;
+
+  --accent-orange-text: #B4661E;
+  --accent-orange-soft-text: #B57A2E;
+  --accent-green-text: #3C6E4A;
+  --warning-text: #8A5A1E;
+  --error-text: #8A2E1E;
+
+  --banner-warning-bg: #FBEFE0;
+  --banner-error-bg: #FBE4E0;
+  --error-border: #E9A79C;
+
+  --on-ink-subtitle: #9AA890;
+  --on-ink-label: #B7C9A8;
+  --on-ink-accent: #E3B463;
+
+  --whatsapp: #25D366;
+  --danger: #B4291E;
+}
+
+[data-theme="dark"] {
+  --bg: #1C1E17;
+  --surface: #24271F;
+  --panel-alt: #2A2D23;
+  --divider: #34372B;
+  --border: #3A3D31;
+  --border-strong: #4A4D3E;
+  --border-warn: #5C4E2E;
+
+  --text: #F0EDE4;
+  --text-muted: #ABA492;
+  --text-faint: #8C8672;
+  --text-faint-2: #6E6857;
+
+  --ink: #3A3E2F;
+  --cream: #F7F4EC;
+  --on-accent: #FFFFFF;
+
+  --accent-orange-text: #E0954A;
+  --accent-orange-soft-text: #DB9F5C;
+  --accent-green-text: #6FBE8A;
+  --warning-text: #E0B96A;
+  --error-text: #E29A8A;
+
+  --banner-warning-bg: #3A2E18;
+  --banner-error-bg: #3A211C;
+  --error-border: #6B342C;
+
+  --on-ink-subtitle: #9AA890;
+  --on-ink-label: #B7C9A8;
+  --on-ink-accent: #E3B463;
+
+  --whatsapp: #25D366;
+  --danger: #C4382C;
+}

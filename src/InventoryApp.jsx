@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Download, Upload, Sun, Moon } from "lucide-react";
 import { getData, setData } from "./storage";
 import { todayStr, tomorrowStr, businessDayStr, isPastCutoffNow, wasSentAfterCutoffToday } from "./dateUtils";
 import { totalHlSold } from "./money";
@@ -27,6 +27,7 @@ const LOW_STOCK_THRESHOLD = 20;
 const STORAGE_KEY = "procovar-inventario-v1";
 const VALID_VIEWS = ["hoy", "manana", "resumen", "pedidos", "clientes", "stock", "config"];
 const VIEW_STORAGE_KEY = "procovar-active-tab";
+const THEME_STORAGE_KEY = "procovar-theme";
 
 function lowStockThresholdFor(product) {
   return product.lowStockThreshold != null ? product.lowStockThreshold : LOW_STOCK_THRESHOLD;
@@ -79,6 +80,28 @@ export default function InventoryApp() {
     try {
       localStorage.setItem(VIEW_STORAGE_KEY, next);
     } catch {}
+  }
+
+  // Tema (claro/oscuro): preferencia de interfaz, no dato de negocio -- vive
+  // en su propia key de localStorage, separada de "procovar-inventario-v1",
+  // y no pasa nunca por persist()/setData.
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved === "dark" || saved === "light") return saved;
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    } catch {
+      return "light";
+    }
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {}
+  }, [theme]);
+  function toggleTheme() {
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
   }
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
@@ -211,8 +234,8 @@ export default function InventoryApp() {
 
   if (!loaded) {
     return (
-      <div style={{ minHeight: "100vh", background: "#F7F4EC", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
-        <div style={{ color: "#9A9484", fontSize: 14, letterSpacing: "0.05em" }}>CARGANDO INVENTARIO…</div>
+      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
+        <div style={{ color: "var(--text-faint)", fontSize: 14, letterSpacing: "0.05em" }}>CARGANDO INVENTARIO…</div>
       </div>
     );
   }
@@ -526,7 +549,7 @@ export default function InventoryApp() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F7F4EC", fontFamily: "'Inter', system-ui, sans-serif", color: "#26241F", paddingBottom: 48 }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "'Inter', system-ui, sans-serif", color: "var(--text)", paddingBottom: 48 }}>
       <style>{`
         * { box-sizing: border-box; }
         input[type=number]::-webkit-inner-spin-button,
@@ -535,20 +558,20 @@ export default function InventoryApp() {
         .rowfade { animation: fadeIn 0.25s ease; }
       `}</style>
 
-      <div style={{ background: "#22261F", color: "#F7F4EC", padding: "24px 16px 20px" }}>
+      <div style={{ background: "var(--ink)", color: "var(--cream)", padding: "24px 16px 20px" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 12, letterSpacing: "0.14em", color: "#B7C9A8", fontWeight: 600, marginBottom: 4 }}>PROCOVAR · CONTROL DE STOCK</div>
+            <div style={{ fontSize: 12, letterSpacing: "0.14em", color: "var(--on-ink-label)", fontWeight: 600, marginBottom: 4 }}>PROCOVAR · CONTROL DE STOCK</div>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: "-0.01em" }}>Inventario diario</h1>
           </div>
           <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 11, color: "#9AA890", letterSpacing: "0.06em" }}>UNIDADES TOTALES</div>
+              <div style={{ fontSize: 11, color: "var(--on-ink-subtitle)", letterSpacing: "0.06em" }}>UNIDADES TOTALES</div>
               <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{totalStock}</div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 11, color: "#9AA890", letterSpacing: "0.06em" }}>VENDIDO HOY</div>
-              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "#E3B463" }}>{todaysUnitsSold}</div>
+              <div style={{ fontSize: 11, color: "var(--on-ink-subtitle)", letterSpacing: "0.06em" }}>VENDIDO HOY</div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--on-ink-accent)" }}>{todaysUnitsSold}</div>
             </div>
           </div>
         </div>
@@ -572,12 +595,25 @@ export default function InventoryApp() {
           aria-label={showPrices ? "Ocultar precios" : "Mostrar precios"}
           style={{
             flex: "0 0 auto", width: 40, padding: "9px", cursor: "pointer",
-            borderRadius: 7, border: "1px solid #22261F",
-            background: "transparent", color: "#22261F",
+            borderRadius: 7, border: "1px solid var(--text)",
+            background: "transparent", color: "var(--text)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}
         >
           {showPrices ? <Eye size={16} /> : <EyeOff size={16} />}
+        </button>
+        <button
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Modo claro" : "Modo oscuro"}
+          aria-label={theme === "dark" ? "Modo claro" : "Modo oscuro"}
+          style={{
+            flex: "0 0 auto", width: 40, padding: "9px", cursor: "pointer",
+            borderRadius: 7, border: "1px solid var(--text)",
+            background: "transparent", color: "var(--text)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
         </button>
       </div>
 
@@ -588,7 +624,7 @@ export default function InventoryApp() {
               onClick={() => setShowLowStockList((s) => !s)}
               style={{
                 display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
-                background: "#FBEFE0", border: "1px solid #E9CFA0", color: "#8A5A1E",
+                background: "var(--banner-warning-bg)", border: "1px solid var(--border-warn)", color: "var(--warning-text)",
                 padding: "10px 14px", borderRadius: 8, fontSize: 13.5, cursor: "pointer",
               }}
             >
@@ -599,7 +635,7 @@ export default function InventoryApp() {
               {showLowStockList ? <ChevronUp size={14} style={{ marginLeft: "auto" }} /> : <ChevronDown size={14} style={{ marginLeft: "auto" }} />}
             </button>
             {showLowStockList && (
-              <div style={{ background: "#FFFFFF", border: "1px solid #E9CFA0", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border-warn)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
                 {activeProducts
                   .filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p))
                   .map((p, i) => (
@@ -607,11 +643,11 @@ export default function InventoryApp() {
                       key={p.code}
                       style={{
                         display: "flex", justifyContent: "space-between", alignItems: "center",
-                        padding: "9px 14px", fontSize: 13, borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
+                        padding: "9px 14px", fontSize: 13, borderTop: i === 0 ? "none" : "1px solid var(--divider)",
                       }}
                     >
                       <span>{p.name}</span>
-                      <span style={{ color: "#8A5A1E", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                      <span style={{ color: "var(--warning-text)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                         {stock[p.code] || 0} uds (aviso ≤ {lowStockThresholdFor(p)})
                         {pendingTodayFor(p.code) > 0 && ` · Pendiente: ${pendingTodayFor(p.code)}`}
                       </span>
@@ -772,7 +808,7 @@ export default function InventoryApp() {
             onClick={() => downloadBackup(currentPersistedState)}
             style={{
               display: "flex", alignItems: "center", gap: 6,
-              background: "transparent", border: "1px solid #D8D2C0", color: "#8A8574",
+              background: "transparent", border: "1px solid var(--border-strong)", color: "var(--text-muted)",
               borderRadius: 7, padding: "7px 12px", fontSize: 12, cursor: "pointer",
             }}
           >
@@ -782,7 +818,7 @@ export default function InventoryApp() {
             onClick={() => fileInputRef.current?.click()}
             style={{
               display: "flex", alignItems: "center", gap: 6,
-              background: "transparent", border: "1px solid #D8D2C0", color: "#8A8574",
+              background: "transparent", border: "1px solid var(--border-strong)", color: "var(--text-muted)",
               borderRadius: 7, padding: "7px 12px", fontSize: 12, cursor: "pointer",
             }}
           >
@@ -797,7 +833,7 @@ export default function InventoryApp() {
           />
         </div>
 
-        <div style={{ marginTop: 10, fontSize: 11.5, color: "#B4AF9E", textAlign: "center" }}>
+        <div style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-faint-2)", textAlign: "center" }}>
           {saveState === "saving" ? "Guardando…" : saveState === "saved" ? "Guardado ✓" : "Los datos se guardan automáticamente en este dispositivo"}
         </div>
       </div>

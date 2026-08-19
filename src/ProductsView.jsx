@@ -42,14 +42,14 @@ export default function ProductsView({
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PRODUCTOS</div>
+        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>PRODUCTOS</div>
         <button
           onClick={onToggleEditMode}
           style={{
             display: "flex", alignItems: "center", gap: 6,
-            background: editMode ? "#22261F" : "transparent",
-            color: editMode ? "#F7F4EC" : "#22261F",
-            border: "1px solid #22261F",
+            background: editMode ? "var(--ink)" : "transparent",
+            color: editMode ? "var(--cream)" : "var(--text)",
+            border: "1px solid var(--text)",
             borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
           }}
         >
@@ -68,8 +68,8 @@ export default function ProductsView({
               key={p.code}
               className="rowfade"
               style={{
-                background: "#FFFFFF",
-                border: `1px solid ${isLow ? "#E9CFA0" : "#E7E2D3"}`,
+                background: "var(--surface)",
+                border: `1px solid ${isLow ? "var(--border-warn)" : "var(--border)"}`,
                 borderRadius: 12,
                 padding: "16px 18px",
               }}
@@ -86,7 +86,7 @@ export default function ProductsView({
                         value={editNameInputs[p.code] ?? p.name}
                         onChange={(e) => setEditNameInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                         style={{
-                          fontWeight: 700, fontSize: 15.5, border: "1px solid #D8D2C0", borderRadius: 7,
+                          fontWeight: 700, fontSize: 15.5, border: "1px solid var(--border-strong)", borderRadius: 7,
                           padding: "4px 8px", marginBottom: 2, width: "100%", boxSizing: "border-box",
                         }}
                       />
@@ -95,14 +95,14 @@ export default function ProductsView({
                     )}
                     {editMode && (
                       <>
-                        <div style={{ fontSize: 12, color: "#9A9484" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
                         {lastAdjustedAt[p.code] && (
-                          <div style={{ fontSize: 11, color: "#B4AF9E" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-faint-2)" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
                         )}
                       </>
                     )}
                     {!editMode && showPrices && (
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "#3C6E4A", marginTop: 2 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
                         {prices[p.code] ? formatCUP(prices[p.code]) : "Precio no definido"}
                       </div>
                     )}
@@ -111,8 +111,8 @@ export default function ProductsView({
 
                 {!editMode && (
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "#B4661E" : "#22261F" }}>
-                      {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "#9A9484" }}>uds</span>
+                    <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "var(--accent-orange-text)" : "var(--text)" }}>
+                      {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)" }}>uds</span>
                     </div>
                   </div>
                 )}
@@ -148,7 +148,7 @@ export default function ProductsView({
                       onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                       style={{
                         width: "100%", boxSizing: "border-box", fontSize: 18, fontWeight: 700,
-                        border: "1px solid #D8D2C0", borderRadius: 7, padding: "7px 10px",
+                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "7px 10px",
                         fontVariantNumeric: "tabular-nums",
                       }}
                     />
@@ -163,8 +163,8 @@ export default function ProductsView({
                       title="Precio en CUP"
                       style={{
                         width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                        border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "#26241F",
+                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
+                        fontVariantNumeric: "tabular-nums", color: "var(--text)",
                       }}
                     />
                   </div>
@@ -178,8 +178,8 @@ export default function ProductsView({
                       title="Hectolitros por unidad"
                       style={{
                         width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                        border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "#26241F",
+                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
+                        fontVariantNumeric: "tabular-nums", color: "var(--text)",
                       }}
                     />
                   </div>
@@ -194,8 +194,8 @@ export default function ProductsView({
                       placeholder={String(defaultLowStockThreshold)}
                       style={{
                         width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                        border: "1px solid #D8D2C0", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "#26241F",
+                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
+                        fontVariantNumeric: "tabular-nums", color: "var(--text)",
                       }}
                     />
                   </div>
@@ -210,7 +210,7 @@ export default function ProductsView({
                     aria-label="Eliminar producto"
                     style={{
                       display: "flex", alignItems: "center", gap: 6,
-                      background: "transparent", border: "1px solid #E7E2D3", color: "#8A5A1E",
+                      background: "transparent", border: "1px solid var(--border)", color: "var(--warning-text)",
                       borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer",
                     }}
                   >
@@ -224,7 +224,7 @@ export default function ProductsView({
         {editMode && (
           <div
             style={{
-              background: "#FFFFFF", border: "1px dashed #D8D2C0", borderRadius: 12,
+              background: "var(--surface)", border: "1px dashed var(--border-strong)", borderRadius: 12,
               padding: "14px 18px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
             }}
           >
@@ -235,7 +235,7 @@ export default function ProductsView({
               onChange={(e) => setNewProductName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") onAddProduct(); }}
               style={{
-                flex: "1 1 auto", minWidth: 160, border: "1px solid #E7E2D3", borderRadius: 7,
+                flex: "1 1 auto", minWidth: 160, border: "1px solid var(--border)", borderRadius: 7,
                 padding: "9px 12px", fontSize: 14,
               }}
             />
@@ -247,14 +247,14 @@ export default function ProductsView({
               onChange={(e) => setNewProductHl(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") onAddProduct(); }}
               style={{
-                flex: "0 1 110px", minWidth: 90, border: "1px solid #E7E2D3", borderRadius: 7,
+                flex: "0 1 110px", minWidth: 90, border: "1px solid var(--border)", borderRadius: 7,
                 padding: "9px 12px", fontSize: 14,
               }}
             />
             <button
               onClick={onAddProduct}
               style={{
-                flex: "0 0 auto", background: "#22261F", color: "#F7F4EC", border: "none",
+                flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
                 borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
               }}
             >
@@ -270,7 +270,7 @@ export default function ProductsView({
             onClick={() => setShowArchived((s) => !s)}
             style={{
               display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
-              color: "#8A8574", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
+              color: "var(--text-muted)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
               padding: 0, marginBottom: showArchived ? 10 : 0,
             }}
           >
@@ -286,14 +286,14 @@ export default function ProductsView({
                   style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",
                     gap: 8, padding: "10px 16px", fontSize: 13.5,
-                    borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
+                    borderTop: i === 0 ? "none" : "1px solid var(--divider)",
                   }}
                 >
                   <span>{p.name}</span>
                   <button
                     onClick={() => onRestoreProduct(p.code)}
                     style={{
-                      background: "transparent", border: "1px solid #E7E2D3", color: "#3C6E4A",
+                      background: "transparent", border: "1px solid var(--border)", color: "var(--accent-green-text)",
                       borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer",
                     }}
                   >
@@ -307,11 +307,11 @@ export default function ProductsView({
       )}
 
       <div style={{ marginTop: 28 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
           <History size={14} /> HISTORIAL DE MOVIMIENTOS
         </div>
         {movements.length === 0 ? (
-          <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
+          <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
             Aún no hay movimientos registrados.
           </div>
         ) : (
@@ -324,17 +324,17 @@ export default function ProductsView({
                   style={{
                     display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
                     gap: 6, padding: "10px 16px", fontSize: 13.5,
-                    borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
+                    borderTop: i === 0 ? "none" : "1px solid var(--divider)",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 5, height: 5, borderRadius: "50%", background: product?.color || "#9A9484" }} />
+                    <div style={{ width: 5, height: 5, borderRadius: "50%", background: product?.color || "var(--text-faint)" }} />
                     <span style={{ fontWeight: 600 }}>{product?.short || m.code}</span>
-                    <span style={{ color: "#9A9484" }}>{m.type === "venta" ? "venta" : "ajuste manual"}</span>
+                    <span style={{ color: "var(--text-faint)" }}>{m.type === "venta" ? "venta" : "ajuste manual"}</span>
                   </div>
                   <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                    <span style={{ color: "#9A9484", fontSize: 12 }}>{formatDate(m.date)}</span>
-                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: m.type === "venta" ? "#B4661E" : (m.qty >= 0 ? "#3C6E4A" : "#B4661E") }}>
+                    <span style={{ color: "var(--text-faint)", fontSize: 12 }}>{formatDate(m.date)}</span>
+                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: m.type === "venta" ? "var(--accent-orange-text)" : (m.qty >= 0 ? "var(--accent-green-text)" : "var(--accent-orange-text)") }}>
                       {m.type === "venta" ? `-${m.qty}` : (m.qty >= 0 ? `+${m.qty}` : m.qty)}
                     </span>
                   </div>

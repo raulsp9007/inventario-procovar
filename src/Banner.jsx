@@ -1,17 +1,17 @@
 const VARIANTS = {
-  warning: { background: "#FBEFE0", border: "#E9CFA0", text: "#8A5A1E" },
-  error: { background: "#FBE4E0", border: "#E9A79C", text: "#8A2E1E" },
-  dark: { background: "#22261F", border: "#22261F", text: "#F7F4EC" },
+  warning: { background: "var(--banner-warning-bg)", border: "var(--border-warn)", text: "var(--warning-text)" },
+  error: { background: "var(--banner-error-bg)", border: "var(--error-border)", text: "var(--error-text)" },
+  dark: { background: "var(--ink)", border: "var(--ink)", text: "var(--cream)" },
 };
 
 const BUTTON_KIND = {
-  primary: (v) => ({ background: v.text, color: "#FFFFFF", border: "none", fontWeight: 600 }),
-  dark: () => ({ background: "#22261F", color: "#F7F4EC", border: "none", fontWeight: 600 }),
-  danger: () => ({ background: "#B4291E", color: "#FFFFFF", border: "none", fontWeight: 600 }),
+  primary: (v) => ({ background: v.text, color: "var(--on-accent)", border: "none", fontWeight: 600 }),
+  dark: () => ({ background: "var(--ink)", color: "var(--cream)", border: "none", fontWeight: 600 }),
+  danger: () => ({ background: "var(--danger)", color: "var(--on-accent)", border: "none", fontWeight: 600 }),
   // Sobre fondo oscuro (variant "dark") el borde normal (v.border) es del
   // mismo color que el fondo y queda invisible -- se usa un contorno claro.
   secondary: (v, variantName) => variantName === "dark"
-    ? { background: "transparent", color: "#F7F4EC", border: "1px solid #F7F4EC", fontWeight: 500 }
+    ? { background: "transparent", color: "var(--cream)", border: "1px solid var(--cream)", fontWeight: 500 }
     : { background: "transparent", color: v.text, border: `1px solid ${v.border}`, fontWeight: 500 },
 };
 

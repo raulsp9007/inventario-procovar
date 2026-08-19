@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./theme.css";
 import InventoryApp from "./InventoryApp.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(

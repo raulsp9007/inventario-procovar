@@ -41,7 +41,7 @@ export default function Customers({ products, movements, showPrices, onRenameCus
 
   return (
     <div>
-      <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
+      <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
         CLIENTES
       </div>
 
@@ -53,7 +53,7 @@ export default function Customers({ products, movements, showPrices, onRenameCus
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
-              flex: "1 1 auto", minWidth: 160, border: "1px solid #E7E2D3", borderRadius: 7,
+              flex: "1 1 auto", minWidth: 160, border: "1px solid var(--border)", borderRadius: 7,
               padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
             }}
           />
@@ -61,8 +61,8 @@ export default function Customers({ products, movements, showPrices, onRenameCus
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
             style={{
-              flex: "0 0 auto", border: "1px solid #E7E2D3", borderRadius: 7,
-              padding: "9px 10px", fontSize: 13.5, background: "#FFFFFF",
+              flex: "0 0 auto", border: "1px solid var(--border)", borderRadius: 7,
+              padding: "9px 10px", fontSize: 13.5, background: "var(--surface)",
             }}
           >
             <option value="recent">Última compra: reciente primero</option>
@@ -73,15 +73,15 @@ export default function Customers({ products, movements, showPrices, onRenameCus
       )}
 
       {allStats.length === 0 ? (
-        <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
+        <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
           Aún no hay clientes registrados.
         </div>
       ) : stats.length === 0 ? (
-        <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
+        <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
           Ningún cliente coincide con "{search}".
         </div>
       ) : (
-        <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
           {stats.map((c, i) => {
             const product = products.find((p) => p.code === c.favoriteProductCode);
             const isExpanded = expandedCustomer === c.customerName;
@@ -89,7 +89,7 @@ export default function Customers({ products, movements, showPrices, onRenameCus
             return (
               <div
                 key={c.customerName}
-                style={{ borderTop: i === 0 ? "none" : "1px solid #F0EDE2" }}
+                style={{ borderTop: i === 0 ? "none" : "1px solid var(--divider)" }}
               >
                 {editingCustomer === c.customerName ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px" }}>
@@ -100,7 +100,7 @@ export default function Customers({ products, movements, showPrices, onRenameCus
                       onChange={(e) => setNameInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") saveRename(c.customerName); }}
                       style={{
-                        flex: "1 1 auto", minWidth: 0, border: "1px solid #E7E2D3", borderRadius: 7,
+                        flex: "1 1 auto", minWidth: 0, border: "1px solid var(--border)", borderRadius: 7,
                         padding: "7px 10px", fontSize: 13.5, boxSizing: "border-box",
                       }}
                     />
@@ -110,7 +110,7 @@ export default function Customers({ products, movements, showPrices, onRenameCus
                       aria-label="Guardar"
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "#22261F", color: "#F7F4EC", border: "none",
+                        background: "var(--ink)", color: "var(--cream)", border: "none",
                         borderRadius: 7, width: 32, height: 32, cursor: "pointer", flexShrink: 0,
                       }}
                     >
@@ -122,7 +122,7 @@ export default function Customers({ products, movements, showPrices, onRenameCus
                       aria-label="Cancelar"
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "transparent", color: "#8A8574", border: "1px solid #E7E2D3",
+                        background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)",
                         borderRadius: 7, width: 32, height: 32, cursor: "pointer", flexShrink: 0,
                       }}
                     >
@@ -145,14 +145,14 @@ export default function Customers({ products, movements, showPrices, onRenameCus
                         aria-label="Editar nombre"
                         style={{
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          background: "transparent", border: "none", color: "#8A8574",
+                          background: "transparent", border: "none", color: "var(--text-muted)",
                           cursor: "pointer", padding: 2,
                         }}
                       >
                         <Pencil size={12} />
                       </button>
                     </span>
-                    <div style={{ display: "flex", gap: 12, alignItems: "center", color: "#8A8574", fontSize: 12.5 }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center", color: "var(--text-muted)", fontSize: 12.5 }}>
                       <span>{product ? product.short : c.favoriteProductCode}</span>
                       <span>{formatDate(c.lastPurchaseDate)}</span>
                       {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -161,7 +161,7 @@ export default function Customers({ products, movements, showPrices, onRenameCus
                 )}
 
                 {isExpanded && (
-                  <div style={{ borderTop: "1px solid #F0EDE2", padding: "8px 16px 12px", background: "#FBFAF6" }}>
+                  <div style={{ borderTop: "1px solid var(--divider)", padding: "8px 16px 12px", background: "var(--panel-alt)" }}>
                     {orders.map((order, oi) => {
                       const total = order.lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
                       return (
@@ -169,14 +169,14 @@ export default function Customers({ products, movements, showPrices, onRenameCus
                           key={order.orderId}
                           style={{
                             display: "flex", justifyContent: "space-between", alignItems: "center",
-                            gap: 8, padding: "8px 0", borderTop: oi === 0 ? "none" : "1px solid #F0EDE2",
+                            gap: 8, padding: "8px 0", borderTop: oi === 0 ? "none" : "1px solid var(--divider)",
                           }}
                         >
                           <div>
                             <div style={{ fontSize: 12.5 }}>
                               {order.isDelivery ? "🛺 " : ""}{formatDate(order.date)}
                             </div>
-                            <div style={{ fontSize: 11.5, color: "#8A8574" }}>
+                            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
                               {order.lines.map((line) => {
                                 const lp = products.find((p) => p.code === line.code);
                                 return `${line.qty}x ${lp ? lp.short : line.code}`;

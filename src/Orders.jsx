@@ -323,7 +323,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         key={order.orderId}
         style={{
           padding: "12px 16px", fontSize: 13.5,
-          borderTop: i === 0 ? "none" : "1px solid #F0EDE2",
+          borderTop: i === 0 ? "none" : "1px solid var(--divider)",
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -340,18 +340,18 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             <div style={{ fontWeight: 600 }}>
               {order.isDelivery ? "🛺 " : ""}{order.customerName}
             </div>
-            <div style={{ color: "#9A9484", fontSize: 12.5 }}>
+            <div style={{ color: "var(--text-faint)", fontSize: 12.5 }}>
               {order.lines.map((line) => {
                 const product = products.find((p) => p.code === line.code);
                 return `${line.qty}x ${product ? product.short : line.code}`;
               }).join(", ")}
               {showPrices && ` · ${formatCUP(orderTotal(order))}`}
             </div>
-            <div style={{ color: "#B5AF9C", fontSize: 11.5, marginTop: 2 }}>
+            <div style={{ color: "var(--text-faint-2)", fontSize: 11.5, marginTop: 2 }}>
               {formatDateTime(order.timestamp)}
             </div>
             {order.note && (
-              <div style={{ color: "#8A5A1E", fontSize: 12.5, marginTop: 4, fontStyle: "italic" }}>
+              <div style={{ color: "var(--warning-text)", fontSize: 12.5, marginTop: 4, fontStyle: "italic" }}>
                 📝 {order.note}
               </div>
             )}
@@ -361,7 +361,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         {!inSelectMode && (
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
                 <input
                   type="checkbox"
                   checked={order.sent}
@@ -369,7 +369,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 />
                 Enviado
               </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#8A8574", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
                 <input
                   type="checkbox"
                   checked={order.confirmed}
@@ -385,7 +385,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 aria-label="Aplazar pedido"
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
+                  background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
                   borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                 }}
               >
@@ -397,7 +397,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 aria-label="Editar pedido"
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "transparent", border: "1px solid #E7E2D3", color: "#8A8574",
+                  background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
                   borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                 }}
               >
@@ -412,7 +412,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 aria-label="Enviar por WhatsApp"
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "#25D366", color: "#FFFFFF", border: "none",
+                  background: "var(--whatsapp)", color: "var(--on-accent)", border: "none",
                   borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                 }}
               >
@@ -426,9 +426,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   gap: 4, width: confirmingDeleteId === order.orderId ? "auto" : 40, height: 40,
                   padding: confirmingDeleteId === order.orderId ? "0 10px" : 0,
-                  background: confirmingDeleteId === order.orderId ? "#B4291E" : "transparent",
-                  border: confirmingDeleteId === order.orderId ? "1px solid #B4291E" : "1px solid #E7E2D3",
-                  color: confirmingDeleteId === order.orderId ? "#FFFFFF" : "#8A8574",
+                  background: confirmingDeleteId === order.orderId ? "var(--danger)" : "transparent",
+                  border: confirmingDeleteId === order.orderId ? "1px solid var(--danger)" : "1px solid var(--border)",
+                  color: confirmingDeleteId === order.orderId ? "var(--on-accent)" : "var(--text-muted)",
                   borderRadius: 7, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600,
                 }}
               >
@@ -459,14 +459,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>
+        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>
           {editingOrderId ? "EDITAR PEDIDO" : "NUEVO PEDIDO"}
         </div>
         {editingOrderId && (
           <button
             onClick={resetForm}
             style={{
-              background: "transparent", border: "none", color: "#8A8574", fontSize: 12.5,
+              background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 12.5,
               cursor: "pointer", textDecoration: "underline",
             }}
           >
@@ -474,7 +474,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           </button>
         )}
       </div>
-      <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
         <div style={{ position: "relative", marginBottom: 10 }}>
           <input
             type="text"
@@ -484,7 +484,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             style={{
-              width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
+              width: "100%", border: "1px solid var(--border)", borderRadius: 7,
               padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
             }}
           />
@@ -492,7 +492,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             <div
               style={{
                 position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
-                background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 7,
+                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 7,
                 marginTop: 4, overflow: "hidden",
               }}
             >
@@ -512,7 +512,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           )}
         </div>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "#8A8574", marginBottom: 14, cursor: "pointer" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "var(--text-muted)", marginBottom: 14, cursor: "pointer" }}>
           <input
             type="checkbox"
             checked={isDelivery}
@@ -527,7 +527,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           onChange={(e) => setNote(e.target.value)}
           rows={2}
           style={{
-            width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
+            width: "100%", border: "1px solid var(--border)", borderRadius: 7,
             padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
             marginBottom: 14, resize: "vertical", fontFamily: "inherit",
           }}
@@ -547,7 +547,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                       value={line.qty}
                       onChange={(e) => updateDraftLineQty(line.code, e.target.value)}
                       style={{
-                        width: 60, textAlign: "right", border: "1px solid #E7E2D3", borderRadius: 7,
+                        width: 60, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
                         padding: "6px 8px", fontSize: 14, fontVariantNumeric: "tabular-nums",
                       }}
                     />
@@ -556,7 +556,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                       title="Quitar producto"
                       aria-label="Quitar producto"
                       style={{
-                        background: "transparent", border: "none", color: "#8A8574",
+                        background: "transparent", border: "none", color: "var(--text-muted)",
                         cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px",
                       }}
                     >
@@ -580,8 +580,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               value={effectiveSelectedProductCode}
               onChange={(e) => setSelectedProductCode(e.target.value)}
               style={{
-                flex: "1 1 auto", border: "1px solid #E7E2D3", borderRadius: 7,
-                padding: "9px 10px", fontSize: 14, background: "#FFFFFF",
+                flex: "1 1 auto", border: "1px solid var(--border)", borderRadius: 7,
+                padding: "9px 10px", fontSize: 14, background: "var(--surface)",
               }}
             >
               {availableProducts.map((p) => (
@@ -596,14 +596,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               onChange={(e) => setPendingQty(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") addDraftLine(); }}
               style={{
-                width: 70, textAlign: "right", border: "1px solid #E7E2D3", borderRadius: 7,
+                width: 70, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
                 padding: "9px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
               }}
             />
             <button
               onClick={addDraftLine}
               style={{
-                flex: "0 0 auto", background: "#22261F", color: "#F7F4EC", border: "none",
+                flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
                 borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
               }}
             >
@@ -611,7 +611,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             </button>
           </div>
         ) : (
-          <div style={{ fontSize: 12.5, color: "#9A9484" }}>Todos los productos ya están en el pedido.</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-faint)" }}>Todos los productos ya están en el pedido.</div>
         )}
 
         {bigOrderWarning && (
@@ -631,7 +631,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         <button
           onClick={confirmOrder}
           style={{
-            marginTop: 16, width: "100%", background: "#22261F", color: "#F7F4EC", border: "none",
+            marginTop: 16, width: "100%", background: "var(--ink)", color: "var(--cream)", border: "none",
             borderRadius: 7, padding: "11px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}
         >
@@ -645,13 +645,13 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         value={orderSearch}
         onChange={(e) => setOrderSearch(e.target.value)}
         style={{
-          width: "100%", border: "1px solid #E7E2D3", borderRadius: 7,
+          width: "100%", border: "1px solid var(--border)", borderRadius: 7,
           padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
         }}
       />
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 14 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#8A8574", cursor: "pointer" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
           <input
             type="checkbox"
             checked={filterUnsent}
@@ -659,7 +659,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           />
           Solo no enviados
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#8A8574", cursor: "pointer" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
           <input
             type="checkbox"
             checked={filterUnconfirmed}
@@ -689,14 +689,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         const hoySection = (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600 }}>PEDIDOS DE HOY</div>
+              <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>PEDIDOS DE HOY</div>
               <button
                 onClick={() => (selectMode ? confirmBulkSend() : setSelectMode(true))}
                 disabled={todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)}
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
-                  background: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "#E7E2D3" : "#25D366",
-                  color: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "#9A9484" : "#FFFFFF",
+                  background: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "var(--border)" : "var(--whatsapp)",
+                  color: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "var(--text-faint)" : "var(--on-accent)",
                   border: "none", borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600,
                   cursor: (todaysOrders.length === 0 || (selectMode && selectedIds.size === 0)) ? "default" : "pointer",
                 }}
@@ -709,7 +709,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               <button
                 onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
                 style={{
-                  background: "transparent", border: "none", color: "#8A8574", fontSize: 12.5,
+                  background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 12.5,
                   cursor: "pointer", padding: "0 0 10px", textDecoration: "underline",
                 }}
               >
@@ -723,8 +723,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                   value={todayOrderSort}
                   onChange={(e) => setTodayOrderSort(e.target.value)}
                   style={{
-                    border: "1px solid #E7E2D3", borderRadius: 7,
-                    padding: "7px 10px", fontSize: 12.5, background: "#FFFFFF", color: "#8A8574",
+                    border: "1px solid var(--border)", borderRadius: 7,
+                    padding: "7px 10px", fontSize: 12.5, background: "var(--surface)", color: "var(--text-muted)",
                   }}
                 >
                   <option value="recent">Más recientes primero</option>
@@ -734,13 +734,13 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             )}
 
             {todaysOrders.length === 0 ? (
-              <div style={{ fontSize: 13.5, color: "#9A9484", padding: "10px 2px" }}>
+              <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
                 {searchTerm || filterUnsent || filterUnconfirmed
                   ? "Ningún pedido de hoy coincide con la búsqueda/filtros."
                   : "Aún no hay pedidos hoy."}
               </div>
             ) : (
-              <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                 {sortedTodaysOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: selectMode }))}
               </div>
             )}
@@ -749,10 +749,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
         const mananaSection = tomorrowsOrders.length > 0 && (
           <div>
-            <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "#8A8574", fontWeight: 600, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
               PEDIDOS DE MAÑANA
             </div>
-            <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
               {sortedTomorrowsOrders.map((order, i) => renderOrderRow(order, i, { inSelectMode: false }))}
             </div>
           </div>
@@ -777,7 +777,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             onClick={() => setShowPast((s) => !s)}
             style={{
               display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
-              color: "#8A8574", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
+              color: "var(--text-muted)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
               padding: 0, marginBottom: showPast ? 10 : 0,
             }}
           >
@@ -787,10 +787,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
           {showPast && pastDatesDesc.map((date) => (
             <div key={date} style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 12, color: "#9A9484", marginBottom: 6 }}>
+              <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
                 {formatDate(date)}
               </div>
-              <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D3", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                 {pastOrdersByDate.get(date).map((order, i) => renderOrderRow(order, i, { inSelectMode: false }))}
               </div>
             </div>
