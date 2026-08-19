@@ -406,8 +406,7 @@ export function useInventoryStore() {
   function deleteOrder(orderId) {
     const orderMovements = movements.filter((m) => m.orderId === orderId);
     if (orderMovements.length === 0) return;
-    const wasBucket = orderMovements[0].bucket || "hoy";
-    const wasCommitted = wasBucket === "hoy" || (wasBucket === "manana" && !!orderMovements[0].sent);
+    const wasCommitted = isCommittedMovement(orderMovements[0]);
 
     const nextStock = { ...stock };
     let removedRevenue = 0;
@@ -442,8 +441,7 @@ export function useInventoryStore() {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
     const wasSent = !!originalMovements[0].sent;
-    const wasBucket = originalMovements[0].bucket || "hoy";
-    const wasCommitted = wasBucket === "hoy" || (wasBucket === "manana" && wasSent);
+    const wasCommitted = isCommittedMovement(originalMovements[0]);
 
     const restoredStock = { ...stock };
     let removedRevenue = 0;
