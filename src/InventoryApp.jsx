@@ -30,6 +30,7 @@ export default function InventoryApp() {
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
+    registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
     renameCustomer, markOrderConfirmed,
   } = useInventoryStore();
@@ -190,6 +191,7 @@ export default function InventoryApp() {
             onMoveProduct={moveProduct}
             showArchived={showArchived}
             setShowArchived={setShowArchived}
+            onRegisterManualSale={registerManualSale}
           />
         )}
 

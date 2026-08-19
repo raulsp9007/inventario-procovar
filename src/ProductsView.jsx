@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ReceiptText, X } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP } from "./money";
 import FieldLabel from "./FieldLabel.jsx";
@@ -40,8 +40,23 @@ export default function ProductsView({
   onMoveProduct,
   showArchived,
   setShowArchived,
+  onRegisterManualSale,
 }) {
   const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
+  const [manualSaleCode, setManualSaleCode] = useState(null);
+  const [manualSaleQty, setManualSaleQty] = useState("");
+
+  function closeManualSale() {
+    setManualSaleCode(null);
+    setManualSaleQty("");
+  }
+
+  function submitManualSale(code, sign) {
+    const qty = parseInt(manualSaleQty, 10);
+    if (!manualSaleQty || isNaN(qty) || qty <= 0) return;
+    onRegisterManualSale(code, sign * qty);
+    closeManualSale();
+  }
 
   return (
     <>
@@ -145,6 +160,68 @@ export default function ProductsView({
                   </div>
                 )}
               </div>
+
+              {!editMode && (
+                manualSaleCode === p.code ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 12 }}>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      autoFocus
+                      placeholder="Uds"
+                      value={manualSaleQty}
+                      onChange={(e) => setManualSaleQty(e.target.value)}
+                      style={{
+                        width: 70, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
+                        padding: "7px 8px", fontSize: 14, fontVariantNumeric: "tabular-nums",
+                      }}
+                    />
+                    <button
+                      onClick={() => submitManualSale(p.code, 1)}
+                      title="Registrar venta (resta stock, suma a vendido hoy e ingreso)"
+                      style={{
+                        background: "var(--ink)", color: "var(--cream)", border: "none",
+                        borderRadius: 7, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      Vender
+                    </button>
+                    <button
+                      onClick={() => submitManualSale(p.code, -1)}
+                      title="Corregir (una venta contada de más: devuelve stock, resta ingreso)"
+                      style={{
+                        background: "transparent", color: "var(--warning-text)", border: "1px solid var(--border)",
+                        borderRadius: 7, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      Corregir
+                    </button>
+                    <button
+                      onClick={closeManualSale}
+                      title="Cancelar"
+                      aria-label="Cancelar"
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "transparent", color: "var(--text-muted)", border: "none",
+                        borderRadius: 7, width: 30, height: 30, cursor: "pointer", flexShrink: 0,
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setManualSaleCode(p.code); setManualSaleQty(""); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 5,
+                      background: "transparent", border: "none", color: "var(--text-muted)",
+                      fontSize: 12, padding: 0, marginTop: 10, cursor: "pointer",
+                    }}
+                  >
+                    <ReceiptText size={13} /> Venta manual
+                  </button>
+                )
+              )}
 
               {editMode && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px", marginTop: 12 }}>
@@ -327,6 +404,13 @@ export default function ProductsView({
           <Card>
             {movements.slice(0, 25).map((m, i) => {
               const product = products.find((p) => p.code === m.code);
+              // Delta real de stock: una venta siempre resta (m.qty>0 normal,
+              // pero una corrección manual guarda qty<0 para devolver stock,
+              // por eso no se puede asumir el signo solo por el tipo).
+              const delta = m.type === "venta" ? -m.qty : m.qty;
+              const label = m.type === "venta"
+                ? (m.manual ? (m.qty >= 0 ? "venta manual" : "corrección manual") : "venta")
+                : "ajuste manual";
               return (
                 <div
                   key={m.id}
@@ -339,12 +423,12 @@ export default function ProductsView({
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ width: 5, height: 5, borderRadius: "50%", background: product?.color || "var(--text-faint)" }} />
                     <span style={{ fontWeight: 600 }}>{product?.short || m.code}</span>
-                    <span style={{ color: "var(--text-faint)" }}>{m.type === "venta" ? "venta" : "ajuste manual"}</span>
+                    <span style={{ color: "var(--text-faint)" }}>{label}</span>
                   </div>
                   <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                     <span style={{ color: "var(--text-faint)", fontSize: 12 }}>{formatDate(m.date)}</span>
-                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: m.type === "venta" ? "var(--accent-orange-text)" : (m.qty >= 0 ? "var(--accent-green-text)" : "var(--accent-orange-text)") }}>
-                      {m.type === "venta" ? `-${m.qty}` : (m.qty >= 0 ? `+${m.qty}` : m.qty)}
+                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: delta >= 0 ? "var(--accent-green-text)" : "var(--accent-orange-text)" }}>
+                      {delta >= 0 ? `+${delta}` : delta}
                     </span>
                   </div>
                 </div>

@@ -368,6 +368,36 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, products: nextProducts });
   }
 
+  // Venta suelta sin pedido/cliente formal (ej. venta de mostrador que no
+  // se armó como pedido, o corregir un conteo de ventas del día) -- resta
+  // stock y suma ingreso/HL de inmediato, igual que un pedido de Hoy ya
+  // enviado. qty negativo = corrección (una venta contada de más): devuelve
+  // stock y resta ingreso/HL. Sin orderId -- no aparece en Pedidos ni en
+  // el historial de compras de ningún cliente.
+  function registerManualSale(code, qty) {
+    const unitPrice = prices[code] || 0;
+    const product = products.find((p) => p.code === code);
+    const unitHl = product?.hl || 0;
+    const movement = makeMovement(code, "venta", qty, {
+      unitPrice, unitHl, exchangeRate, bucket: "hoy", date: todayStr(), sent: true, manual: true,
+    });
+    const nextStock = { ...stock, [code]: (stock[code] || 0) - qty };
+    const nextMovements = [movement, ...movements].slice(0, 500);
+    const nextCumulativeRevenue = cumulativeRevenue + qty * unitPrice;
+    const nextCumulativeHl = cumulativeHl + qty * unitHl;
+    setStock(nextStock);
+    setMovements(nextMovements);
+    setCumulativeRevenue(nextCumulativeRevenue);
+    setCumulativeHl(nextCumulativeHl);
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+      cumulativeHl: nextCumulativeHl,
+    });
+  }
+
   function confirmOrder({ customerName, isDelivery, note, lines, bucket }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const committed = bucket === "hoy";
@@ -577,6 +607,7 @@ export function useInventoryStore() {
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
+    registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
     renameCustomer, markOrderConfirmed,
   };
