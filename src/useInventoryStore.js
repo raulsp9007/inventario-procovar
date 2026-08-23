@@ -53,6 +53,7 @@ export function useInventoryStore() {
   const [editNameInputs, setEditNameInputs] = useState({});
   const [editHlInputs, setEditHlInputs] = useState({});
   const [editLowStockInputs, setEditLowStockInputs] = useState({});
+  const [editColorInputs, setEditColorInputs] = useState({});
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -251,18 +252,21 @@ export function useInventoryStore() {
     const nameInputs = {};
     const hlInputs = {};
     const lowStockInputs = {};
+    const colorInputs = {};
     activeProducts.forEach((p) => {
       inputs[p.code] = String(stock[p.code] || 0);
       priceInputs[p.code] = String(prices[p.code] || 0);
       nameInputs[p.code] = p.name;
       hlInputs[p.code] = p.hl != null ? String(p.hl) : "";
       lowStockInputs[p.code] = p.lowStockThreshold != null ? String(p.lowStockThreshold) : "";
+      colorInputs[p.code] = p.color || "#8A8574";
     });
     setEditInputs(inputs);
     setEditPriceInputs(priceInputs);
     setEditNameInputs(nameInputs);
     setEditHlInputs(hlInputs);
     setEditLowStockInputs(lowStockInputs);
+    setEditColorInputs(colorInputs);
     setEditMode(true);
   }
 
@@ -290,6 +294,7 @@ export function useInventoryStore() {
       setEditNameInputs((s) => ({ ...s, [code]: trimmed }));
       setEditHlInputs((s) => ({ ...s, [code]: newProductHl }));
       setEditLowStockInputs((s) => ({ ...s, [code]: "" }));
+      setEditColorInputs((s) => ({ ...s, [code]: color }));
     }
     persist({ ...currentPersistedState, products: nextProducts });
   }
@@ -325,6 +330,7 @@ export function useInventoryStore() {
       else delete nextP.hl;
       if (Number.isFinite(lowStockVal) && lowStockVal >= 0) nextP.lowStockThreshold = lowStockVal;
       else delete nextP.lowStockThreshold;
+      if (editColorInputs[p.code]) nextP.color = editColorInputs[p.code];
       return nextP;
     });
     const nextMovements = [...adjustments, ...movements].slice(0, 500);
@@ -404,6 +410,10 @@ export function useInventoryStore() {
 
   function confirmOrder({ customerName, isDelivery, note, lines, bucket, date: chosenDate }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    // Numero consecutivo solo para ubicar el pedido en la app (no se manda
+    // por WhatsApp) -- se deriva del maximo ya usado en vez de guardar un
+    // contador aparte, asi no hace falta migrar datos viejos.
+    const orderSeq = movements.reduce((max, m) => (m.orderSeq && m.orderSeq > max ? m.orderSeq : max), 0) + 1;
     const committed = bucket === "hoy";
     const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
     const nextStock = { ...stock };
@@ -414,7 +424,7 @@ export function useInventoryStore() {
       const unitPrice = prices[code] || 0;
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, note, bucket, date }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, isDelivery, note, bucket, date }));
       if (committed) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;
@@ -491,6 +501,7 @@ export function useInventoryStore() {
     const nextSent = wasSent;
     const willBeCommitted = bucket === "hoy" || (bucket === "manana" && nextSent);
     const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
+    const orderSeq = originalMovements[0].orderSeq;
 
     const nextStock = { ...restoredStock };
     const newMovements = [];
@@ -500,7 +511,7 @@ export function useInventoryStore() {
       const unitPrice = prices[code] || 0;
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, customerName, isDelivery, note, bucket, date, sent: nextSent }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, isDelivery, note, bucket, date, sent: nextSent }));
       if (willBeCommitted) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;
@@ -602,6 +613,7 @@ export function useInventoryStore() {
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,
     editLowStockInputs, setEditLowStockInputs,
+    editColorInputs, setEditColorInputs,
     newProductName, setNewProductName, newProductHl, setNewProductHl,
     showArchived, setShowArchived, showLowStockList, setShowLowStockList,
     pendingImport, setPendingImport, fileInputRef,

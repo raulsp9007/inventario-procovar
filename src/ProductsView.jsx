@@ -30,6 +30,8 @@ export default function ProductsView({
   setEditHlInputs,
   editLowStockInputs,
   setEditLowStockInputs,
+  editColorInputs,
+  setEditColorInputs,
   newProductName,
   setNewProductName,
   newProductHl,
@@ -95,9 +97,22 @@ export default function ProductsView({
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flex: "1 1 200px", minWidth: 0 }}>
-                  <div style={{
-                    width: 6, height: 40, borderRadius: 3, background: p.color, flexShrink: 0,
-                  }} />
+                  {editMode ? (
+                    <input
+                      type="color"
+                      value={editColorInputs[p.code] ?? p.color}
+                      onChange={(e) => setEditColorInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                      title="Color del producto"
+                      style={{
+                        width: 40, height: 40, borderRadius: 8, border: "1px solid var(--border-strong)",
+                        padding: 2, cursor: "pointer", flexShrink: 0, background: "var(--surface)",
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: 6, height: 40, borderRadius: 3, background: p.color, flexShrink: 0,
+                    }} />
+                  )}
                   <div style={{ minWidth: 0 }}>
                     {editMode ? (
                       <input

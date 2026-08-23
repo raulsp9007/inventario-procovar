@@ -23,7 +23,7 @@ export default function Today({
   const ordersToday = new Set(todaysSentSales.filter((m) => m.orderId).map((m) => m.orderId)).size;
 
   const activeProducts = products.filter((p) => !p.archived);
-  const rows = activeProducts
+  const allRows = activeProducts
     .map((p) => ({
       product: p,
       soldToday: todaysSentSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
@@ -32,6 +32,10 @@ export default function Today({
     }))
     .map((row) => ({ ...row, disponibleLibre: row.stockLeft - row.pendingToday }))
     .sort((a, b) => b.soldToday - a.soldToday);
+  // Producto en 0 se oculta de este resumen -- salvo que todavía tenga algo
+  // sin consolidar (en Hoy: venta sin enviar; en Mañana/pendingMode: lo
+  // reservado en esta vista), para no esconder algo que sigue en curso.
+  const rows = allRows.filter((row) => row.stockLeft > 0 || (pendingMode ? row.soldToday > 0 : row.pendingToday > 0));
 
   return (
     <div>
@@ -77,7 +81,7 @@ export default function Today({
       </div>
       {rows.length === 0 ? (
         <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
-          Sin productos activos.
+          {activeProducts.length === 0 ? "Sin productos activos." : "Todo el stock activo está en cero."}
         </div>
       ) : (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>

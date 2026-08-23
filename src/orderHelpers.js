@@ -12,6 +12,7 @@ export function groupAllOrders(movements) {
         sentAt: m.sentAt || null,
         confirmed: !!m.confirmed,
         bucket: m.bucket || "hoy",
+        orderSeq: m.orderSeq || null,
         date: m.date,
         timestamp: m.timestamp,
         lines: [],

@@ -55,6 +55,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [orderSearch, setOrderSearch] = useState("");
   const [filterUnsent, setFilterUnsent] = useState(() => !!loadSavedFilters().filterUnsent);
   const [filterUnconfirmed, setFilterUnconfirmed] = useState(() => !!loadSavedFilters().filterUnconfirmed);
+  const [filterProductCode, setFilterProductCode] = useState(() => loadSavedFilters().filterProductCode || "");
   // Bloquea envíos repetidos (doble clic/doble toque) mientras el formulario
   // todavía no reflejó el reset -- el estado de React (customerName, etc.)
   // se actualiza en batch, así que un segundo click puede leer el mismo
@@ -65,9 +66,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   useEffect(() => {
     try {
-      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: hoyOrderSort, sortManana: mananaOrderSort, filterUnsent, filterUnconfirmed }));
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: hoyOrderSort, sortManana: mananaOrderSort, filterUnsent, filterUnconfirmed, filterProductCode }));
     } catch {}
-  }, [hoyOrderSort, mananaOrderSort, filterUnsent, filterUnconfirmed]);
+  }, [hoyOrderSort, mananaOrderSort, filterUnsent, filterUnconfirmed, filterProductCode]);
 
   useEffect(() => {
     submittingRef.current = false;
@@ -93,7 +94,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       (!filterUnsent && !filterUnconfirmed) ||
       (filterUnsent && !order.sent) ||
       (filterUnconfirmed && !order.confirmed);
-    const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order);
+    const matchesProduct = (order) => !filterProductCode || order.lines.some((l) => l.code === filterProductCode);
+    const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order) && matchesProduct(order);
 
     const allOrders = groupAllOrders(movements).filter((o) => !pendingDeletes.has(o.orderId));
     const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
@@ -116,7 +118,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
     return { allOrders, todaysOrders, sortedTodaysOrders, upcomingOrders, sortedUpcomingOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, hoyOrderSort, mananaOrderSort, pendingDeletes]);
+  }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes]);
 
   const activeProductsForPanel = products.filter((p) => !p.archived);
 
@@ -137,7 +139,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setPendingQty("");
     setEditingOrderId(null);
     setBigOrderWarning(null);
-    setDraftBucket("hoy");
+    // No se resetea draftBucket: si confirmaste un pedido Programado,
+    // te quedás en "Programar" para seguir cargando pedidos del mismo tipo.
     setDraftDate(tomorrowStr());
   }
 
@@ -339,6 +342,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           )}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {order.orderSeq && (
+                <span style={{ color: "var(--text-faint)", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>#{order.orderSeq}</span>
+              )}
               {order.isDelivery ? "🛺 " : ""}{order.customerName}
               {showDate && (
                 <span style={{
@@ -494,7 +500,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
         {sorted.length === 0 ? (
           <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
-            {searchTerm || filterUnsent || filterUnconfirmed ? `Ningún pedido coincide con la búsqueda/filtros.` : emptyText}
+            {searchTerm || filterUnsent || filterUnconfirmed || filterProductCode ? `Ningún pedido coincide con la búsqueda/filtros.` : emptyText}
           </div>
         ) : (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
@@ -737,6 +743,20 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         }}
       />
 
+      <select
+        value={filterProductCode}
+        onChange={(e) => setFilterProductCode(e.target.value)}
+        style={{
+          width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
+          padding: "9px 12px", fontSize: 14, marginBottom: 10, background: "var(--surface)", color: "var(--text)",
+        }}
+      >
+        <option value="">Todos los productos</option>
+        {products.map((p) => (
+          <option key={p.code} value={p.code}>{p.name}</option>
+        ))}
+      </select>
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 14 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
           <input
@@ -798,7 +818,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 }}
               >
                 <span>{p.name}</span>
-                <b style={{ fontVariantNumeric: "tabular-nums" }}>{libre} uds libres</b>
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {reserved > 0 && <span style={{ color: "var(--accent-orange-soft-text)", marginRight: 8 }}>Reservado: {reserved}</span>}
+                  <b>{libre} libres</b>
+                </span>
               </div>
             );
           })}
