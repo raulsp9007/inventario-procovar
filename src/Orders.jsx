@@ -120,9 +120,19 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes]);
 
-  const activeProductsForPanel = products.filter((p) => !p.archived);
+  // Solo entra al panel si queda algo libre para prometer, o si ya tiene
+  // reservas encima (aunque esté en 0 libre) -- un producto sin nada de
+  // ninguna de las dos cosas solo ensucia la lista.
+  const reservablePanelRows = products
+    .filter((p) => !p.archived)
+    .map((p) => {
+      const reserved = reservedForTomorrow(allOrders, p.code);
+      const libre = (stock[p.code] || 0) - reserved;
+      return { product: p, reserved, libre };
+    })
+    .filter((row) => row.libre !== 0 || row.reserved !== 0);
 
-  const availableProducts = products.filter((p) => !p.archived && !draftLines.some((l) => l.code === p.code));
+  const availableProducts = products.filter((p) => !p.archived && (stock[p.code] || 0) > 0 && !draftLines.some((l) => l.code === p.code));
   const effectiveSelectedProductCode = availableProducts.some((p) => p.code === selectedProductCode)
     ? selectedProductCode
     : (availableProducts[0]?.code || "");
@@ -704,7 +714,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             </div>
           </div>
         ) : (
-          <div style={{ fontSize: 12.5, color: "var(--text-faint)" }}>Todos los productos ya están en el pedido.</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-faint)" }}>No hay productos con stock disponibles para agregar.</div>
         )}
 
         {bigOrderWarning && (
@@ -801,30 +811,26 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         onSortChange: setHoyOrderSort,
       })}
 
-      {draftBucket === "manana" && activeProductsForPanel.length > 0 && (
+      {draftBucket === "manana" && reservablePanelRows.length > 0 && (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
           <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
             DISPONIBLE PARA RESERVAR
           </div>
-          {activeProductsForPanel.map((p, i) => {
-            const reserved = reservedForTomorrow(allOrders, p.code);
-            const libre = (stock[p.code] || 0) - reserved;
-            return (
-              <div
-                key={p.code}
-                style={{
-                  display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0",
-                  borderTop: i === 0 ? "none" : "1px solid var(--divider)",
-                }}
-              >
-                <span>{p.name}</span>
-                <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                  {reserved > 0 && <span style={{ color: "var(--accent-orange-soft-text)", marginRight: 8 }}>Reservado: {reserved}</span>}
-                  <b>{libre} libres</b>
-                </span>
-              </div>
-            );
-          })}
+          {reservablePanelRows.map(({ product: p, reserved, libre }, i) => (
+            <div
+              key={p.code}
+              style={{
+                display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0",
+                borderTop: i === 0 ? "none" : "1px solid var(--divider)",
+              }}
+            >
+              <span>{p.name}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {reserved > 0 && <span style={{ color: "var(--accent-orange-soft-text)", marginRight: 8 }}>Reservado: {reserved}</span>}
+                <b>{libre} libres</b>
+              </span>
+            </div>
+          ))}
         </div>
       )}
 
