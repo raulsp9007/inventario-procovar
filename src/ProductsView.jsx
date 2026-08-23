@@ -140,6 +140,11 @@ export default function ProductsView({
                         {prices[p.code] ? formatCUP(prices[p.code]) : "Precio no definido"}
                       </div>
                     )}
+                    {!editMode && reservedForTomorrow(allOrders, p.code) > 0 && (
+                      <div style={{ fontSize: 11.5, color: "var(--accent-orange-soft-text)", marginTop: 2 }}>
+                        Reservado: {reservedForTomorrow(allOrders, p.code)} · Libre: {qty - reservedForTomorrow(allOrders, p.code)}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -148,11 +153,6 @@ export default function ProductsView({
                     <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "var(--accent-orange-text)" : "var(--text)" }}>
                       {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)" }}>uds</span>
                     </div>
-                    {reservedForTomorrow(allOrders, p.code) > 0 && (
-                      <div style={{ fontSize: 11.5, color: "var(--accent-orange-soft-text)", marginTop: 2 }}>
-                        Reservado: {reservedForTomorrow(allOrders, p.code)} · Libre: {qty - reservedForTomorrow(allOrders, p.code)}
-                      </div>
-                    )}
                   </div>
                 )}
 
