@@ -621,7 +621,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             color: activeSection === "manana" ? "var(--cream)" : "var(--text)",
           }}
         >
-          Programar
+          Para mañana
         </button>
       </div>
 
@@ -789,8 +789,17 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </Banner>
       )}
 
+      {activeSection === "hoy" && renderOrdersSection({
+        section: "hoy",
+        title: `PEDIDOS DE HOY (${totalTodayCount})`,
+        sorted: sortedTodaysOrders,
+        emptyText: "Aún no hay pedidos hoy.",
+        sortValue: hoyOrderSort,
+        onSortChange: setHoyOrderSort,
+      })}
+
       {activeSection === "hoy" && (
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginTop: 20 }}>
           <Today
             products={products}
             movements={todaysMovements}
@@ -803,17 +812,18 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </div>
       )}
 
-      {activeSection === "hoy" && renderOrdersSection({
-        section: "hoy",
-        title: `PEDIDOS DE HOY (${totalTodayCount})`,
-        sorted: sortedTodaysOrders,
-        emptyText: "Aún no hay pedidos hoy.",
-        sortValue: hoyOrderSort,
-        onSortChange: setHoyOrderSort,
+      {activeSection === "manana" && renderOrdersSection({
+        section: "manana",
+        title: `PRÓXIMOS PEDIDOS (${totalUpcomingCount})`,
+        sorted: sortedUpcomingOrders,
+        emptyText: "Aún no hay pedidos programados.",
+        sortValue: mananaOrderSort,
+        onSortChange: setMananaOrderSort,
+        showDate: true,
       })}
 
       {activeSection === "manana" && (
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginTop: 20, marginBottom: 20 }}>
           <Today
             products={products}
             movements={mananaMovements}
@@ -851,16 +861,6 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           ))}
         </div>
       )}
-
-      {activeSection === "manana" && renderOrdersSection({
-        section: "manana",
-        title: `PRÓXIMOS PEDIDOS (${totalUpcomingCount})`,
-        sorted: sortedUpcomingOrders,
-        emptyText: "Aún no hay pedidos programados.",
-        sortValue: mananaOrderSort,
-        onSortChange: setMananaOrderSort,
-        showDate: true,
-      })}
 
       {pastOrdersCount > 0 && (
         <div style={{ marginTop: 20 }}>
@@ -954,7 +954,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                   color: draftBucket === "manana" ? "var(--cream)" : "var(--text)",
                 }}
               >
-                Programar
+                Para mañana
               </button>
             </div>
 
