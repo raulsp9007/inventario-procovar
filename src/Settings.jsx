@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Sun, Moon, Eye, EyeOff } from "lucide-react";
 
 function formatHour(h) {
   const period = h < 12 ? "AM" : "PM";
@@ -19,6 +20,8 @@ export default function Settings({
   whatsappContactName, onWhatsappContactNameChange,
   cierreVentasHour, onCierreVentasHourChange,
   senderName, sendSenderName, onSenderSettingsChange,
+  theme, onToggleTheme,
+  showPrices, onToggleShowPrices,
 }) {
   const [phoneInput, setPhoneInput] = useState(whatsappPhone || "");
   const [contactNameInput, setContactNameInput] = useState(whatsappContactName || "");
@@ -62,6 +65,40 @@ export default function Settings({
     <div>
       <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
         CONFIGURACIÓN
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Apariencia</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Cambia el tema de toda la app.
+        </div>
+        <button
+          onClick={onToggleTheme}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: "transparent", border: "1px solid var(--border)", color: "var(--text)",
+            borderRadius: 7, padding: "9px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+            marginBottom: 14,
+          }}
+        >
+          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          {theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+        </button>
+
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Oculta precios e ingresos en toda la app (útil para no mostrar plata al enseñar la pantalla).
+        </div>
+        <button
+          onClick={onToggleShowPrices}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: "transparent", border: "1px solid var(--border)", color: "var(--text)",
+            borderRadius: 7, padding: "9px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          {showPrices ? <Eye size={16} /> : <EyeOff size={16} />}
+          {showPrices ? "Ocultar precios" : "Mostrar precios"}
+        </button>
       </div>
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px" }}>

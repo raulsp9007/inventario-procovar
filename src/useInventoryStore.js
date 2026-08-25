@@ -16,7 +16,7 @@ const DEFAULT_PRODUCTS = [
 
 export const LOW_STOCK_THRESHOLD = 20;
 const STORAGE_KEY = "procovar-inventario-v1";
-const VALID_VIEWS = ["hoy", "manana", "resumen", "pedidos", "clientes", "stock", "config"];
+const VALID_VIEWS = ["resumen", "pedidos", "portafolio", "clientes", "stock", "config"];
 const VIEW_STORAGE_KEY = "procovar-active-tab";
 const THEME_STORAGE_KEY = "procovar-theme";
 
@@ -76,16 +76,6 @@ export function useInventoryStore() {
     try {
       localStorage.setItem(VIEW_STORAGE_KEY, next);
     } catch {}
-  }
-
-  // Navegación cruzada Hoy -> Pedidos: clickear un producto en el resumen de
-  // Hoy manda a Pedidos ya filtrado por ese producto. `requestId` cambia
-  // siempre (aunque se clickee el mismo producto dos veces seguidas) para
-  // que Orders.jsx detecte el pedido de filtro incluso si el código no cambió.
-  const [productFilterRequest, setProductFilterRequest] = useState(null);
-  function goToOrdersForProduct(code) {
-    setProductFilterRequest({ code, requestId: Date.now() });
-    setView("pedidos");
   }
 
   // Tema (claro/oscuro): preferencia de interfaz, no dato de negocio -- vive
@@ -647,7 +637,6 @@ export function useInventoryStore() {
     showArchived, setShowArchived, showLowStockList, setShowLowStockList,
     pendingImport, setPendingImport, fileInputRef,
     view, setView, theme, toggleTheme,
-    productFilterRequest, goToOrdersForProduct,
     currentPersistedState, persist,
     handleImportFileChange, confirmImport,
     todaysMovements, mananaMovements,

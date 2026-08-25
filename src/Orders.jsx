@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck } from "lucide-react";
+import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X, Plus } from "lucide-react";
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
 import Banner from "./Banner.jsx";
+import Today from "./Today.jsx";
 
 const PAST_ORDERS_DAYS = 14;
 const FILTERS_STORAGE_KEY = "procovar-pedidos-filtros";
@@ -32,7 +33,7 @@ function draftTotal(draftLines, prices) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (prices[l.code] || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError, productFilterRequest, cierreVentasHour }) {
+export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError, cierreVentasHour }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
@@ -55,7 +56,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [orderSearch, setOrderSearch] = useState("");
   const [filterUnsent, setFilterUnsent] = useState(() => !!loadSavedFilters().filterUnsent);
   const [filterUnconfirmed, setFilterUnconfirmed] = useState(() => !!loadSavedFilters().filterUnconfirmed);
+  const [filterDelivery, setFilterDelivery] = useState(() => !!loadSavedFilters().filterDelivery);
   const [filterProductCode, setFilterProductCode] = useState(() => loadSavedFilters().filterProductCode || "");
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Vista de la lista (Hoy/Programar), independiente del bucket del pedido
+  // que se está creando/editando en el modal -- podés estar mirando la
+  // lista de Hoy y aun así abrir el modal para cargar un pedido Programado.
+  const [activeSection, setActiveSection] = useState("hoy");
+  const [modalOpen, setModalOpen] = useState(false);
   // Bloquea envíos repetidos (doble clic/doble toque) mientras el formulario
   // todavía no reflejó el reset -- el estado de React (customerName, etc.)
   // se actualiza en batch, así que un segundo click puede leer el mismo
@@ -66,24 +74,20 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   useEffect(() => {
     try {
-      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: hoyOrderSort, sortManana: mananaOrderSort, filterUnsent, filterUnconfirmed, filterProductCode }));
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: hoyOrderSort, sortManana: mananaOrderSort, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode }));
     } catch {}
-  }, [hoyOrderSort, mananaOrderSort, filterUnsent, filterUnconfirmed, filterProductCode]);
+  }, [hoyOrderSort, mananaOrderSort, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode]);
 
   useEffect(() => {
     submittingRef.current = false;
   }, [customerName]);
 
-  // Llegada desde "Hoy" (clic en un producto): aplica el filtro de producto
-  // y se asegura de estar mirando la sección Hoy, no Próximos. `requestId`
-  // en vez de `code` en las deps para que un segundo clic al mismo producto
-  // también dispare esto (por si mientras tanto lo habían cambiado a mano).
-  useEffect(() => {
-    if (!productFilterRequest) return;
-    setFilterProductCode(productFilterRequest.code);
-    setDraftBucket("hoy");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productFilterRequest?.requestId]);
+  // Clic en un producto dentro del resumen embebido (Hoy/Programar): filtra
+  // la lista de pedidos de esta misma pestaña por ese producto, sin navegar
+  // a ningún lado (ya estamos en Pedidos).
+  function handleSummaryProductClick(code) {
+    setFilterProductCode(code);
+  }
 
   const today = todayStr();
   const belongsToToday = (o) => o.date === today;
@@ -101,6 +105,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     upcomingOrders, sortedUpcomingOrders,
     pastOrdersByDate, pastDatesDesc, pastOrdersCount,
     unconfirmedTodayOrders,
+    totalTodayCount, totalUpcomingCount,
+    filterCounts,
   } = useMemo(() => {
     const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
     const matchesStatusFilter = (order) =>
@@ -108,7 +114,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       (filterUnsent && !order.sent) ||
       (filterUnconfirmed && !order.confirmed);
     const matchesProduct = (order) => !filterProductCode || order.lines.some((l) => l.code === filterProductCode);
-    const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order) && matchesProduct(order);
+    const matchesDelivery = (order) => !filterDelivery || order.isDelivery;
+    const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order) && matchesProduct(order) && matchesDelivery(order);
 
     const allOrders = groupAllOrders(movements).filter((o) => !pendingDeletes.has(o.orderId));
     const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
@@ -129,13 +136,34 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const pastDatesDesc = Array.from(pastOrdersByDate.keys()).sort((a, b) => b.localeCompare(a));
     const pastOrdersCount = pastDatesDesc.reduce((sum, d) => sum + pastOrdersByDate.get(d).length, 0);
 
+    // Totales sin filtrar por estado/domicilio -- "cuántos pedidos hay hoy/
+    // programados", no cuántos coinciden con los checkboxes.
+    const totalTodayCount = allOrders.filter((o) => belongsToToday(o)).length;
+    const totalUpcomingCount = allOrders.filter((o) => isUpcoming(o)).length;
+
+    // Cuántos pedidos de la sección activa coincidirían con cada filtro de
+    // estado si lo marcaras -- independientes entre sí (no se combinan),
+    // para que el número al lado del checkbox tenga sentido por separado.
+    // Solo tiene en cuenta búsqueda + producto (no los otros checkboxes).
+    const sectionBase = (activeSection === "hoy" ? allOrders.filter(belongsToToday) : allOrders.filter(isUpcoming))
+      .filter((o) => matchesSearch(o) && matchesProduct(o));
+    const filterCounts = {
+      unsent: sectionBase.filter((o) => !o.sent).length,
+      unconfirmed: sectionBase.filter((o) => !o.confirmed).length,
+      delivery: sectionBase.filter((o) => o.isDelivery).length,
+    };
+
     // Independiente de la búsqueda/filtros -- es un aviso del sistema, no
     // una vista que el usuario esté filtrando a mano.
     const unconfirmedTodayOrders = allOrders.filter((o) => belongsToToday(o) && !o.confirmed);
 
-    return { allOrders, todaysOrders, sortedTodaysOrders, upcomingOrders, sortedUpcomingOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount, unconfirmedTodayOrders };
+    return {
+      allOrders, todaysOrders, sortedTodaysOrders, upcomingOrders, sortedUpcomingOrders,
+      pastOrdersByDate, pastDatesDesc, pastOrdersCount, unconfirmedTodayOrders,
+      totalTodayCount, totalUpcomingCount, filterCounts,
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes]);
+  }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, activeSection]);
 
   // Solo entra al panel si queda algo libre para prometer, o si ya tiene
   // reservas encima (aunque esté en 0 libre) -- un producto sin nada de
@@ -180,6 +208,21 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setEditingOrderId(order.orderId);
     setDraftBucket(order.bucket);
     setDraftDate(order.bucket === "manana" ? order.date : tomorrowStr());
+    setModalOpen(true);
+  }
+
+  // Abre el modal para un pedido nuevo, arrancando en el mismo bucket que
+  // la lista que estás mirando (si estás en Programar, el pedido nuevo
+  // arranca en Programar).
+  function openNewOrderModal() {
+    resetForm();
+    setDraftBucket(activeSection);
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    resetForm();
+    setModalOpen(false);
   }
 
   function addDraftLine() {
@@ -264,7 +307,11 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     } else {
       onConfirmOrder(draft);
     }
+    // La lista sigue al pedido recién guardado -- si lo mandaste a
+    // Programar, pasás a ver la lista de Programar, no la de Hoy.
+    setActiveSection(draft.bucket);
     resetForm();
+    setModalOpen(false);
   }
 
   function confirmBigOrderAnyway() {
@@ -542,7 +589,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
         {sorted.length === 0 ? (
           <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
-            {searchTerm || filterUnsent || filterUnconfirmed || filterProductCode ? `Ningún pedido coincide con la búsqueda/filtros.` : emptyText}
+            {searchTerm || filterUnsent || filterUnconfirmed || filterDelivery || filterProductCode ? `Ningún pedido coincide con la búsqueda/filtros.` : emptyText}
           </div>
         ) : (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
@@ -555,249 +602,114 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>
-          {editingOrderId ? "EDITAR PEDIDO" : "NUEVO PEDIDO"}
-        </div>
-        {editingOrderId && (
-          <button
-            onClick={resetForm}
-            style={{
-              background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 12.5,
-              cursor: "pointer", textDecoration: "underline",
-            }}
-          >
-            Cancelar edición
-          </button>
-        )}
-      </div>
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: draftBucket === "manana" ? 8 : 12 }}>
-          <button
-            onClick={() => setDraftBucket("hoy")}
-            style={{
-              flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
-              background: draftBucket === "hoy" ? "var(--ink)" : "transparent",
-              color: draftBucket === "hoy" ? "var(--cream)" : "var(--text)",
-            }}
-          >
-            Hoy
-          </button>
-          <button
-            onClick={() => setDraftBucket("manana")}
-            style={{
-              flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
-              background: draftBucket === "manana" ? "var(--ink)" : "transparent",
-              color: draftBucket === "manana" ? "var(--cream)" : "var(--text)",
-            }}
-          >
-            Programar
-          </button>
-        </div>
-
-        {draftBucket === "manana" && (
-          <input
-            type="date"
-            value={draftDate}
-            min={tomorrowStr()}
-            onChange={(e) => setDraftDate(e.target.value)}
-            style={{
-              width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
-              padding: "9px 10px", fontSize: 14, marginBottom: 12, background: "var(--surface)", color: "var(--text)",
-            }}
-          />
-        )}
-
-        <div style={{ position: "relative", marginBottom: 10 }}>
-          <input
-            type="text"
-            placeholder="Nombre y apellidos del cliente"
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            onFocus={() => setShowSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-            style={{
-              width: "100%", border: "1px solid var(--border)", borderRadius: 7,
-              padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
-            }}
-          />
-          {suggestions.length > 0 && (
-            <div
-              style={{
-                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
-                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 7,
-                marginTop: 4, overflow: "hidden",
-              }}
-            >
-              {suggestions.map((name) => (
-                <div
-                  key={name}
-                  onClick={() => {
-                    setCustomerName(name);
-                    setShowSuggestions(false);
-                  }}
-                  style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer" }}
-                >
-                  {name}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "var(--text-muted)", marginBottom: 14, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={isDelivery}
-            onChange={(e) => setIsDelivery(e.target.checked)}
-          />
-          Entrega a domicilio
-        </label>
-
-        <textarea
-          placeholder="Nota (opcional)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={2}
-          style={{
-            width: "100%", border: "1px solid var(--border)", borderRadius: 7,
-            padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
-            marginBottom: 14, resize: "vertical", fontFamily: "inherit",
-          }}
-        />
-
-        {draftLines.length > 0 && (
-          <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
-            {draftLines.map((line) => {
-              const product = products.find((p) => p.code === line.code);
-              return (
-                <div key={line.code} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontSize: 13.5 }}>{product ? product.name : line.code}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={line.qty}
-                      onChange={(e) => updateDraftLineQty(line.code, e.target.value)}
-                      style={{
-                        width: 60, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
-                        padding: "6px 8px", fontSize: 14, fontVariantNumeric: "tabular-nums",
-                      }}
-                    />
-                    <button
-                      onClick={() => removeDraftLine(line.code)}
-                      title="Quitar producto"
-                      aria-label="Quitar producto"
-                      style={{
-                        background: "transparent", border: "none", color: "var(--text-muted)",
-                        cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px",
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {showPrices && (
-              <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13.5, fontWeight: 600 }}>
-                Total: {formatCUP(draftTotal(draftLines, prices))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {availableProducts.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <select
-              value={effectiveSelectedProductCode}
-              onChange={(e) => setSelectedProductCode(e.target.value)}
-              style={{
-                width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
-                padding: "9px 10px", fontSize: 14, background: "var(--surface)",
-              }}
-            >
-              {availableProducts.map((p) => (
-                <option key={p.code} value={p.code}>{p.name}</option>
-              ))}
-            </select>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type="number"
-                inputMode="numeric"
-                placeholder="Cant."
-                value={pendingQty}
-                onChange={(e) => setPendingQty(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addDraftLine(); }}
-                style={{
-                  flex: "1 1 auto", minWidth: 0, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
-                  padding: "9px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
-                }}
-              />
-              <button
-                onClick={addDraftLine}
-                style={{
-                  flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
-                  borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                }}
-              >
-                Agregar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ fontSize: 12.5, color: "var(--text-faint)" }}>No hay productos con stock disponibles para agregar.</div>
-        )}
-
-        {bigOrderWarning && (
-          <Banner
-            variant="warning"
-            style={{ marginTop: 12, fontSize: 12.5 }}
-            actions={[
-              { label: "Confirmar de todas formas", kind: "dark", onClick: confirmBigOrderAnyway },
-              { label: "Cancelar", kind: "secondary", onClick: cancelBigOrderWarning },
-            ]}
-          >
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠️ Pedido grande:</div>
-            {bigOrderWarning.bigLines.map((l) => `${l.name}: ${l.qty} uds (aviso ≤ ${l.threshold})`).join(", ")}
-          </Banner>
-        )}
-
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button
-          onClick={confirmOrder}
+          onClick={() => setActiveSection("hoy")}
           style={{
-            marginTop: 16, width: "100%", background: "var(--ink)", color: "var(--cream)", border: "none",
-            borderRadius: 7, padding: "11px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer",
+            flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+            background: activeSection === "hoy" ? "var(--ink)" : "transparent",
+            color: activeSection === "hoy" ? "var(--cream)" : "var(--text)",
           }}
         >
-          {editingOrderId ? "Guardar cambios" : "Confirmar pedido"}
+          Hoy
+        </button>
+        <button
+          onClick={() => setActiveSection("manana")}
+          style={{
+            flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+            background: activeSection === "manana" ? "var(--ink)" : "transparent",
+            color: activeSection === "manana" ? "var(--cream)" : "var(--text)",
+          }}
+        >
+          Programar
         </button>
       </div>
 
-      <input
-        type="text"
-        placeholder="Buscar cliente en pedidos"
-        value={orderSearch}
-        onChange={(e) => setOrderSearch(e.target.value)}
-        style={{
-          width: "100%", border: "1px solid var(--border)", borderRadius: 7,
-          padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
-        }}
-      />
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <select
+          value={filterProductCode}
+          onChange={(e) => setFilterProductCode(e.target.value)}
+          style={{
+            flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
+            padding: "9px 12px", fontSize: 14, background: "var(--surface)", color: "var(--text)",
+          }}
+        >
+          <option value="">Todos los productos</option>
+          {products.map((p) => (
+            <option key={p.code} value={p.code}>{p.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => setSearchOpen(true)}
+          title="Buscar cliente"
+          aria-label="Buscar cliente"
+          style={{
+            flex: "0 0 auto", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 7, border: "1px solid var(--border)", cursor: "pointer",
+            background: orderSearch ? "var(--ink)" : "transparent",
+            color: orderSearch ? "var(--cream)" : "var(--text)",
+          }}
+        >
+          <Search size={16} />
+        </button>
+        {orderSearch && (
+          <button
+            onClick={() => setOrderSearch("")}
+            title="Limpiar búsqueda"
+            aria-label="Limpiar búsqueda"
+            style={{
+              flex: "0 0 auto", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 7, border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)", cursor: "pointer",
+            }}
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
 
-      <select
-        value={filterProductCode}
-        onChange={(e) => setFilterProductCode(e.target.value)}
-        style={{
-          width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
-          padding: "9px 12px", fontSize: 14, marginBottom: 10, background: "var(--surface)", color: "var(--text)",
-        }}
-      >
-        <option value="">Todos los productos</option>
-        {products.map((p) => (
-          <option key={p.code} value={p.code}>{p.name}</option>
-        ))}
-      </select>
+      {searchOpen && (
+        <div
+          onClick={() => setSearchOpen(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50,
+            display: "flex", justifyContent: "center", padding: "80px 16px 0",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 420, height: "fit-content",
+              background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10,
+              padding: 10, display: "flex", gap: 8, alignItems: "center",
+            }}
+          >
+            <Search size={16} style={{ flexShrink: 0, color: "var(--text-muted)" }} />
+            <input
+              autoFocus
+              type="text"
+              placeholder="Buscar cliente en pedidos"
+              value={orderSearch}
+              onChange={(e) => setOrderSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") setSearchOpen(false); }}
+              style={{
+                flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                fontSize: 14, color: "var(--text)",
+              }}
+            />
+            <button
+              onClick={() => setSearchOpen(false)}
+              title="Cerrar"
+              aria-label="Cerrar búsqueda"
+              style={{
+                flex: "0 0 auto", background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 14 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
@@ -806,7 +718,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             checked={filterUnsent}
             onChange={(e) => setFilterUnsent(e.target.checked)}
           />
-          Solo no enviados
+          No enviados ({filterCounts.unsent})
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
           <input
@@ -814,7 +726,15 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             checked={filterUnconfirmed}
             onChange={(e) => setFilterUnconfirmed(e.target.checked)}
           />
-          Solo no confirmados
+          No confirmados ({filterCounts.unconfirmed})
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={filterDelivery}
+            onChange={(e) => setFilterDelivery(e.target.checked)}
+          />
+          Domicilio ({filterCounts.delivery})
         </label>
       </div>
 
@@ -834,7 +754,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </div>
       )}
 
-      {draftBucket === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
+      {activeSection === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
         <Banner variant="warning" style={{ marginBottom: 14 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>
             Cierre de ventas: {unconfirmedTodayOrders.length} pedido{unconfirmedTodayOrders.length === 1 ? "" : "s"} de hoy sin confirmar
@@ -869,16 +789,47 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </Banner>
       )}
 
-      {draftBucket === "hoy" && renderOrdersSection({
+      {activeSection === "hoy" && (
+        <div style={{ marginBottom: 20 }}>
+          <Today
+            products={products}
+            movements={todaysMovements}
+            stock={stock}
+            showPrices={showPrices}
+            exchangeRate={exchangeRate}
+            title="RESUMEN DE HOY"
+            onProductClick={handleSummaryProductClick}
+          />
+        </div>
+      )}
+
+      {activeSection === "hoy" && renderOrdersSection({
         section: "hoy",
-        title: "PEDIDOS DE HOY",
+        title: `PEDIDOS DE HOY (${totalTodayCount})`,
         sorted: sortedTodaysOrders,
         emptyText: "Aún no hay pedidos hoy.",
         sortValue: hoyOrderSort,
         onSortChange: setHoyOrderSort,
       })}
 
-      {draftBucket === "manana" && reservablePanelRows.length > 0 && (
+      {activeSection === "manana" && (
+        <div style={{ marginBottom: 20 }}>
+          <Today
+            products={products}
+            movements={mananaMovements}
+            stock={stock}
+            showPrices={showPrices}
+            exchangeRate={exchangeRate}
+            title="RESUMEN PENDIENTE"
+            ordersLabel="PEDIDOS PENDIENTES"
+            soldLabel="Pendiente"
+            pendingMode
+            onProductClick={handleSummaryProductClick}
+          />
+        </div>
+      )}
+
+      {activeSection === "manana" && reservablePanelRows.length > 0 && (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
           <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
             DISPONIBLE PARA RESERVAR
@@ -901,9 +852,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </div>
       )}
 
-      {draftBucket === "manana" && renderOrdersSection({
+      {activeSection === "manana" && renderOrdersSection({
         section: "manana",
-        title: "PRÓXIMOS PEDIDOS",
+        title: `PRÓXIMOS PEDIDOS (${totalUpcomingCount})`,
         sorted: sortedUpcomingOrders,
         emptyText: "Aún no hay pedidos programados.",
         sortValue: mananaOrderSort,
@@ -935,6 +886,261 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      <button
+        onClick={openNewOrderModal}
+        title="Nuevo pedido"
+        aria-label="Nuevo pedido"
+        style={{
+          position: "fixed", bottom: 24, right: 20, width: 56, height: 56, borderRadius: "50%",
+          background: "var(--ink)", color: "var(--cream)", border: "none", cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 4px 14px rgba(0,0,0,0.35)", zIndex: 40,
+        }}
+      >
+        <Plus size={26} />
+      </button>
+
+      {modalOpen && (
+        <div
+          onClick={closeModal}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 60,
+            display: "flex", alignItems: "flex-end", justifyContent: "center",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box",
+              background: "var(--surface)", borderRadius: "16px 16px 0 0", padding: "16px 18px 24px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>
+                {editingOrderId ? "EDITAR PEDIDO" : "NUEVO PEDIDO"}
+              </div>
+              <button
+                onClick={closeModal}
+                title="Cerrar"
+                aria-label="Cerrar"
+                style={{
+                  background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: draftBucket === "manana" ? 8 : 12 }}>
+              <button
+                onClick={() => setDraftBucket("hoy")}
+                style={{
+                  flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+                  background: draftBucket === "hoy" ? "var(--ink)" : "transparent",
+                  color: draftBucket === "hoy" ? "var(--cream)" : "var(--text)",
+                }}
+              >
+                Hoy
+              </button>
+              <button
+                onClick={() => setDraftBucket("manana")}
+                style={{
+                  flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+                  background: draftBucket === "manana" ? "var(--ink)" : "transparent",
+                  color: draftBucket === "manana" ? "var(--cream)" : "var(--text)",
+                }}
+              >
+                Programar
+              </button>
+            </div>
+
+            {draftBucket === "manana" && (
+              <input
+                type="date"
+                value={draftDate}
+                min={tomorrowStr()}
+                onChange={(e) => setDraftDate(e.target.value)}
+                style={{
+                  width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
+                  padding: "9px 10px", fontSize: 14, marginBottom: 12, background: "var(--surface)", color: "var(--text)",
+                }}
+              />
+            )}
+
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <input
+                type="text"
+                placeholder="Nombre y apellidos del cliente"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                style={{
+                  width: "100%", border: "1px solid var(--border)", borderRadius: 7,
+                  padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
+                }}
+              />
+              {suggestions.length > 0 && (
+                <div
+                  style={{
+                    position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
+                    background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 7,
+                    marginTop: 4, overflow: "hidden",
+                  }}
+                >
+                  {suggestions.map((name) => (
+                    <div
+                      key={name}
+                      onClick={() => {
+                        setCustomerName(name);
+                        setShowSuggestions(false);
+                      }}
+                      style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer" }}
+                    >
+                      {name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "var(--text-muted)", marginBottom: 14, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={isDelivery}
+                onChange={(e) => setIsDelivery(e.target.checked)}
+              />
+              Entrega a domicilio
+            </label>
+
+            <textarea
+              placeholder="Nota (opcional)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              style={{
+                width: "100%", border: "1px solid var(--border)", borderRadius: 7,
+                padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
+                marginBottom: 14, resize: "vertical", fontFamily: "inherit",
+              }}
+            />
+
+            {draftLines.length > 0 && (
+              <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+                {draftLines.map((line) => {
+                  const product = products.find((p) => p.code === line.code);
+                  return (
+                    <div key={line.code} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontSize: 13.5 }}>{product ? product.name : line.code}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={line.qty}
+                          onChange={(e) => updateDraftLineQty(line.code, e.target.value)}
+                          style={{
+                            width: 60, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
+                            padding: "6px 8px", fontSize: 14, fontVariantNumeric: "tabular-nums",
+                          }}
+                        />
+                        <button
+                          onClick={() => removeDraftLine(line.code)}
+                          title="Quitar producto"
+                          aria-label="Quitar producto"
+                          style={{
+                            background: "transparent", border: "none", color: "var(--text-muted)",
+                            cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px",
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {showPrices && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13.5, fontWeight: 600 }}>
+                    Total: {formatCUP(draftTotal(draftLines, prices))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {availableProducts.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <select
+                  value={effectiveSelectedProductCode}
+                  onChange={(e) => setSelectedProductCode(e.target.value)}
+                  style={{
+                    width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
+                    padding: "9px 10px", fontSize: 14, background: "var(--surface)",
+                  }}
+                >
+                  {availableProducts.map((p) => (
+                    <option key={p.code} value={p.code}>{p.name}</option>
+                  ))}
+                </select>
+                {effectiveSelectedProductCode && (
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    ({computeAvailable(effectiveSelectedProductCode)} disponibles)
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="Cant."
+                    value={pendingQty}
+                    onChange={(e) => setPendingQty(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") addDraftLine(); }}
+                    style={{
+                      flex: "1 1 auto", minWidth: 0, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
+                      padding: "9px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
+                    }}
+                  />
+                  <button
+                    onClick={addDraftLine}
+                    style={{
+                      flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
+                      borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    Agregar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: "var(--text-faint)" }}>No hay productos con stock disponibles para agregar.</div>
+            )}
+
+            {bigOrderWarning && (
+              <Banner
+                variant="warning"
+                style={{ marginTop: 12, fontSize: 12.5 }}
+                actions={[
+                  { label: "Confirmar de todas formas", kind: "dark", onClick: confirmBigOrderAnyway },
+                  { label: "Cancelar", kind: "secondary", onClick: cancelBigOrderWarning },
+                ]}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠️ Pedido grande:</div>
+                {bigOrderWarning.bigLines.map((l) => `${l.name}: ${l.qty} uds (aviso ≤ ${l.threshold})`).join(", ")}
+              </Banner>
+            )}
+
+            <button
+              onClick={confirmOrder}
+              style={{
+                marginTop: 16, width: "100%", background: "var(--ink)", color: "var(--cream)", border: "none",
+                borderRadius: 7, padding: "11px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              {editingOrderId ? "Guardar cambios" : "Confirmar pedido"}
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -1,13 +1,12 @@
-import { AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Download, Upload, Sun, Moon } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { downloadBackup } from "./backup";
 import TabButton from "./TabButton.jsx";
 import Banner from "./Banner.jsx";
 import ProductsView from "./ProductsView.jsx";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
+import Portfolio from "./Portfolio.jsx";
 import Customers from "./Customers.jsx";
-import Today from "./Today.jsx";
-import Tomorrow from "./Tomorrow.jsx";
 import Settings from "./Settings.jsx";
 import { useInventoryStore, LOW_STOCK_THRESHOLD, lowStockThresholdFor } from "./useInventoryStore.js";
 
@@ -28,7 +27,6 @@ export default function InventoryApp() {
     showArchived, setShowArchived, showLowStockList, setShowLowStockList,
     pendingImport, setPendingImport, fileInputRef,
     view, setView, theme, toggleTheme,
-    productFilterRequest, goToOrdersForProduct,
     currentPersistedState, persist,
     handleImportFileChange, confirmImport,
     todaysMovements, mananaMovements,
@@ -55,13 +53,15 @@ export default function InventoryApp() {
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .rowfade { animation: fadeIn 0.25s ease; }
+        .tabscroll { scrollbar-width: none; -ms-overflow-style: none; }
+        .tabscroll::-webkit-scrollbar { display: none; }
       `}</style>
 
       <div style={{ background: "var(--ink)", color: "var(--cream)", padding: "24px 16px 20px" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 12, letterSpacing: "0.14em", color: "var(--on-ink-label)", fontWeight: 600, marginBottom: 4 }}>PROCOVAR · CONTROL DE STOCK</div>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: "-0.01em" }}>Inventario diario</h1>
+            <div style={{ fontSize: 12, letterSpacing: "0.14em", color: "var(--on-ink-label)", fontWeight: 600, marginBottom: 4 }}>PROCOVAR · GESTOR DE VENTAS</div>
+            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: "-0.01em" }}>Control de inventario</h1>
           </div>
           <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
             <div style={{ textAlign: "right" }}>
@@ -76,44 +76,15 @@ export default function InventoryApp() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0", display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <TabButton active={view === "hoy"} onClick={() => setView("hoy")}>Hoy</TabButton>
-        <TabButton active={view === "manana"} onClick={() => setView("manana")}>Mañana</TabButton>
-        <TabButton active={view === "resumen"} onClick={() => setView("resumen")}>Resumen semanal</TabButton>
-        <TabButton active={view === "pedidos"} onClick={() => setView("pedidos")}>Pedidos</TabButton>
-        <TabButton active={view === "clientes"} onClick={() => setView("clientes")}>Clientes</TabButton>
-        <TabButton active={view === "stock"} onClick={() => setView("stock")}>Productos</TabButton>
-        <TabButton active={view === "config"} onClick={() => setView("config")}>Configuración</TabButton>
-        <button
-          onClick={() => {
-            const next = !showPrices;
-            setShowPrices(next);
-            persist({ ...currentPersistedState, showPrices: next });
-          }}
-          title={showPrices ? "Ocultar precios" : "Mostrar precios"}
-          aria-label={showPrices ? "Ocultar precios" : "Mostrar precios"}
-          style={{
-            flex: "0 0 auto", width: 40, padding: "9px", cursor: "pointer",
-            borderRadius: 7, border: "1px solid var(--text)",
-            background: "transparent", color: "var(--text)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          {showPrices ? <Eye size={16} /> : <EyeOff size={16} />}
-        </button>
-        <button
-          onClick={toggleTheme}
-          title={theme === "dark" ? "Modo claro" : "Modo oscuro"}
-          aria-label={theme === "dark" ? "Modo claro" : "Modo oscuro"}
-          style={{
-            flex: "0 0 auto", width: 40, padding: "9px", cursor: "pointer",
-            borderRadius: 7, border: "1px solid var(--text)",
-            background: "transparent", color: "var(--text)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0" }}>
+        <div className="tabscroll" style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+          <TabButton active={view === "pedidos"} onClick={() => setView("pedidos")}>Pedidos</TabButton>
+          <TabButton active={view === "portafolio"} onClick={() => setView("portafolio")}>Portafolio</TabButton>
+          <TabButton active={view === "resumen"} onClick={() => setView("resumen")}>Resumen semanal</TabButton>
+          <TabButton active={view === "clientes"} onClick={() => setView("clientes")}>Clientes</TabButton>
+          <TabButton active={view === "stock"} onClick={() => setView("stock")}>Productos</TabButton>
+          <TabButton active={view === "config"} onClick={() => setView("config")}>Configuración</TabButton>
+        </div>
       </div>
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "20px 16px 0" }}>
@@ -233,6 +204,9 @@ export default function InventoryApp() {
             stock={stock}
             prices={prices}
             showPrices={showPrices}
+            exchangeRate={exchangeRate}
+            todaysMovements={todaysMovements}
+            mananaMovements={mananaMovements}
             whatsappPhone={whatsappPhone}
             senderName={senderName}
             sendSenderName={sendSenderName}
@@ -247,34 +221,16 @@ export default function InventoryApp() {
               setError(message);
               setTimeout(() => setError(""), 2500);
             }}
-            productFilterRequest={productFilterRequest}
             cierreVentasHour={cierreVentasHour}
           />
         )}
 
+        {view === "portafolio" && (
+          <Portfolio products={products} movements={movements} showPrices={showPrices} />
+        )}
+
         {view === "clientes" && (
           <Customers products={products} movements={movements} showPrices={showPrices} onRenameCustomer={renameCustomer} />
-        )}
-
-        {view === "hoy" && (
-          <Today
-            products={products}
-            movements={todaysMovements}
-            stock={stock}
-            showPrices={showPrices}
-            exchangeRate={exchangeRate}
-            onProductClick={goToOrdersForProduct}
-          />
-        )}
-
-        {view === "manana" && (
-          <Tomorrow
-            products={products}
-            movements={mananaMovements}
-            stock={stock}
-            showPrices={showPrices}
-            exchangeRate={exchangeRate}
-          />
         )}
 
         {view === "config" && (
@@ -300,6 +256,14 @@ export default function InventoryApp() {
               setSenderName(nextSenderName);
               setSendSenderName(nextSendSenderName);
               persist({ ...currentPersistedState, senderName: nextSenderName, sendSenderName: nextSendSenderName });
+            }}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            showPrices={showPrices}
+            onToggleShowPrices={() => {
+              const next = !showPrices;
+              setShowPrices(next);
+              persist({ ...currentPersistedState, showPrices: next });
             }}
           />
         )}

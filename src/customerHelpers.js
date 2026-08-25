@@ -1,3 +1,5 @@
+import { isCommittedMovement } from "./orderHelpers";
+
 export function getCustomerNames(movements) {
   const names = new Set();
   movements.forEach((m) => {
@@ -59,4 +61,39 @@ export function getCustomerStats(movements, products) {
 
   stats.sort((a, b) => b.lastPurchaseDate.localeCompare(a.lastPurchaseDate));
   return stats;
+}
+
+// Totales por cliente (unidades + ingreso), solo ventas comprometidas y con
+// cliente real -- "Venta manual" queda afuera porque no es una relación con
+// un cliente, es un ajuste de conteo. Opcionalmente acotado a [start, end].
+// Incluye favoriteProductCode (el producto que más le compró en el rango).
+export function getCustomerSalesTotals(movements, products, { start, end } = {}) {
+  const byCustomer = new Map();
+  movements.forEach((m) => {
+    if (!m.customerName || m.customerName === "Venta manual") return;
+    if (m.type !== "venta" || !isCommittedMovement(m)) return;
+    if (start && m.date < start) return;
+    if (end && m.date > end) return;
+    if (!byCustomer.has(m.customerName)) {
+      byCustomer.set(m.customerName, { customerName: m.customerName, qty: 0, revenue: 0, qtyByCode: {} });
+    }
+    const entry = byCustomer.get(m.customerName);
+    entry.qty += m.qty;
+    entry.revenue += m.qty * (m.unitPrice || 0);
+    entry.qtyByCode[m.code] = (entry.qtyByCode[m.code] || 0) + m.qty;
+  });
+  return Array.from(byCustomer.values())
+    .map((entry) => {
+      let favoriteProductCode = null;
+      let bestQty = -1;
+      products.forEach((p) => {
+        const qty = entry.qtyByCode[p.code] || 0;
+        if (qty > bestQty) {
+          bestQty = qty;
+          favoriteProductCode = p.code;
+        }
+      });
+      return { customerName: entry.customerName, qty: entry.qty, revenue: entry.revenue, favoriteProductCode };
+    })
+    .sort((a, b) => b.revenue - a.revenue);
 }

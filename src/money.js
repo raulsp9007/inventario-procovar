@@ -39,6 +39,24 @@ export function totalHlSold(movements, products) {
     }, 0);
 }
 
+// Totales por producto (unidades + ingreso), solo ventas comprometidas,
+// opcionalmente acotado a un rango de fechas [start, end] inclusive.
+export function getProductSalesTotals(movements, products, { start, end } = {}) {
+  const byCode = new Map();
+  movements.forEach((m) => {
+    if (m.type !== "venta" || !isCommittedMovement(m)) return;
+    if (start && m.date < start) return;
+    if (end && m.date > end) return;
+    const cur = byCode.get(m.code) || { qty: 0, revenue: 0 };
+    cur.qty += m.qty;
+    cur.revenue += m.qty * (m.unitPrice || 0);
+    byCode.set(m.code, cur);
+  });
+  return products
+    .map((p) => ({ product: p, qty: byCode.get(p.code)?.qty || 0, revenue: byCode.get(p.code)?.revenue || 0 }))
+    .filter((row) => row.qty > 0);
+}
+
 export function monthWeeklyBreakdown(movements, monthStartStr, endDateStr) {
   const inMonth = movements.filter(
     (m) => m.type === "venta" && isCommittedMovement(m) && m.date >= monthStartStr && m.date <= endDateStr
