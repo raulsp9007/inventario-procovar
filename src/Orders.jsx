@@ -177,6 +177,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     })
     .filter((row) => row.libre !== 0 || row.reserved !== 0);
 
+  // Dropdown de filtro por producto: solo ofrece productos que aparecen en
+  // algún pedido de hoy o para mañana -- no tiene sentido filtrar por algo
+  // que no vas a encontrar en ninguna de las dos listas.
+  const productCodesWithOrders = new Set(
+    allOrders.filter((o) => belongsToToday(o) || isUpcoming(o)).flatMap((o) => o.lines.map((l) => l.code))
+  );
+  const filterableProducts = products.filter((p) => productCodesWithOrders.has(p.code));
+
   const availableProducts = products.filter((p) => !p.archived && (stock[p.code] || 0) > 0 && !draftLines.some((l) => l.code === p.code));
   const effectiveSelectedProductCode = availableProducts.some((p) => p.code === selectedProductCode)
     ? selectedProductCode
@@ -635,7 +643,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           }}
         >
           <option value="">Todos los productos</option>
-          {products.map((p) => (
+          {filterableProducts.map((p) => (
             <option key={p.code} value={p.code}>{p.name}</option>
           ))}
         </select>
