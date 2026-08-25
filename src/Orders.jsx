@@ -51,6 +51,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [confirmingPostponeId, setConfirmingPostponeId] = useState(null);
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
+  const [pendingPostpones, setPendingPostpones] = useState(() => new Map());
   const [bigOrderWarning, setBigOrderWarning] = useState(null);
   const [hoyOrderSort, setHoyOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
   const [mananaOrderSort, setMananaOrderSort] = useState(() => (loadSavedFilters().sortManana === "oldest" ? "oldest" : "recent"));
@@ -118,7 +119,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const matchesDelivery = (order) => !filterDelivery || order.isDelivery;
     const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order) && matchesProduct(order) && matchesDelivery(order);
 
-    const allOrders = groupAllOrders(movements).filter((o) => !pendingDeletes.has(o.orderId));
+    const allOrders = groupAllOrders(movements).filter((o) => !pendingDeletes.has(o.orderId) && !pendingPostpones.has(o.orderId));
     const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
     const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
       hoyOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
@@ -164,7 +165,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       totalTodayCount, totalUpcomingCount, filterCounts,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, activeSection]);
+  }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, pendingPostpones, activeSection]);
 
   // Solo entra al panel si queda algo libre para prometer, o si ya tiene
   // reservas encima (aunque esté en 0 libre) -- un producto sin nada de
@@ -355,13 +356,38 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function handlePostponeClick(order) {
     if (confirmingPostponeId === order.orderId) {
       setConfirmingPostponeId(null);
-      postponeToTomorrow(order);
+      stagePostpone(order);
       return;
     }
     setConfirmingPostponeId(order.orderId);
     setTimeout(() => {
       setConfirmingPostponeId((current) => (current === order.orderId ? null : current));
     }, 3000);
+  }
+
+  // Igual que stageDelete: recién se reprograma de verdad cuando pasan los
+  // 5s sin que se apriete "Deshacer". Mientras tanto el pedido se esconde
+  // de las listas (pendingPostpones), pero nada del pedido cambió todavía.
+  function stagePostpone(order) {
+    const timeoutId = setTimeout(() => {
+      postponeToTomorrow(order);
+      setPendingPostpones((m) => {
+        const next = new Map(m);
+        next.delete(order.orderId);
+        return next;
+      });
+    }, 5000);
+    setPendingPostpones((m) => new Map(m).set(order.orderId, { timeoutId, customerName: order.customerName }));
+  }
+
+  function undoPostpone(orderId) {
+    setPendingPostpones((m) => {
+      const entry = m.get(orderId);
+      if (entry) clearTimeout(entry.timeoutId);
+      const next = new Map(m);
+      next.delete(orderId);
+      return next;
+    });
   }
 
   function handleDeleteClick(order) {
@@ -773,6 +799,22 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               actions={[{ label: "Deshacer", kind: "secondary", onClick: () => undoDelete(orderId) }]}
             >
               Pedido de {deletedName} eliminado.
+            </Banner>
+          ))}
+        </div>
+      )}
+
+      {pendingPostpones.size > 0 && (
+        <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+          {Array.from(pendingPostpones.entries()).map(([orderId, { customerName: postponedName }]) => (
+            <Banner
+              key={orderId}
+              variant="dark"
+              layout="row"
+              style={{ fontSize: 13 }}
+              actions={[{ label: "Deshacer", kind: "secondary", onClick: () => undoPostpone(orderId) }]}
+            >
+              Pedido de {postponedName} programado para mañana.
             </Banner>
           ))}
         </div>
