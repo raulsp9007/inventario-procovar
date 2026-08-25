@@ -76,6 +76,16 @@ export function useInventoryStore() {
     } catch {}
   }
 
+  // Navegación cruzada Hoy -> Pedidos: clickear un producto en el resumen de
+  // Hoy manda a Pedidos ya filtrado por ese producto. `requestId` cambia
+  // siempre (aunque se clickee el mismo producto dos veces seguidas) para
+  // que Orders.jsx detecte el pedido de filtro incluso si el código no cambió.
+  const [productFilterRequest, setProductFilterRequest] = useState(null);
+  function goToOrdersForProduct(code) {
+    setProductFilterRequest({ code, requestId: Date.now() });
+    setView("pedidos");
+  }
+
   // Tema (claro/oscuro): preferencia de interfaz, no dato de negocio -- vive
   // en su propia key de localStorage, separada de "procovar-inventario-v1",
   // y no pasa nunca por persist()/setData.
@@ -618,6 +628,7 @@ export function useInventoryStore() {
     showArchived, setShowArchived, showLowStockList, setShowLowStockList,
     pendingImport, setPendingImport, fileInputRef,
     view, setView, theme, toggleTheme,
+    productFilterRequest, goToOrdersForProduct,
     currentPersistedState, persist,
     handleImportFileChange, confirmImport,
     todaysMovements, mananaMovements,

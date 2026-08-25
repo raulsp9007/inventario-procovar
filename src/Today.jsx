@@ -12,6 +12,7 @@ export default function Today({
   products, movements, stock, showPrices, exchangeRate,
   title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
   pendingMode = false,
+  onProductClick = null,
 }) {
   const todaysSales = movements.filter((m) => m.type === "venta");
   const todaysSentSales = pendingMode ? todaysSales : todaysSales.filter((m) => m.sent);
@@ -32,10 +33,12 @@ export default function Today({
     }))
     .map((row) => ({ ...row, disponibleLibre: row.stockLeft - row.pendingToday }))
     .sort((a, b) => b.soldToday - a.soldToday);
-  // Producto en 0 se oculta de este resumen -- salvo que todavía tenga algo
-  // sin consolidar (en Hoy: venta sin enviar; en Mañana/pendingMode: lo
-  // reservado en esta vista), para no esconder algo que sigue en curso.
-  const rows = allRows.filter((row) => row.stockLeft > 0 || (pendingMode ? row.soldToday > 0 : row.pendingToday > 0));
+  // En Hoy se muestra siempre todo lo activo, aunque la venta del día haya
+  // dejado el stock en 0 -- es justamente el resumen de lo vendido hoy, no
+  // tendría sentido que un producto agotado desapareciera de esa lista.
+  // En Mañana (pendingMode) un producto en 0 sigue oculto salvo que todavía
+  // tenga algo reservado sin consolidar en esta vista.
+  const rows = pendingMode ? allRows.filter((row) => row.stockLeft > 0 || row.soldToday > 0) : allRows;
 
   return (
     <div>
@@ -88,9 +91,10 @@ export default function Today({
           {rows.map((row, i) => (
             <div
               key={row.product.code}
+              onClick={onProductClick ? () => onProductClick(row.product.code) : undefined}
               style={{
                 display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
-                gap: 6, padding: "12px 16px", fontSize: 14,
+                gap: 6, padding: "12px 16px", fontSize: 14, cursor: onProductClick ? "pointer" : "default",
                 borderTop: i === 0 ? "none" : "1px solid var(--divider)",
               }}
             >

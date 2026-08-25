@@ -32,7 +32,7 @@ function draftTotal(draftLines, prices) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (prices[l.code] || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError }) {
+export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError, productFilterRequest }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
@@ -73,6 +73,17 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   useEffect(() => {
     submittingRef.current = false;
   }, [customerName]);
+
+  // Llegada desde "Hoy" (clic en un producto): aplica el filtro de producto
+  // y se asegura de estar mirando la sección Hoy, no Próximos. `requestId`
+  // en vez de `code` en las deps para que un segundo clic al mismo producto
+  // también dispare esto (por si mientras tanto lo habían cambiado a mano).
+  useEffect(() => {
+    if (!productFilterRequest) return;
+    setFilterProductCode(productFilterRequest.code);
+    setDraftBucket("hoy");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productFilterRequest?.requestId]);
 
   const today = todayStr();
   const belongsToToday = (o) => o.date === today;

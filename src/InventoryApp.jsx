@@ -26,6 +26,7 @@ export default function InventoryApp() {
     showArchived, setShowArchived, showLowStockList, setShowLowStockList,
     pendingImport, setPendingImport, fileInputRef,
     view, setView, theme, toggleTheme,
+    productFilterRequest, goToOrdersForProduct,
     currentPersistedState, persist,
     handleImportFileChange, confirmImport,
     todaysMovements, mananaMovements,
@@ -244,6 +245,7 @@ export default function InventoryApp() {
               setError(message);
               setTimeout(() => setError(""), 2500);
             }}
+            productFilterRequest={productFilterRequest}
           />
         )}
 
@@ -258,6 +260,7 @@ export default function InventoryApp() {
             stock={stock}
             showPrices={showPrices}
             exchangeRate={exchangeRate}
+            onProductClick={goToOrdersForProduct}
           />
         )}
 
