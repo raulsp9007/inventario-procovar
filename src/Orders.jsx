@@ -49,6 +49,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
+  const [confirmingPostponeId, setConfirmingPostponeId] = useState(null);
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
   const [bigOrderWarning, setBigOrderWarning] = useState(null);
   const [hoyOrderSort, setHoyOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
@@ -346,6 +347,21 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       date: tomorrowStr(),
       forceSent: false,
     });
+  }
+
+  // Confirmación de 2 toques -- misma mecánica que Eliminar (armar, esperar
+  // 3s, o confirmar con un segundo toque) -- para no aplazar un pedido de
+  // un toque accidental en el aviso de cierre de ventas.
+  function handlePostponeClick(order) {
+    if (confirmingPostponeId === order.orderId) {
+      setConfirmingPostponeId(null);
+      postponeToTomorrow(order);
+      return;
+    }
+    setConfirmingPostponeId(order.orderId);
+    setTimeout(() => {
+      setConfirmingPostponeId((current) => (current === order.orderId ? null : current));
+    }, 3000);
   }
 
   function handleDeleteClick(order) {
@@ -773,13 +789,13 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 <span>{order.customerName}</span>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   <button
-                    onClick={() => postponeToTomorrow(order)}
+                    onClick={() => handlePostponeClick(order)}
                     style={{
                       background: "var(--ink)", color: "var(--cream)", border: "none",
                       borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer",
                     }}
                   >
-                    Programar mañana
+                    {confirmingPostponeId === order.orderId ? "¿Seguro?" : "Programar mañana"}
                   </button>
                   <button
                     onClick={() => handleDeleteClick(order)}
