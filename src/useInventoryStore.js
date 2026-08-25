@@ -43,6 +43,8 @@ export function useInventoryStore() {
   const [showPrices, setShowPrices] = useState(true);
   const [hlGoal, setHlGoal] = useState(null);
   const [whatsappPhone, setWhatsappPhone] = useState("");
+  const [whatsappContactName, setWhatsappContactName] = useState("");
+  const [cierreVentasHour, setCierreVentasHour] = useState(null); // 0-23, o null = desactivado
   const [senderName, setSenderName] = useState("");
   const [sendSenderName, setSendSenderName] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -110,6 +112,7 @@ export function useInventoryStore() {
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, whatsappPhone,
+    whatsappContactName, cierreVentasHour,
     senderName, sendSenderName,
   };
 
@@ -141,6 +144,8 @@ export function useInventoryStore() {
     const nextShowPrices = parsed.showPrices ?? true;
     const nextHlGoal = parsed.hlGoal ?? null;
     const nextWhatsappPhone = parsed.whatsappPhone || "";
+    const nextWhatsappContactName = parsed.whatsappContactName || "";
+    const nextCierreVentasHour = parsed.cierreVentasHour ?? null;
     const nextSenderName = parsed.senderName || "";
     const nextSendSenderName = parsed.sendSenderName ?? false;
     const migratedHl = parsed.cumulativeHl == null;
@@ -160,6 +165,8 @@ export function useInventoryStore() {
     setShowPrices(nextShowPrices);
     setHlGoal(nextHlGoal);
     setWhatsappPhone(nextWhatsappPhone);
+    setWhatsappContactName(nextWhatsappContactName);
+    setCierreVentasHour(nextCierreVentasHour);
     setSenderName(nextSenderName);
     setSendSenderName(nextSendSenderName);
 
@@ -168,7 +175,8 @@ export function useInventoryStore() {
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
-        whatsappPhone: nextWhatsappPhone, senderName: nextSenderName, sendSenderName: nextSendSenderName,
+        whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
+        senderName: nextSenderName, sendSenderName: nextSendSenderName,
       });
     }
   }
@@ -388,18 +396,22 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, products: nextProducts });
   }
 
-  // Venta suelta sin pedido/cliente formal (ej. venta de mostrador que no
-  // se armó como pedido, o corregir un conteo de ventas del día) -- resta
-  // stock y suma ingreso/HL de inmediato, igual que un pedido de Hoy ya
-  // enviado. qty negativo = corrección (una venta contada de más): devuelve
-  // stock y resta ingreso/HL. Sin orderId -- no aparece en Pedidos ni en
-  // el historial de compras de ningún cliente.
+  // Venta suelta sin cliente real (ej. venta de mostrador que no se armó
+  // como pedido, o corregir un conteo de ventas del día) -- resta stock y
+  // suma ingreso/HL de inmediato, igual que un pedido de Hoy ya enviado.
+  // qty negativo = corrección (una venta contada de más): devuelve stock y
+  // resta ingreso/HL. Se guarda como un pedido más (con orderId/orderSeq),
+  // "customerName" fijo en "Venta manual", ya enviado y confirmado -- así
+  // aparece editable en Pedidos igual que cualquier otro.
   function registerManualSale(code, qty) {
     const unitPrice = prices[code] || 0;
     const product = products.find((p) => p.code === code);
     const unitHl = product?.hl || 0;
+    const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const orderSeq = movements.reduce((max, m) => (m.orderSeq && m.orderSeq > max ? m.orderSeq : max), 0) + 1;
     const movement = makeMovement(code, "venta", qty, {
-      unitPrice, unitHl, exchangeRate, bucket: "hoy", date: todayStr(), sent: true, manual: true,
+      unitPrice, unitHl, exchangeRate, bucket: "hoy", date: todayStr(), sent: true, confirmed: true, manual: true,
+      orderId, orderSeq, customerName: "Venta manual", isDelivery: false, note: "",
     });
     const nextStock = { ...stock, [code]: (stock[code] || 0) - qty };
     const nextMovements = [movement, ...movements].slice(0, 500);
@@ -491,7 +503,12 @@ export function useInventoryStore() {
   // La fecha se recalcula siempre desde el bucket actual (hoy/mañana de
   // HOY, no la fecha original) -- así editar un pedido viejo estancado lo
   // "refresca" al día correspondiente sin necesitar un botón Aplazar aparte.
-  function editOrder(orderId, { customerName, isDelivery, note, lines, bucket, date: chosenDate }) {
+  // forceSent: normalmente se preserva el "Enviado" que ya tenía el pedido
+  // (editar cantidades no debería des-enviarlo solo). Pero al programar para
+  // mañana desde el aviso de cierre de ventas, el pedido tiene que quedar
+  // SIEMPRE sin comprometer (fuera de stock/estadísticas de hoy) sin
+  // importar si ya estaba marcado Enviado -- por eso ahí se fuerza `false`.
+  function editOrder(orderId, { customerName, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
     const wasSent = !!originalMovements[0].sent;
@@ -508,7 +525,7 @@ export function useInventoryStore() {
       });
     }
 
-    const nextSent = wasSent;
+    const nextSent = forceSent !== undefined ? forceSent : wasSent;
     const willBeCommitted = bucket === "hoy" || (bucket === "manana" && nextSent);
     const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
     const orderSeq = originalMovements[0].orderSeq;
@@ -618,7 +635,9 @@ export function useInventoryStore() {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
     showPrices, setShowPrices, hlGoal, setHlGoal,
-    whatsappPhone, setWhatsappPhone, senderName, setSenderName, sendSenderName, setSendSenderName,
+    whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
+    cierreVentasHour, setCierreVentasHour,
+    senderName, setSenderName, sendSenderName, setSendSenderName,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,

@@ -32,7 +32,7 @@ function draftTotal(draftLines, prices) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (prices[l.code] || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError, productFilterRequest }) {
+export default function Orders({ products, movements, stock, prices, showPrices, whatsappPhone, senderName, sendSenderName, lowStockThresholdFor, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError, productFilterRequest, cierreVentasHour }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
@@ -88,6 +88,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const today = todayStr();
   const belongsToToday = (o) => o.date === today;
   const isUpcoming = (o) => o.date > today;
+  const pastCierreDeVentas = cierreVentasHour != null && new Date().getHours() >= cierreVentasHour;
   const searchTerm = orderSearch.trim().toLowerCase();
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
 
@@ -99,6 +100,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     allOrders, todaysOrders, sortedTodaysOrders,
     upcomingOrders, sortedUpcomingOrders,
     pastOrdersByDate, pastDatesDesc, pastOrdersCount,
+    unconfirmedTodayOrders,
   } = useMemo(() => {
     const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
     const matchesStatusFilter = (order) =>
@@ -127,7 +129,11 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const pastDatesDesc = Array.from(pastOrdersByDate.keys()).sort((a, b) => b.localeCompare(a));
     const pastOrdersCount = pastDatesDesc.reduce((sum, d) => sum + pastOrdersByDate.get(d).length, 0);
 
-    return { allOrders, todaysOrders, sortedTodaysOrders, upcomingOrders, sortedUpcomingOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount };
+    // Independiente de la búsqueda/filtros -- es un aviso del sistema, no
+    // una vista que el usuario esté filtrando a mano.
+    const unconfirmedTodayOrders = allOrders.filter((o) => belongsToToday(o) && !o.confirmed);
+
+    return { allOrders, todaysOrders, sortedTodaysOrders, upcomingOrders, sortedUpcomingOrders, pastOrdersByDate, pastDatesDesc, pastOrdersCount, unconfirmedTodayOrders };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes]);
 
@@ -270,6 +276,21 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   function cancelBigOrderWarning() {
     setBigOrderWarning(null);
+  }
+
+  // Revisión de cierre de ventas: reprograma un pedido de hoy sin confirmar
+  // para mañana -- mismo mecanismo que editar y cambiar a "Programar" a
+  // mano (devuelve el stock/ingreso de hoy, queda reservado sin comprometer).
+  function postponeToTomorrow(order) {
+    onEditOrder(order.orderId, {
+      customerName: order.customerName,
+      isDelivery: order.isDelivery,
+      note: order.note,
+      lines: order.lines.map((l) => ({ code: l.code, qty: l.qty })),
+      bucket: "manana",
+      date: tomorrowStr(),
+      forceSent: false,
+    });
   }
 
   function handleDeleteClick(order) {
@@ -811,6 +832,41 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             </Banner>
           ))}
         </div>
+      )}
+
+      {draftBucket === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
+        <Banner variant="warning" style={{ marginBottom: 14 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>
+            Cierre de ventas: {unconfirmedTodayOrders.length} pedido{unconfirmedTodayOrders.length === 1 ? "" : "s"} de hoy sin confirmar
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {unconfirmedTodayOrders.map((order) => (
+              <div key={order.orderId} style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span>{order.customerName}</span>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button
+                    onClick={() => postponeToTomorrow(order)}
+                    style={{
+                      background: "var(--ink)", color: "var(--cream)", border: "none",
+                      borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    Programar mañana
+                  </button>
+                  <button
+                    onClick={() => handleDeleteClick(order)}
+                    style={{
+                      background: "transparent", color: "var(--warning-text)", border: "1px solid var(--border-warn)",
+                      borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    {confirmingDeleteId === order.orderId ? "¿Seguro?" : "Eliminar"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Banner>
       )}
 
       {draftBucket === "hoy" && renderOrdersSection({

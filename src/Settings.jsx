@@ -1,14 +1,55 @@
 import { useState } from "react";
 
-export default function Settings({ whatsappPhone, onWhatsappPhoneChange, senderName, sendSenderName, onSenderSettingsChange }) {
+function formatHour(h) {
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:00 ${period}`;
+}
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
+
+// El picker de contactos del navegador (Contact Picker API) solo existe en
+// Chrome/Android por ahora -- en iPhone o desktop no aparece el botón, no
+// tiene sentido ofrecer algo que va a fallar siempre.
+const CONTACT_PICKER_SUPPORTED =
+  typeof navigator !== "undefined" && "contacts" in navigator && typeof window !== "undefined" && "ContactsManager" in window;
+
+export default function Settings({
+  whatsappPhone, onWhatsappPhoneChange,
+  whatsappContactName, onWhatsappContactNameChange,
+  cierreVentasHour, onCierreVentasHourChange,
+  senderName, sendSenderName, onSenderSettingsChange,
+}) {
   const [phoneInput, setPhoneInput] = useState(whatsappPhone || "");
+  const [contactNameInput, setContactNameInput] = useState(whatsappContactName || "");
   const [nameInput, setNameInput] = useState(senderName || "");
   const [sendChecked, setSendChecked] = useState(!!sendSenderName);
+  const [pickerError, setPickerError] = useState("");
 
   function save() {
     const digits = phoneInput.replace(/\D/g, "");
     setPhoneInput(digits);
     onWhatsappPhoneChange(digits);
+  }
+
+  async function pickContact() {
+    setPickerError("");
+    try {
+      const contacts = await navigator.contacts.select(["name", "tel"], { multiple: false });
+      const contact = contacts && contacts[0];
+      const tel = contact?.tel?.[0]?.replace(/\D/g, "") || "";
+      if (!tel) {
+        setPickerError("Ese contacto no tiene número de teléfono.");
+        return;
+      }
+      const name = contact?.name?.[0] || "";
+      setPhoneInput(tel);
+      setContactNameInput(name);
+      onWhatsappPhoneChange(tel);
+      onWhatsappContactNameChange(name);
+    } catch {
+      // Usuario canceló el picker -- no es un error real, no hace falta avisar.
+    }
   }
 
   function saveSenderSettings(nextName, nextChecked) {
@@ -28,16 +69,16 @@ export default function Settings({ whatsappPhone, onWhatsappPhoneChange, senderN
         <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
           Código de país + número, sin espacios ni "+". Ej: 5359XXXXXXX. Al enviar un pedido, se abre el chat directo con este número.
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input
             type="text"
             inputMode="numeric"
             placeholder="5359XXXXXXX"
             value={phoneInput}
-            onChange={(e) => setPhoneInput(e.target.value)}
+            onChange={(e) => { setPhoneInput(e.target.value); setContactNameInput(""); }}
             onKeyDown={(e) => { if (e.key === "Enter") save(); }}
             style={{
-              flex: "1 1 auto", border: "1px solid var(--border)", borderRadius: 7,
+              flex: "1 1 auto", minWidth: 140, border: "1px solid var(--border)", borderRadius: 7,
               padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
             }}
           />
@@ -51,11 +92,45 @@ export default function Settings({ whatsappPhone, onWhatsappPhoneChange, senderN
             Guardar
           </button>
         </div>
+        {CONTACT_PICKER_SUPPORTED && (
+          <button
+            onClick={pickContact}
+            style={{
+              marginTop: 8, background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
+              borderRadius: 7, padding: "7px 12px", fontSize: 12.5, cursor: "pointer",
+            }}
+          >
+            Elegir contacto
+          </button>
+        )}
+        {pickerError && (
+          <div style={{ fontSize: 12, color: "var(--error-text)", marginTop: 8 }}>{pickerError}</div>
+        )}
         {whatsappPhone && (
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
-            Guardado: {whatsappPhone}
+            Guardado: {whatsappContactName ? `${whatsappContactName} · ${whatsappPhone}` : whatsappPhone}
           </div>
         )}
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Cierre de ventas</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Pasada esta hora, en Pedidos vas a ver un aviso con los pedidos de hoy que sigan sin marcar Confirmado, para que decidas si eliminarlos o programarlos para mañana.
+        </div>
+        <select
+          value={cierreVentasHour ?? ""}
+          onChange={(e) => onCierreVentasHourChange(e.target.value === "" ? null : Number(e.target.value))}
+          style={{
+            width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
+            padding: "9px 12px", fontSize: 14, background: "var(--surface)", color: "var(--text)",
+          }}
+        >
+          <option value="">Desactivado</option>
+          {HOUR_OPTIONS.map((h) => (
+            <option key={h} value={h}>{formatHour(h)}</option>
+          ))}
+        </select>
       </div>
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>

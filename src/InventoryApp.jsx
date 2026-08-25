@@ -16,7 +16,9 @@ export default function InventoryApp() {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
     showPrices, setShowPrices, hlGoal, setHlGoal,
-    whatsappPhone, setWhatsappPhone, senderName, setSenderName, sendSenderName, setSendSenderName,
+    whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
+    cierreVentasHour, setCierreVentasHour,
+    senderName, setSenderName, sendSenderName, setSendSenderName,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,
@@ -246,6 +248,7 @@ export default function InventoryApp() {
               setTimeout(() => setError(""), 2500);
             }}
             productFilterRequest={productFilterRequest}
+            cierreVentasHour={cierreVentasHour}
           />
         )}
 
@@ -280,6 +283,16 @@ export default function InventoryApp() {
             onWhatsappPhoneChange={(next) => {
               setWhatsappPhone(next);
               persist({ ...currentPersistedState, whatsappPhone: next });
+            }}
+            whatsappContactName={whatsappContactName}
+            onWhatsappContactNameChange={(next) => {
+              setWhatsappContactName(next);
+              persist({ ...currentPersistedState, whatsappContactName: next });
+            }}
+            cierreVentasHour={cierreVentasHour}
+            onCierreVentasHourChange={(next) => {
+              setCierreVentasHour(next);
+              persist({ ...currentPersistedState, cierreVentasHour: next });
             }}
             senderName={senderName}
             sendSenderName={sendSenderName}
