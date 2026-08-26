@@ -8,7 +8,7 @@ import Orders from "./Orders.jsx";
 import Portfolio from "./Portfolio.jsx";
 import Customers from "./Customers.jsx";
 import Settings from "./Settings.jsx";
-import { useInventoryStore, LOW_STOCK_THRESHOLD, lowStockThresholdFor } from "./useInventoryStore.js";
+import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, lowStockThresholdFor } from "./useInventoryStore.js";
 
 export default function InventoryApp() {
   const {
@@ -31,6 +31,7 @@ export default function InventoryApp() {
     handleImportFileChange, confirmImport,
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
+    movementsNearCap,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
@@ -128,6 +129,16 @@ export default function InventoryApp() {
           </div>
         )}
 
+        {movementsNearCap && (
+          <Banner
+            variant="warning"
+            style={{ marginBottom: 16 }}
+            actions={[{ label: "Exportar respaldo", kind: "dark", onClick: () => downloadBackup(currentPersistedState) }]}
+          >
+            El historial de movimientos está por llenarse ({movements.length}/{MOVEMENTS_CAP}). Exportá un respaldo pronto -- al llegar al tope, los movimientos más viejos se empiezan a perder.
+          </Banner>
+        )}
+
         {error && (
           <Banner variant="error" style={{ marginBottom: 16 }}>{error}</Banner>
         )}
@@ -213,7 +224,6 @@ export default function InventoryApp() {
             onConfirmOrder={confirmOrder}
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
-            lowStockThresholdFor={lowStockThresholdFor}
             onMarkSent={markOrderSent}
             onMarkOrdersSent={markOrdersSent}
             onMarkConfirmed={markOrderConfirmed}

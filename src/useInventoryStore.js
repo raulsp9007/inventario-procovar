@@ -15,6 +15,11 @@ const DEFAULT_PRODUCTS = [
 ];
 
 export const LOW_STOCK_THRESHOLD = 20;
+// Antes en 500 -- para un negocio activo (~30 movimientos/día) eso se
+// llenaba en un par de semanas y los más viejos se perdían sin aviso.
+// 5000 da meses de margen; igual se avisa (movementsNearCap) antes de
+// llegar, para exportar un respaldo a tiempo.
+export const MOVEMENTS_CAP = 5000;
 const STORAGE_KEY = "procovar-inventario-v1";
 const VALID_VIEWS = ["resumen", "pedidos", "portafolio", "clientes", "stock", "config"];
 const VIEW_STORAGE_KEY = "procovar-active-tab";
@@ -230,6 +235,10 @@ export function useInventoryStore() {
     return { todaysMovements, mananaMovements };
   }, [movements, todayCal, tomorrowCal]);
 
+  // Aviso temprano antes de llegar al tope -- así hay tiempo de exportar un
+  // respaldo antes de que los movimientos más viejos empiecen a perderse.
+  const movementsNearCap = movements.length >= MOVEMENTS_CAP * 0.9;
+
   const activeProducts = products.filter((p) => !p.archived);
   const archivedProducts = products.filter((p) => p.archived);
   const totalStock = activeProducts.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
@@ -341,7 +350,7 @@ export function useInventoryStore() {
       if (editColorInputs[p.code]) nextP.color = editColorInputs[p.code];
       return nextP;
     });
-    const nextMovements = [...adjustments, ...movements].slice(0, 500);
+    const nextMovements = [...adjustments, ...movements].slice(0, MOVEMENTS_CAP);
     setStock(nextStock);
     setPrices(nextPrices);
     setMovements(nextMovements);
@@ -404,7 +413,7 @@ export function useInventoryStore() {
       orderId, orderSeq, customerName: "Venta manual", isDelivery: false, note: "",
     });
     const nextStock = { ...stock, [code]: (stock[code] || 0) - qty };
-    const nextMovements = [movement, ...movements].slice(0, 500);
+    const nextMovements = [movement, ...movements].slice(0, MOVEMENTS_CAP);
     const nextCumulativeRevenue = cumulativeRevenue + qty * unitPrice;
     const nextCumulativeHl = cumulativeHl + qty * unitHl;
     setStock(nextStock);
@@ -443,7 +452,7 @@ export function useInventoryStore() {
         addedHl += qty * unitHl;
       }
     });
-    const nextMovements = [...newMovements, ...movements].slice(0, 500);
+    const nextMovements = [...newMovements, ...movements].slice(0, MOVEMENTS_CAP);
     const nextCumulativeRevenue = cumulativeRevenue + addedRevenue;
     const nextCumulativeHl = cumulativeHl + addedHl;
     setStock(nextStock);
@@ -537,7 +546,7 @@ export function useInventoryStore() {
     });
 
     const otherMovements = movements.filter((m) => m.orderId !== orderId);
-    const nextMovements = [...newMovements, ...otherMovements].slice(0, 500);
+    const nextMovements = [...newMovements, ...otherMovements].slice(0, MOVEMENTS_CAP);
     const nextCumulativeRevenue = cumulativeRevenue - removedRevenue + addedRevenue;
     const nextCumulativeHl = cumulativeHl - removedHl + addedHl;
 
@@ -641,6 +650,7 @@ export function useInventoryStore() {
     handleImportFileChange, confirmImport,
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
+    movementsNearCap,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
