@@ -39,11 +39,18 @@ export function getCustomerStats(movements, products) {
   movements.forEach((m) => {
     if (!m.customerName) return;
     if (!byCustomer.has(m.customerName)) {
-      byCustomer.set(m.customerName, { qtyByCode: {}, lastPurchaseDate: m.date });
+      byCustomer.set(m.customerName, { qtyByCode: {}, lastPurchaseDate: m.date, businessName: "", businessNameTimestamp: "" });
     }
     const entry = byCustomer.get(m.customerName);
     entry.qtyByCode[m.code] = (entry.qtyByCode[m.code] || 0) + m.qty;
     if (m.date > entry.lastPurchaseDate) entry.lastPurchaseDate = m.date;
+    // El nombre del negocio puede haberse cargado en cualquier pedido de
+    // este cliente (o editado aparte en Clientes) -- nos quedamos con el
+    // más reciente por timestamp, no importa en qué movimiento haya quedado.
+    if (m.businessName && m.timestamp > entry.businessNameTimestamp) {
+      entry.businessName = m.businessName;
+      entry.businessNameTimestamp = m.timestamp;
+    }
   });
 
   const stats = Array.from(byCustomer.entries()).map(([customerName, entry]) => {
@@ -56,11 +63,26 @@ export function getCustomerStats(movements, products) {
         favoriteProductCode = p.code;
       }
     });
-    return { customerName, favoriteProductCode, lastPurchaseDate: entry.lastPurchaseDate };
+    return { customerName, favoriteProductCode, lastPurchaseDate: entry.lastPurchaseDate, businessName: entry.businessName };
   });
 
   stats.sort((a, b) => b.lastPurchaseDate.localeCompare(a.lastPurchaseDate));
   return stats;
+}
+
+// Nombre de negocio guardado para ese cliente (el más reciente entre todos
+// sus pedidos) -- usado para autocompletar al armar un pedido nuevo.
+export function getCustomerBusinessName(movements, customerName) {
+  let businessName = "";
+  let latestTimestamp = "";
+  movements.forEach((m) => {
+    if (m.customerName !== customerName || !m.businessName) return;
+    if (m.timestamp > latestTimestamp) {
+      businessName = m.businessName;
+      latestTimestamp = m.timestamp;
+    }
+  });
+  return businessName;
 }
 
 // Totales por cliente (unidades + ingreso), solo ventas comprometidas y con

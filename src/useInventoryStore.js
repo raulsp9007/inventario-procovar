@@ -486,7 +486,7 @@ export function useInventoryStore() {
     });
   }
 
-  function confirmOrder({ customerName, isDelivery, note, lines, bucket, date: chosenDate }) {
+  function confirmOrder({ customerName, businessName, isDelivery, note, lines, bucket, date: chosenDate }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     // Numero consecutivo solo para ubicar el pedido en la app (no se manda
     // por WhatsApp) -- se deriva del maximo ya usado en vez de guardar un
@@ -502,7 +502,7 @@ export function useInventoryStore() {
       const unitPrice = prices[code] || 0;
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, isDelivery, note, bucket, date }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", isDelivery, note, bucket, date }));
       if (committed) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;
@@ -564,7 +564,7 @@ export function useInventoryStore() {
   // mañana desde el aviso de cierre de ventas, el pedido tiene que quedar
   // SIEMPRE sin comprometer (fuera de stock/estadísticas de hoy) sin
   // importar si ya estaba marcado Enviado -- por eso ahí se fuerza `false`.
-  function editOrder(orderId, { customerName, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
+  function editOrder(orderId, { customerName, businessName, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
     const wasSent = !!originalMovements[0].sent;
@@ -594,7 +594,7 @@ export function useInventoryStore() {
       const unitPrice = prices[code] || 0;
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, isDelivery, note, bucket, date, sent: nextSent }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", isDelivery, note, bucket, date, sent: nextSent }));
       if (willBeCommitted) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;
@@ -669,11 +669,17 @@ export function useInventoryStore() {
     });
   }
 
-  function renameCustomer(oldName, newName) {
-    const trimmed = newName.trim();
-    if (!trimmed || trimmed === oldName) return;
+  // Edita nombre y/o negocio del cliente en un solo paso -- no hay un
+  // registro de clientes aparte, así que ambos campos se guardan en todos
+  // los movimientos que tenga ese cliente. Van juntos (no dos funciones
+  // separadas) para no arriesgar una carrera entre dos persist() seguidos
+  // sobre el mismo `movements` (el segundo leería el estado viejo, de
+  // antes del primer cambio).
+  function updateCustomer(oldName, newName, businessName) {
+    const trimmedName = newName.trim() || oldName;
+    const trimmedBusiness = businessName.trim();
     const nextMovements = movements.map((m) =>
-      m.customerName === oldName ? { ...m, customerName: trimmed } : m
+      m.customerName === oldName ? { ...m, customerName: trimmedName, businessName: trimmedBusiness } : m
     );
     setMovements(nextMovements);
     persist({ ...currentPersistedState, movements: nextMovements });
@@ -711,6 +717,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    renameCustomer, markOrderConfirmed,
+    updateCustomer, markOrderConfirmed,
   };
 }

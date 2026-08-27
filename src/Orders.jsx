@@ -3,7 +3,7 @@ import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X, Pl
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
-import { getCustomerNames, matchCustomerNames } from "./customerHelpers";
+import { getCustomerNames, matchCustomerNames, getCustomerBusinessName } from "./customerHelpers";
 import Banner from "./Banner.jsx";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
@@ -34,6 +34,7 @@ function orderTotal(order) {
 export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError, cierreVentasHour }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
   const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
@@ -196,10 +197,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function pickSuggestion(name) {
     setCustomerName(name);
     setShowSuggestions(false);
+    // Cliente ya registrado -- autocompleta el negocio que le quedó
+    // guardado de algún pedido anterior (si nunca se cargó, queda vacío).
+    setBusinessName(getCustomerBusinessName(movements, name));
   }
 
   function resetForm() {
     setCustomerName("");
+    setBusinessName("");
     setIsDelivery(false);
     setNote("");
     setDraftLines([]);
@@ -212,6 +217,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   function startEdit(order) {
     setCustomerName(order.customerName);
+    setBusinessName(order.businessName || "");
     setIsDelivery(order.isDelivery);
     setNote(order.note || "");
     setDraftLines(order.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
@@ -296,7 +302,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         return;
       }
     }
-    const draft = { customerName: customerName.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
+    const draft = { customerName: customerName.trim(), businessName: businessName.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
     submittingRef.current = true;
     submitDraft(draft);
   }
@@ -950,6 +956,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         onDraftDateChange={setDraftDate}
         customerName={customerName}
         onCustomerNameChange={setCustomerName}
+        businessName={businessName}
+        onBusinessNameChange={setBusinessName}
         showSuggestions={showSuggestions}
         onShowSuggestions={setShowSuggestions}
         suggestions={suggestions}

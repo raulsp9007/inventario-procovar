@@ -6,6 +6,7 @@ export function groupAllOrders(movements) {
       byId.set(m.orderId, {
         orderId: m.orderId,
         customerName: m.customerName,
+        businessName: m.businessName || "",
         isDelivery: !!m.isDelivery,
         note: m.note || "",
         sent: !!m.sent,

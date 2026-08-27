@@ -1,6 +1,6 @@
 import { AlertTriangle, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { downloadBackup } from "./backup";
-import TabButton from "./TabButton.jsx";
+import RadialNav, { VIEW_LABELS } from "./RadialNav.jsx";
 import Banner from "./Banner.jsx";
 import ProductsView from "./ProductsView.jsx";
 import WeeklySummary from "./WeeklySummary";
@@ -35,7 +35,7 @@ export default function InventoryApp() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    renameCustomer, markOrderConfirmed,
+    updateCustomer, markOrderConfirmed,
   } = useInventoryStore();
 
   if (!loaded) {
@@ -54,15 +54,16 @@ export default function InventoryApp() {
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .rowfade { animation: fadeIn 0.25s ease; }
-        .tabscroll { scrollbar-width: none; -ms-overflow-style: none; }
-        .tabscroll::-webkit-scrollbar { display: none; }
       `}</style>
+
+      <RadialNav view={view} setView={setView} />
 
       <div style={{ background: "var(--ink)", color: "var(--cream)", padding: "24px 16px 20px" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 12, letterSpacing: "0.14em", color: "var(--on-ink-label)", fontWeight: 600, marginBottom: 4 }}>PROCOVAR · GESTOR DE VENTAS</div>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: "-0.01em" }}>Control de inventario</h1>
+            <div style={{ fontSize: 12.5, color: "var(--on-ink-subtitle)", marginTop: 6 }}>{VIEW_LABELS[view] || ""}</div>
           </div>
           <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
             <div style={{ textAlign: "right" }}>
@@ -74,17 +75,6 @@ export default function InventoryApp() {
               <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--on-ink-accent)" }}>{todaysUnitsSold}</div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 0" }}>
-        <div className="tabscroll" style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-          <TabButton active={view === "pedidos"} onClick={() => setView("pedidos")}>Pedidos</TabButton>
-          <TabButton active={view === "portafolio"} onClick={() => setView("portafolio")}>Portafolio</TabButton>
-          <TabButton active={view === "resumen"} onClick={() => setView("resumen")}>Resumen semanal</TabButton>
-          <TabButton active={view === "clientes"} onClick={() => setView("clientes")}>Clientes</TabButton>
-          <TabButton active={view === "stock"} onClick={() => setView("stock")}>Productos</TabButton>
-          <TabButton active={view === "config"} onClick={() => setView("config")}>Configuración</TabButton>
         </div>
       </div>
 
@@ -240,7 +230,12 @@ export default function InventoryApp() {
         )}
 
         {view === "clientes" && (
-          <Customers products={products} movements={movements} showPrices={showPrices} onRenameCustomer={renameCustomer} />
+          <Customers
+            products={products}
+            movements={movements}
+            showPrices={showPrices}
+            onUpdateCustomer={updateCustomer}
+          />
         )}
 
         {view === "config" && (

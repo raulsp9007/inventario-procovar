@@ -16,20 +16,22 @@ function sortStats(stats, sortBy) {
   return sorted;
 }
 
-export default function Customers({ products, movements, showPrices, onRenameCustomer }) {
+export default function Customers({ products, movements, showPrices, onUpdateCustomer }) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [expandedCustomer, setExpandedCustomer] = useState(null);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [nameInput, setNameInput] = useState("");
+  const [businessNameInput, setBusinessNameInput] = useState("");
 
-  function startRename(customerName) {
+  function startRename(customerName, businessName) {
     setEditingCustomer(customerName);
     setNameInput(customerName);
+    setBusinessNameInput(businessName || "");
   }
 
   function saveRename(oldName) {
-    onRenameCustomer(oldName, nameInput);
+    onUpdateCustomer(oldName, nameInput, businessNameInput);
     setEditingCustomer(null);
   }
 
@@ -92,42 +94,56 @@ export default function Customers({ products, movements, showPrices, onRenameCus
                 style={{ borderTop: i === 0 ? "none" : "1px solid var(--divider)" }}
               >
                 {editingCustomer === c.customerName ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px" }}>
+                  <div style={{ display: "grid", gap: 8, padding: "10px 16px" }}>
                     <input
                       type="text"
                       autoFocus
+                      placeholder="Nombre y apellidos"
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") saveRename(c.customerName); }}
                       style={{
-                        flex: "1 1 auto", minWidth: 0, border: "1px solid var(--border)", borderRadius: 7,
+                        border: "1px solid var(--border)", borderRadius: 7,
                         padding: "7px 10px", fontSize: 13.5, boxSizing: "border-box",
                       }}
                     />
-                    <button
-                      onClick={() => saveRename(c.customerName)}
-                      title="Guardar"
-                      aria-label="Guardar"
+                    <input
+                      type="text"
+                      placeholder="Nombre del negocio (opcional)"
+                      value={businessNameInput}
+                      onChange={(e) => setBusinessNameInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveRename(c.customerName); }}
                       style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "var(--ink)", color: "var(--cream)", border: "none",
-                        borderRadius: 7, width: 32, height: 32, cursor: "pointer", flexShrink: 0,
+                        border: "1px solid var(--border)", borderRadius: 7,
+                        padding: "7px 10px", fontSize: 13.5, boxSizing: "border-box",
                       }}
-                    >
-                      <Check size={14} />
-                    </button>
-                    <button
-                      onClick={() => setEditingCustomer(null)}
-                      title="Cancelar"
-                      aria-label="Cancelar"
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)",
-                        borderRadius: 7, width: 32, height: 32, cursor: "pointer", flexShrink: 0,
-                      }}
-                    >
-                      <X size={14} />
-                    </button>
+                    />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={() => saveRename(c.customerName)}
+                        title="Guardar"
+                        aria-label="Guardar"
+                        style={{
+                          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                          background: "var(--ink)", color: "var(--cream)", border: "none",
+                          borderRadius: 7, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >
+                        <Check size={14} /> Guardar
+                      </button>
+                      <button
+                        onClick={() => setEditingCustomer(null)}
+                        title="Cancelar"
+                        aria-label="Cancelar"
+                        style={{
+                          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                          background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)",
+                          borderRadius: 7, padding: "8px 14px", fontSize: 13, cursor: "pointer",
+                        }}
+                      >
+                        <X size={14} /> Cancelar
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div
@@ -137,20 +153,25 @@ export default function Customers({ products, movements, showPrices, onRenameCus
                       gap: 6, padding: "12px 16px", fontSize: 13.5, cursor: "pointer",
                     }}
                   >
-                    <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
-                      {c.customerName}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); startRename(c.customerName); }}
-                        title="Editar nombre"
-                        aria-label="Editar nombre"
-                        style={{
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          background: "transparent", border: "none", color: "var(--text-muted)",
-                          cursor: "pointer", padding: 2,
-                        }}
-                      >
-                        <Pencil size={12} />
-                      </button>
+                    <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                        {c.customerName}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startRename(c.customerName, c.businessName); }}
+                          title="Editar cliente"
+                          aria-label="Editar cliente"
+                          style={{
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            background: "transparent", border: "none", color: "var(--text-muted)",
+                            cursor: "pointer", padding: 2,
+                          }}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </span>
+                      {c.businessName && (
+                        <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 400 }}>{c.businessName}</span>
+                      )}
                     </span>
                     <div style={{ display: "flex", gap: 12, alignItems: "center", color: "var(--text-muted)", fontSize: 12.5 }}>
                       <span>{product ? product.short : c.favoriteProductCode}</span>

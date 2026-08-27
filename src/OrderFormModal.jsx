@@ -15,6 +15,7 @@ export default function OrderFormModal({
   draftBucket, onDraftBucketChange,
   draftDate, onDraftDateChange,
   customerName, onCustomerNameChange,
+  businessName, onBusinessNameChange,
   showSuggestions, onShowSuggestions, suggestions, onPickSuggestion,
   isDelivery, onIsDeliveryChange,
   note, onNoteChange,
@@ -128,6 +129,17 @@ export default function OrderFormModal({
             </div>
           )}
         </div>
+
+        <input
+          type="text"
+          placeholder="Nombre del negocio (opcional)"
+          value={businessName}
+          onChange={(e) => onBusinessNameChange(e.target.value)}
+          style={{
+            width: "100%", border: "1px solid var(--border)", borderRadius: 7,
+            padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
+          }}
+        />
 
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "var(--text-muted)", marginBottom: 14, cursor: "pointer" }}>
           <input
