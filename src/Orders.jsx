@@ -473,14 +473,31 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 </span>
               )}
             </div>
-            <div style={{ color: "var(--text-faint)", fontSize: 12.5 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
               {order.lines.map((line) => {
                 const product = products.find((p) => p.code === line.code);
-                return `${line.qty}x ${product ? product.short : line.code}`;
-              }).join(", ")}
-              {showPrices && ` · ${formatCUP(orderTotal(order))}`}
+                const color = product?.color || "#8A8574";
+                return (
+                  <span
+                    key={line.code}
+                    style={{
+                      display: "inline-flex", alignItems: "center",
+                      background: `${color}22`, border: `1px solid ${color}55`,
+                      borderRadius: 20, padding: "3px 10px", fontSize: 12, fontWeight: 600,
+                      color: "var(--text)",
+                    }}
+                  >
+                    {line.qty}x {product ? product.short : line.code}
+                  </span>
+                );
+              })}
             </div>
-            <div style={{ color: "var(--text-faint-2)", fontSize: 11.5, marginTop: 2 }}>
+            {showPrices && (
+              <div style={{ fontWeight: 700, fontSize: 13.5, marginTop: 6 }}>
+                {formatCUP(orderTotal(order))}
+              </div>
+            )}
+            <div style={{ color: "var(--text-faint-2)", fontSize: 11.5, marginTop: 4 }}>
               {formatDateTime(order.timestamp)}
             </div>
             {order.note && (
