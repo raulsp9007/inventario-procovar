@@ -190,6 +190,63 @@ export function useInventoryStore() {
     })();
   }, []);
 
+  // Pedidos programados (bucket "manana") cuya fecha ya llegó (o pasó) se
+  // comprometen solos como pedido de hoy: bucket pasa a "hoy" (con la fecha
+  // de hoy) y recién ahí descuenta stock y suma ingreso/HL -- antes de esto
+  // quedaban reservados para siempre hasta que alguien los tocara a mano.
+  // Corre al cargar los datos y de nuevo cada minuto mientras la app siga
+  // abierta, para agarrar tanto "abrí la app a la mañana siguiente" como
+  // "la dejé abierta pasando la medianoche". Se apoya en un ref con el
+  // estado más reciente para que el intervalo nunca lea una closure vieja.
+  const latestStateRef = useRef();
+  latestStateRef.current = { movements, stock, cumulativeRevenue, cumulativeHl, currentPersistedState };
+
+  const checkScheduledTransitions = useCallback(() => {
+    const {
+      movements: curMovements, stock: curStock,
+      cumulativeRevenue: curRevenue, cumulativeHl: curHl, currentPersistedState: curPersisted,
+    } = latestStateRef.current;
+    const todayCal = todayStr();
+    const orderIdsToTransition = new Set(
+      curMovements
+        .filter((m) => m.orderId && (m.bucket || "hoy") === "manana" && !m.sent && m.date <= todayCal)
+        .map((m) => m.orderId)
+    );
+    if (orderIdsToTransition.size === 0) return;
+
+    const nextStock = { ...curStock };
+    let addedRevenue = 0;
+    let addedHl = 0;
+    const nextMovements = curMovements.map((m) => {
+      if (!orderIdsToTransition.has(m.orderId)) return m;
+      nextStock[m.code] = (nextStock[m.code] || 0) - m.qty;
+      addedRevenue += m.qty * (m.unitPrice || 0);
+      addedHl += m.qty * (m.unitHl || 0);
+      return { ...m, bucket: "hoy", date: todayCal };
+    });
+    const nextCumulativeRevenue = curRevenue + addedRevenue;
+    const nextCumulativeHl = curHl + addedHl;
+
+    setStock(nextStock);
+    setMovements(nextMovements);
+    setCumulativeRevenue(nextCumulativeRevenue);
+    setCumulativeHl(nextCumulativeHl);
+    persist({
+      ...curPersisted,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+      cumulativeHl: nextCumulativeHl,
+    });
+  }, [persist]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    checkScheduledTransitions();
+    const intervalId = setInterval(checkScheduledTransitions, 60000);
+    return () => clearInterval(intervalId);
+  }, [loaded, checkScheduledTransitions]);
+
   function handleImportFileChange(e) {
     const file = e.target.files[0];
     e.target.value = "";
