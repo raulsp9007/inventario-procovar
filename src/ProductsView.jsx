@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ReceiptText, X } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
-import { formatCUP } from "./money";
+import { formatCUP, formatUSD, convertToUSD } from "./money";
 import FieldLabel from "./FieldLabel.jsx";
 import IconButton from "./IconButton.jsx";
 import Card from "./Card.jsx";
@@ -16,6 +16,8 @@ export default function ProductsView({
   movements,
   lastAdjustedAt,
   showPrices,
+  exchangeRate,
+  onExchangeRateChange,
   lowStockThresholdFor,
   defaultLowStockThreshold,
   editMode,
@@ -47,6 +49,37 @@ export default function ProductsView({
   const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
   const [manualSaleCode, setManualSaleCode] = useState(null);
   const [manualSaleQty, setManualSaleQty] = useState("");
+  const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
+
+  // Los precios se guardan en CUP por dentro (todo el resto de la app --
+  // pedidos, ingresos, WhatsApp -- sigue en CUP), pero ahora se cargan en
+  // USD. Este campo aparte (no editPriceInputs directo) evita que el valor
+  // se reformatee en cada tecla al ir y volver por la conversión -- se
+  // siembra una vez al entrar en modo edición, y cada cambio empuja el CUP
+  // calculado a editPriceInputs (lo que de verdad se guarda al Guardar).
+  const [usdPriceInputs, setUsdPriceInputs] = useState({});
+
+  useEffect(() => {
+    if (!editMode || !exchangeRate) return;
+    const seeded = {};
+    activeProducts.forEach((p) => {
+      const cup = parseFloat(editPriceInputs[p.code]);
+      seeded[p.code] = isNaN(cup) ? "" : String(Math.round((cup / exchangeRate) * 100) / 100);
+    });
+    setUsdPriceInputs(seeded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMode]);
+
+  function handleUsdPriceChange(code, raw) {
+    setUsdPriceInputs((s) => ({ ...s, [code]: raw }));
+    if (raw === "") {
+      setEditPriceInputs((s) => ({ ...s, [code]: "0" }));
+      return;
+    }
+    const usd = parseFloat(raw);
+    if (isNaN(usd) || !exchangeRate) return;
+    setEditPriceInputs((s) => ({ ...s, [code]: String(usd * exchangeRate) }));
+  }
 
   function closeManualSale() {
     setManualSaleCode(null);
@@ -77,6 +110,32 @@ export default function ProductsView({
           <Settings2 size={14} />
           {editMode ? "Guardar existencias" : "Ajustar existencias"}
         </button>
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+        <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
+          TASA DE CAMBIO
+        </div>
+        <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+          1 USD =
+          <input
+            type="number"
+            inputMode="decimal"
+            value={rateInput}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setRateInput(raw);
+              const val = parseFloat(raw);
+              onExchangeRateChange(isNaN(val) || val <= 0 ? null : val);
+            }}
+            placeholder="tasa"
+            style={{
+              width: 90, border: "1px solid var(--border)", borderRadius: 7,
+              padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums",
+            }}
+          />
+          CUP
+        </label>
       </div>
 
       <div style={{ display: "grid", gap: 10 }}>
@@ -136,9 +195,25 @@ export default function ProductsView({
                       </>
                     )}
                     {!editMode && showPrices && (
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
-                        {prices[p.code] ? formatCUP(prices[p.code]) : "Precio no definido"}
-                      </div>
+                      prices[p.code] ? (
+                        (() => {
+                          const usd = convertToUSD(prices[p.code], exchangeRate);
+                          return usd !== null ? (
+                            <div style={{ marginTop: 2 }}>
+                              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)" }}>{formatUSD(usd)}</div>
+                              <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatCUP(prices[p.code])}</div>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
+                              {formatCUP(prices[p.code])}
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
+                          Precio no definido
+                        </div>
+                      )
                     )}
                     {!editMode && reservedForTomorrow(allOrders, p.code) > 0 && (
                       <div style={{ fontSize: 11.5, color: "var(--accent-orange-soft-text)", marginTop: 2 }}>
@@ -255,19 +330,42 @@ export default function ProductsView({
                     />
                   </div>
                   <div>
-                    <FieldLabel>PRECIO CUP</FieldLabel>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={editPriceInputs[p.code]}
-                      onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                      title="Precio en CUP"
-                      style={{
-                        width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "var(--text)",
-                      }}
-                    />
+                    {exchangeRate ? (
+                      <>
+                        <FieldLabel>PRECIO USD</FieldLabel>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={usdPriceInputs[p.code] ?? ""}
+                          onChange={(e) => handleUsdPriceChange(p.code, e.target.value)}
+                          title="Precio en dólares"
+                          style={{
+                            width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
+                            border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
+                            fontVariantNumeric: "tabular-nums", color: "var(--text)",
+                          }}
+                        />
+                        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 3 }}>
+                          {formatCUP(parseFloat(editPriceInputs[p.code]) || 0)}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <FieldLabel>PRECIO CUP</FieldLabel>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={editPriceInputs[p.code]}
+                          onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                          title="Precio en CUP -- configurá la tasa de cambio arriba para cargarlo en USD"
+                          style={{
+                            width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
+                            border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
+                            fontVariantNumeric: "tabular-nums", color: "var(--text)",
+                          }}
+                        />
+                      </>
+                    )}
                   </div>
                   <div>
                     <FieldLabel>HL POR UNIDAD</FieldLabel>

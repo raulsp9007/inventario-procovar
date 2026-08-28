@@ -10,7 +10,6 @@ export default function WeeklySummary({
   exchangeRate,
   commissionPercent,
   showPrices,
-  onExchangeRateChange,
   onCommissionPercentChange,
   hlGoal,
   onHlGoalChange,
@@ -26,7 +25,6 @@ export default function WeeklySummary({
   const cumulativeUSD = convertToUSD(cumulativeRevenue, exchangeRate);
   const commissionCUP = (cumulativeRevenue * (commissionPercent || 0)) / 100;
   const commissionUSD = convertToUSD(commissionCUP, exchangeRate);
-  const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
   const [commissionInput, setCommissionInput] = useState(() => (commissionPercent ? String(commissionPercent) : ""));
   const [hlGoalInput, setHlGoalInput] = useState(() => (hlGoal != null ? String(hlGoal) : ""));
   const hlSold = cumulativeHl || 0;
@@ -128,27 +126,6 @@ export default function WeeklySummary({
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 8 }}>
           <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
-            1 USD =
-            <input
-              type="number"
-              inputMode="decimal"
-              value={rateInput}
-              onChange={(e) => {
-                const raw = e.target.value;
-                setRateInput(raw);
-                const val = parseFloat(raw);
-                onExchangeRateChange(isNaN(val) || val <= 0 ? null : val);
-              }}
-              placeholder="tasa"
-              style={{
-                width: 90, border: "1px solid var(--border)", borderRadius: 7,
-                padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums",
-              }}
-            />
-            CUP
-          </label>
-
-          <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
             Comisión
             <input
               type="number"
@@ -176,7 +153,7 @@ export default function WeeklySummary({
             <span style={{ fontWeight: 700, color: "var(--text)" }}>
               {commissionUSD !== null ? formatUSD(commissionUSD) : formatCUP(commissionCUP)}
             </span>
-            {commissionUSD === null && <span> (definí la tasa USD arriba para verla en dólares)</span>}
+            {commissionUSD === null && <span> (definí la tasa USD en Productos para verla en dólares)</span>}
           </div>
         )}
       </div>

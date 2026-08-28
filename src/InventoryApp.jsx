@@ -143,6 +143,11 @@ export default function InventoryApp() {
             movements={movements}
             lastAdjustedAt={lastAdjustedAt}
             showPrices={showPrices}
+            exchangeRate={exchangeRate}
+            onExchangeRateChange={(next) => {
+              setExchangeRate(next);
+              persist({ ...currentPersistedState, exchangeRate: next });
+            }}
             lowStockThresholdFor={lowStockThresholdFor}
             defaultLowStockThreshold={LOW_STOCK_THRESHOLD}
             editMode={editMode}
@@ -182,10 +187,6 @@ export default function InventoryApp() {
             exchangeRate={exchangeRate}
             commissionPercent={commissionPercent}
             showPrices={showPrices}
-            onExchangeRateChange={(next) => {
-              setExchangeRate(next);
-              persist({ ...currentPersistedState, exchangeRate: next });
-            }}
             onCommissionPercentChange={(next) => {
               setCommissionPercent(next);
               persist({ ...currentPersistedState, commissionPercent: next });
