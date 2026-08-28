@@ -28,6 +28,9 @@ export function groupOrders(movements, dateStr) {
   return groupAllOrders(movements).filter((order) => order.date === dateStr);
 }
 
+// El nombre del negocio es solo para mostrar dentro de la app (fila del
+// pedido) -- nunca se manda en el mensaje de WhatsApp, sin importar el
+// checkbox "Mostrar negocio en todos los pedidos".
 export function formatOrderForWhatsApp(order, products, { senderName, sendSenderName } = {}) {
   const lines = [];
   if (sendSenderName && senderName && senderName.trim()) lines.push(senderName.trim());

@@ -18,6 +18,7 @@ export default function InventoryApp() {
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
+    sendBusinessName, setSendBusinessNameSetting,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,
@@ -34,7 +35,7 @@ export default function InventoryApp() {
     movementsNearCap,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
     registerManualSale,
-    confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
+    confirmOrder, deleteOrder, editOrder, markOrderSent,
     updateCustomer, markOrderConfirmed,
   } = useInventoryStore();
 
@@ -212,11 +213,12 @@ export default function InventoryApp() {
             whatsappPhone={whatsappPhone}
             senderName={senderName}
             sendSenderName={sendSenderName}
+            sendBusinessName={sendBusinessName}
+            onToggleSendBusinessName={() => setSendBusinessNameSetting(!sendBusinessName)}
             onConfirmOrder={confirmOrder}
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
             onMarkSent={markOrderSent}
-            onMarkOrdersSent={markOrdersSent}
             onMarkConfirmed={markOrderConfirmed}
             onError={(message) => {
               setError(message);

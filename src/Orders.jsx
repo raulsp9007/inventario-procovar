@@ -31,7 +31,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkOrdersSent, onMarkConfirmed, onError, cierreVentasHour }) {
+export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onError, cierreVentasHour }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -43,8 +43,6 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectSection, setSelectSection] = useState(null); // null | "hoy" | "manana"
-  const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
@@ -326,6 +324,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function postponeToTomorrow(order) {
     onEditOrder(order.orderId, {
       customerName: order.customerName,
+      businessName: order.businessName,
       isDelivery: order.isDelivery,
       note: order.note,
       lines: order.lines.map((l) => ({ code: l.code, qty: l.qty })),
@@ -414,38 +413,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     });
   }
 
-  function toggleSelected(orderId) {
-    setSelectedIds((s) => {
-      const next = new Set(s);
-      if (next.has(orderId)) next.delete(orderId);
-      else next.add(orderId);
-      return next;
-    });
-  }
-
-  function startSelect(section) {
-    setSelectSection(section);
-    setSelectedIds(new Set());
-  }
-
-  function cancelSelect() {
-    setSelectSection(null);
-    setSelectedIds(new Set());
-  }
-
-  function confirmBulkSend(orders) {
-    const idsToSend = [];
-    orders.forEach((order) => {
-      if (!selectedIds.has(order.orderId)) return;
-      openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
-      idsToSend.push(order.orderId);
-    });
-    onMarkOrdersSent(idsToSend, true);
-    setSelectSection(null);
-    setSelectedIds(new Set());
-  }
-
-  function renderOrderRow(order, i, { inSelectMode, showDate }) {
+  function renderOrderRow(order, i, { showDate }) {
     return (
       <div
         key={order.orderId}
@@ -455,15 +423,6 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-          {inSelectMode && (
-            <input
-              type="checkbox"
-              checked={order.sent || selectedIds.has(order.orderId)}
-              disabled={order.sent}
-              onChange={() => toggleSelected(order.orderId)}
-              style={{ marginTop: 2, flexShrink: 0 }}
-            />
-          )}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               {order.orderSeq && (
@@ -479,6 +438,11 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 </span>
               )}
             </div>
+            {sendBusinessName && order.businessName && (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
+                {order.businessName}
+              </div>
+            )}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
               {order.lines.map((line) => {
                 const product = products.find((p) => p.code === line.code);
@@ -514,8 +478,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           </div>
         </div>
 
-        {!inSelectMode && (
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
                 <input
@@ -581,49 +544,30 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               </button>
             </div>
           </div>
-        )}
       </div>
     );
   }
 
   // Misma estructura para PEDIDOS DE HOY y PEDIDOS DE MAÑANA: título +
-  // envío masivo opcional + orden + lista (o mensaje vacío). `section` es
-  // "hoy" | "manana", usado para saber si el modo selección activo es el
-  // de esta sección.
-  function renderOrdersSection({ section, title, sorted, emptyText, sortValue, onSortChange, showDate }) {
-    const inSelectMode = selectSection === section;
+  // orden + lista (o mensaje vacío). Cada pedido tiene su propio botón de
+  // envío por WhatsApp en la fila -- no hace falta un modo de selección
+  // masiva acá.
+  function renderOrdersSection({ title, sorted, emptyText, sortValue, onSortChange, showDate }) {
     return (
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>{title}</div>
-          <button
-            onClick={() => (inSelectMode ? confirmBulkSend(sorted) : startSelect(section))}
-            disabled={sorted.length === 0 || (inSelectMode && selectedIds.size === 0)}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: (sorted.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "var(--border)" : "var(--whatsapp)",
-              color: (sorted.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "var(--text-faint)" : "var(--on-accent)",
-              border: "none", borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600,
-              cursor: (sorted.length === 0 || (inSelectMode && selectedIds.size === 0)) ? "default" : "pointer",
-            }}
-          >
-            <Send size={14} /> {inSelectMode ? `Confirmar envío (${selectedIds.size})` : "Enviar por WhatsApp"}
-          </button>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={sendBusinessName}
+              onChange={(e) => onToggleSendBusinessName(e.target.checked)}
+            />
+            Mostrar negocio en todos los pedidos
+          </label>
         </div>
 
-        {inSelectMode && (
-          <button
-            onClick={cancelSelect}
-            style={{
-              background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 12.5,
-              cursor: "pointer", padding: "0 0 10px", textDecoration: "underline",
-            }}
-          >
-            Cancelar selección
-          </button>
-        )}
-
-        {!inSelectMode && sorted.length > 0 && (
+        {sorted.length > 0 && (
           <div style={{ marginBottom: 10 }}>
             <select
               value={sortValue}
@@ -645,7 +589,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           </div>
         ) : (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-            {sorted.map((order, i) => renderOrderRow(order, i, { inSelectMode, showDate }))}
+            {sorted.map((order, i) => renderOrderRow(order, i, { showDate }))}
           </div>
         )}
       </div>
@@ -833,7 +777,6 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       )}
 
       {activeSection === "hoy" && renderOrdersSection({
-        section: "hoy",
         title: `PEDIDOS DE HOY (${totalTodayCount})`,
         sorted: sortedTodaysOrders,
         emptyText: "Aún no hay pedidos hoy.",
@@ -856,7 +799,6 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       )}
 
       {activeSection === "manana" && renderOrdersSection({
-        section: "manana",
         title: `PRÓXIMOS PEDIDOS (${totalUpcomingCount})`,
         sorted: sortedUpcomingOrders,
         emptyText: "Aún no hay pedidos programados.",
@@ -925,7 +867,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 {formatDate(date)}
               </div>
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-                {pastOrdersByDate.get(date).map((order, i) => renderOrderRow(order, i, { inSelectMode: false }))}
+                {pastOrdersByDate.get(date).map((order, i) => renderOrderRow(order, i, {}))}
               </div>
             </div>
           ))}

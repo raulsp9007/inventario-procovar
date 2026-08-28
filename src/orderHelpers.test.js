@@ -188,6 +188,12 @@ describe("formatOrderForWhatsApp", () => {
     expect(text).toBe("🛺 Domicilio 🛺\nCliente A\nSin hielo\nParranda 1500ml - 1");
   });
 
+  it("nunca manda el nombre del negocio en el mensaje, aunque el pedido tenga uno guardado (es solo para mostrar en la app)", () => {
+    const order = { customerName: "Cliente A", businessName: "Bar Cliente A", isDelivery: false, note: "", lines: [{ code: "P1500", qty: 1 }] };
+    const text = formatOrderForWhatsApp(order, products, {});
+    expect(text).toBe("Cliente A\nParranda 1500ml - 1");
+  });
+
   it("agrega el nombre del remitente solo si sendSenderName está activo", () => {
     const order = { customerName: "Cliente A", isDelivery: false, note: "", lines: [{ code: "P1500", qty: 1 }] };
     const withSender = formatOrderForWhatsApp(order, products, { senderName: "Raul", sendSenderName: true });

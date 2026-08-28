@@ -52,6 +52,7 @@ export function useInventoryStore() {
   const [cierreVentasHour, setCierreVentasHour] = useState(null); // 0-23, o null = desactivado
   const [senderName, setSenderName] = useState("");
   const [sendSenderName, setSendSenderName] = useState(false);
+  const [sendBusinessName, setSendBusinessName] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [editMode, setEditMode] = useState(false);
@@ -108,7 +109,7 @@ export function useInventoryStore() {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, whatsappPhone,
     whatsappContactName, cierreVentasHour,
-    senderName, sendSenderName,
+    senderName, sendSenderName, sendBusinessName,
   };
 
   const persist = useCallback(async (nextState) => {
@@ -143,6 +144,7 @@ export function useInventoryStore() {
     const nextCierreVentasHour = parsed.cierreVentasHour ?? null;
     const nextSenderName = parsed.senderName || "";
     const nextSendSenderName = parsed.sendSenderName ?? false;
+    const nextSendBusinessName = parsed.sendBusinessName ?? true;
     const migratedHl = parsed.cumulativeHl == null;
     // Migración: dato guardado (o backup) de antes de este campo — se siembra una sola vez
     // desde el HL ya vendido (derivado del historial), para no perder lo que ya se contó.
@@ -164,6 +166,7 @@ export function useInventoryStore() {
     setCierreVentasHour(nextCierreVentasHour);
     setSenderName(nextSenderName);
     setSendSenderName(nextSendSenderName);
+    setSendBusinessName(nextSendBusinessName);
 
     if (alwaysPersist || migratedHl) {
       persist({
@@ -171,7 +174,7 @@ export function useInventoryStore() {
         prices: nextPrices, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
-        senderName: nextSenderName, sendSenderName: nextSendSenderName,
+        senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
       });
     }
   }
@@ -683,6 +686,11 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, movements: nextMovements });
   }
 
+  function setSendBusinessNameSetting(next) {
+    setSendBusinessName(next);
+    persist({ ...currentPersistedState, sendBusinessName: next });
+  }
+
   return {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
@@ -690,6 +698,7 @@ export function useInventoryStore() {
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
+    sendBusinessName, setSendBusinessNameSetting,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,
