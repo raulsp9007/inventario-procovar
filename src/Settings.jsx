@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sun, Moon, Eye, EyeOff } from "lucide-react";
+import { Sun, Moon, Eye, EyeOff, RefreshCw } from "lucide-react";
 
 function formatHour(h) {
   const period = h < 12 ? "AM" : "PM";
@@ -28,6 +28,26 @@ export default function Settings({
   const [nameInput, setNameInput] = useState(senderName || "");
   const [sendChecked, setSendChecked] = useState(!!sendSenderName);
   const [pickerError, setPickerError] = useState("");
+  const [clearingCache, setClearingCache] = useState(false);
+
+  // Borra el service worker y el cache de la PWA (versión vieja de la app
+  // que haya quedado servida offline) y recarga -- no toca `localStorage`,
+  // así que los pedidos/stock/config quedan intactos.
+  async function clearCacheAndReload() {
+    setClearingCache(true);
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } finally {
+      window.location.reload();
+    }
+  }
 
   function save() {
     const digits = phoneInput.replace(/\D/g, "");
@@ -200,6 +220,26 @@ export default function Settings({
             Guardado: {senderName}
           </div>
         )}
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Actualizar app</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Si la app se ve rara o desactualizada, borra la caché y recarga. No toca tus pedidos ni el stock -- eso se guarda aparte.
+        </div>
+        <button
+          onClick={clearCacheAndReload}
+          disabled={clearingCache}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: "transparent", border: "1px solid var(--border)", color: "var(--text)",
+            borderRadius: 7, padding: "9px 14px", fontSize: 13.5, fontWeight: 600,
+            cursor: clearingCache ? "default" : "pointer", opacity: clearingCache ? 0.6 : 1,
+          }}
+        >
+          <RefreshCw size={16} />
+          {clearingCache ? "Borrando caché…" : "Borrar caché y recargar"}
+        </button>
       </div>
     </div>
   );
