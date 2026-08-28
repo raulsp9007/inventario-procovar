@@ -2,12 +2,12 @@ import { useState } from "react";
 import { ClipboardList, PieChart, BarChart3, Users, Package, Settings, Menu, X } from "lucide-react";
 
 const TABS = [
-  { key: "pedidos", label: "Pedidos", Icon: ClipboardList },
-  { key: "portafolio", label: "Portafolio", Icon: PieChart },
-  { key: "resumen", label: "Resumen semanal", Icon: BarChart3 },
-  { key: "clientes", label: "Clientes", Icon: Users },
-  { key: "stock", label: "Productos", Icon: Package },
-  { key: "config", label: "Configuración", Icon: Settings },
+  { key: "pedidos", label: "Pedidos", shortLabel: "Pedidos", Icon: ClipboardList },
+  { key: "portafolio", label: "Portafolio", shortLabel: "Portafolio", Icon: PieChart },
+  { key: "resumen", label: "Resumen semanal", shortLabel: "Resumen", Icon: BarChart3 },
+  { key: "clientes", label: "Clientes", shortLabel: "Clientes", Icon: Users },
+  { key: "stock", label: "Productos", shortLabel: "Productos", Icon: Package },
+  { key: "config", label: "Configuración", shortLabel: "Config.", Icon: Settings },
 ];
 
 export const VIEW_LABELS = TABS.reduce((acc, t) => ({ ...acc, [t.key]: t.label }), {});
@@ -71,6 +71,18 @@ export default function RadialNav({ view, setView }) {
             }}
           >
             <tab.Icon size={19} />
+            <span
+              aria-hidden="true"
+              style={{
+                position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)",
+                marginTop: 4, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
+                background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)",
+                borderRadius: 5, padding: "1px 5px", pointerEvents: "none",
+                opacity: open ? 1 : 0, transition: "opacity 0.2s ease",
+              }}
+            >
+              {tab.shortLabel}
+            </span>
           </button>
         );
       })}

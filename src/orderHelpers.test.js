@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupAllOrders, formatOrderForWhatsApp, isCommittedOrder, isCommittedMovement, reservedForTomorrow } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition } from "./orderHelpers";
 
 function makeMovement(overrides = {}) {
   return {
@@ -93,6 +93,83 @@ describe("groupAllOrders", () => {
   it("default bucket a 'hoy' si el movimiento no lo trae (dato viejo)", () => {
     const movements = [makeMovement({ bucket: undefined })];
     expect(groupAllOrders(movements)[0].bucket).toBe("hoy");
+  });
+});
+
+describe("computeScheduledTransition", () => {
+  const TODAY = "2026-08-27";
+
+  it("devuelve null si no hay nada programado para transicionar", () => {
+    const movements = [makeMovement({ bucket: "hoy" })];
+    expect(computeScheduledTransition(movements, TODAY)).toBeNull();
+  });
+
+  it("transiciona un programado cuya fecha ya llegó (hoy)", () => {
+    const movements = [makeMovement({ bucket: "manana", date: TODAY, sent: false, qty: 3, unitPrice: 100, unitHl: 0.1 })];
+    const result = computeScheduledTransition(movements, TODAY);
+    expect(result).not.toBeNull();
+    expect(result.nextMovements[0].bucket).toBe("hoy");
+    expect(result.nextMovements[0].date).toBe(TODAY);
+    expect(result.stockDeltas.P1500).toBe(3);
+    expect(result.addedRevenue).toBe(300);
+    expect(result.addedHl).toBeCloseTo(0.3);
+  });
+
+  it("transiciona un programado con fecha atrasada (la app estuvo cerrada varios días)", () => {
+    const movements = [makeMovement({ bucket: "manana", date: "2026-08-20", sent: false, qty: 2 })];
+    const result = computeScheduledTransition(movements, TODAY);
+    expect(result).not.toBeNull();
+    expect(result.nextMovements[0].date).toBe(TODAY);
+  });
+
+  it("NO transiciona un programado con fecha futura", () => {
+    const movements = [makeMovement({ bucket: "manana", date: "2026-09-01", sent: false })];
+    expect(computeScheduledTransition(movements, TODAY)).toBeNull();
+  });
+
+  it("NO transiciona un programado que ya está enviado (evita descuento doble)", () => {
+    const movements = [makeMovement({ bucket: "manana", date: TODAY, sent: true, qty: 5 })];
+    expect(computeScheduledTransition(movements, TODAY)).toBeNull();
+  });
+
+  it("no toca pedidos que ya son de hoy", () => {
+    const movements = [makeMovement({ bucket: "hoy", date: TODAY, sent: false })];
+    expect(computeScheduledTransition(movements, TODAY)).toBeNull();
+  });
+
+  it("suma stock/ingreso/HL de varias líneas del mismo pedido por producto", () => {
+    const orderId = "order-multi";
+    const movements = [
+      makeMovement({ orderId, bucket: "manana", date: TODAY, sent: false, code: "P1500", qty: 2, unitPrice: 100, unitHl: 0.15 }),
+      makeMovement({ orderId, bucket: "manana", date: TODAY, sent: false, code: "P500", qty: 4, unitPrice: 50, unitHl: 0.05 }),
+    ];
+    const result = computeScheduledTransition(movements, TODAY);
+    expect(result.stockDeltas).toEqual({ P1500: 2, P500: 4 });
+    expect(result.addedRevenue).toBe(400);
+    expect(result.addedHl).toBeCloseTo(0.5);
+  });
+
+  it("transiciona varios pedidos distintos a la vez y deja el resto sin tocar", () => {
+    const movements = [
+      makeMovement({ orderId: "o1", bucket: "manana", date: TODAY, sent: false, code: "P1500", qty: 2 }),
+      makeMovement({ orderId: "o2", bucket: "manana", date: "2026-08-25", sent: false, code: "P1500", qty: 3 }),
+      makeMovement({ orderId: "o3", bucket: "manana", date: "2026-09-05", sent: false, code: "P1500", qty: 10 }),
+      makeMovement({ orderId: "o4", bucket: "hoy", date: TODAY, sent: true, code: "P1500", qty: 1 }),
+    ];
+    const result = computeScheduledTransition(movements, TODAY);
+    expect(result.orderIdsToTransition.has("o1")).toBe(true);
+    expect(result.orderIdsToTransition.has("o2")).toBe(true);
+    expect(result.orderIdsToTransition.has("o3")).toBe(false);
+    expect(result.orderIdsToTransition.has("o4")).toBe(false);
+    expect(result.stockDeltas.P1500).toBe(5);
+    const untouched = result.nextMovements.find((m) => m.orderId === "o3");
+    expect(untouched.bucket).toBe("manana");
+    expect(untouched.date).toBe("2026-09-05");
+  });
+
+  it("trata bucket sin definir como 'hoy' (dato viejo) y no lo transiciona", () => {
+    const movements = [makeMovement({ bucket: undefined, date: "2026-08-01", sent: false })];
+    expect(computeScheduledTransition(movements, TODAY)).toBeNull();
   });
 });
 

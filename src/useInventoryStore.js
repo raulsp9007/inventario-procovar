@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getData, setData } from "./storage";
 import { todayStr, tomorrowStr } from "./dateUtils";
-import { isCommittedMovement } from "./orderHelpers";
+import { isCommittedMovement, computeScheduledTransition } from "./orderHelpers";
 import { totalHlSold } from "./money";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
@@ -206,23 +206,13 @@ export function useInventoryStore() {
       movements: curMovements, stock: curStock,
       cumulativeRevenue: curRevenue, cumulativeHl: curHl, currentPersistedState: curPersisted,
     } = latestStateRef.current;
-    const todayCal = todayStr();
-    const orderIdsToTransition = new Set(
-      curMovements
-        .filter((m) => m.orderId && (m.bucket || "hoy") === "manana" && !m.sent && m.date <= todayCal)
-        .map((m) => m.orderId)
-    );
-    if (orderIdsToTransition.size === 0) return;
+    const result = computeScheduledTransition(curMovements, todayStr());
+    if (!result) return;
+    const { nextMovements, stockDeltas, addedRevenue, addedHl } = result;
 
     const nextStock = { ...curStock };
-    let addedRevenue = 0;
-    let addedHl = 0;
-    const nextMovements = curMovements.map((m) => {
-      if (!orderIdsToTransition.has(m.orderId)) return m;
-      nextStock[m.code] = (nextStock[m.code] || 0) - m.qty;
-      addedRevenue += m.qty * (m.unitPrice || 0);
-      addedHl += m.qty * (m.unitHl || 0);
-      return { ...m, bucket: "hoy", date: todayCal };
+    Object.entries(stockDeltas).forEach(([code, qty]) => {
+      nextStock[code] = (nextStock[code] || 0) - qty;
     });
     const nextCumulativeRevenue = curRevenue + addedRevenue;
     const nextCumulativeHl = curHl + addedHl;

@@ -53,6 +53,33 @@ export function isCommittedMovement(m) {
   return bucket === "hoy" || (bucket === "manana" && !!m.sent);
 }
 
+// Pedidos programados (bucket "manana") sin enviar cuya fecha ya llegó (o
+// pasó) deben pasar a "hoy" solos -- devuelve todo lo necesario para
+// aplicar el cambio (nuevos movimientos + cuánto sumar a stock/ingreso/HL),
+// pero no toca nada por sí misma: pura, para poder testearla sin React.
+// null si no hay nada que transicionar.
+export function computeScheduledTransition(movements, todayCal) {
+  const orderIdsToTransition = new Set(
+    movements
+      .filter((m) => m.orderId && (m.bucket || "hoy") === "manana" && !m.sent && m.date <= todayCal)
+      .map((m) => m.orderId)
+  );
+  if (orderIdsToTransition.size === 0) return null;
+
+  const stockDeltas = {};
+  let addedRevenue = 0;
+  let addedHl = 0;
+  const nextMovements = movements.map((m) => {
+    if (!orderIdsToTransition.has(m.orderId)) return m;
+    stockDeltas[m.code] = (stockDeltas[m.code] || 0) + m.qty;
+    addedRevenue += m.qty * (m.unitPrice || 0);
+    addedHl += m.qty * (m.unitHl || 0);
+    return { ...m, bucket: "hoy", date: todayCal };
+  });
+
+  return { orderIdsToTransition, nextMovements, stockDeltas, addedRevenue, addedHl };
+}
+
 // Unidades ya reservadas en pedidos de mañana sin enviar (no descuentan
 // stock todavía, pero igual comprometen disponibilidad futura). Se excluye
 // opcionalmente un pedido (el que se está editando) para no contarse a sí mismo.
