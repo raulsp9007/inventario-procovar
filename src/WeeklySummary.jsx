@@ -123,6 +123,11 @@ export default function WeeklySummary({
             </span>
           )}
         </div>
+        {showPrices && cumulativeUSD !== null && (
+          <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: -6, marginBottom: 8 }}>
+            El USD es estimado con la tasa actual sobre todo el histórico -- no refleja la tasa de cada venta.
+          </div>
+        )}
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 8 }}>
           <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>

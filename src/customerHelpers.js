@@ -15,6 +15,23 @@ export function matchCustomerNames(names, query) {
   return names.filter((name) => name.toLowerCase().includes(lower));
 }
 
+function normalizeCustomerName(name) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// Detecta un cliente "casi igual" ya guardado (typo de mayúsculas, espacios
+// de más/de menos) cuando el nombre escrito no es exactamente ninguno de
+// los existentes -- para avisar antes de crear sin querer un cliente
+// duplicado. Devuelve el nombre EXISTENTE (tal como está guardado) o null
+// si no hay ambigüedad (ya es exacto, o no se parece a ninguno).
+export function findNearDuplicateCustomerName(names, query) {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  if (names.includes(trimmed)) return null;
+  const normalizedQuery = normalizeCustomerName(trimmed);
+  return names.find((name) => normalizeCustomerName(name) === normalizedQuery) || null;
+}
+
 export function getCustomerOrders(movements, customerName) {
   const orderMovements = movements.filter((m) => m.customerName === customerName && m.orderId);
   const byId = new Map();
@@ -83,6 +100,22 @@ export function getCustomerBusinessName(movements, customerName) {
     }
   });
   return businessName;
+}
+
+// Teléfono guardado para ese cliente (el más reciente entre todos sus
+// pedidos) -- usado para autocompletar al armar un pedido nuevo, igual que
+// getCustomerBusinessName.
+export function getCustomerPhone(movements, customerName) {
+  let phone = "";
+  let latestTimestamp = "";
+  movements.forEach((m) => {
+    if (m.customerName !== customerName || !m.customerPhone) return;
+    if (m.timestamp > latestTimestamp) {
+      phone = m.customerPhone;
+      latestTimestamp = m.timestamp;
+    }
+  });
+  return phone;
 }
 
 // Totales por cliente (unidades + ingreso), solo ventas comprometidas y con

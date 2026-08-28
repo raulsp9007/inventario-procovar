@@ -1,9 +1,9 @@
 import { X } from "lucide-react";
 import { tomorrowStr } from "./dateUtils";
-import { formatCUP } from "./money";
+import { formatCUP, priceToCUP } from "./money";
 
-function draftTotal(draftLines, prices) {
-  return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (prices[l.code] || 0), 0);
+function draftTotal(draftLines, prices, exchangeRate) {
+  return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * priceToCUP(prices[l.code], exchangeRate), 0);
 }
 
 // Modal de crear/editar pedido -- componente de presentación pura, sin
@@ -16,11 +16,13 @@ export default function OrderFormModal({
   draftDate, onDraftDateChange,
   customerName, onCustomerNameChange,
   businessName, onBusinessNameChange,
+  customerPhone, onCustomerPhoneChange,
   showSuggestions, onShowSuggestions, suggestions, onPickSuggestion,
+  nearDuplicateName, onUseNearDuplicateName,
   isDelivery, onIsDeliveryChange,
   note, onNoteChange,
   draftLines, onUpdateDraftLineQty, onRemoveDraftLine,
-  showPrices, prices, products,
+  showPrices, prices, exchangeRate, products,
   availableProducts, effectiveSelectedProductCode, onSelectedProductCodeChange,
   computeAvailable,
   pendingQty, onPendingQtyChange, onAddDraftLine,
@@ -130,11 +132,44 @@ export default function OrderFormModal({
           )}
         </div>
 
+        {nearDuplicateName && (
+          <div
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+              background: "var(--banner-warning-bg)", border: `1px solid var(--border-warn)`, borderRadius: 7,
+              padding: "7px 10px", fontSize: 12.5, color: "var(--warning-text)", marginBottom: 10,
+            }}
+          >
+            <span>¿Es el mismo cliente que <strong>{nearDuplicateName}</strong>?</span>
+            <button
+              onClick={onUseNearDuplicateName}
+              style={{
+                flexShrink: 0, background: "transparent", border: "1px solid var(--border-warn)",
+                color: "var(--warning-text)", borderRadius: 6, padding: "4px 8px", fontSize: 12, cursor: "pointer",
+              }}
+            >
+              Usar ese
+            </button>
+          </div>
+        )}
+
         <input
           type="text"
           placeholder="Nombre del negocio (opcional)"
           value={businessName}
           onChange={(e) => onBusinessNameChange(e.target.value)}
+          style={{
+            width: "100%", border: "1px solid var(--border)", borderRadius: 7,
+            padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
+          }}
+        />
+
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="Teléfono del cliente (opcional)"
+          value={customerPhone}
+          onChange={(e) => onCustomerPhoneChange(e.target.value.replace(/[^\d]/g, ""))}
           style={{
             width: "100%", border: "1px solid var(--border)", borderRadius: 7,
             padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
@@ -197,7 +232,7 @@ export default function OrderFormModal({
             })}
             {showPrices && (
               <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13.5, fontWeight: 600 }}>
-                Total: {formatCUP(draftTotal(draftLines, prices))}
+                Total: {formatCUP(draftTotal(draftLines, prices, exchangeRate))}
               </div>
             )}
           </div>

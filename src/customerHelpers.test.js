@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getCustomerNames, matchCustomerNames, getCustomerSalesTotals } from "./customerHelpers";
+import { getCustomerNames, matchCustomerNames, getCustomerSalesTotals, findNearDuplicateCustomerName, getCustomerPhone } from "./customerHelpers";
 
 const products = [
   { code: "P1500", name: "Parranda 1500ml" },
@@ -26,6 +26,45 @@ describe("getCustomerNames / matchCustomerNames", () => {
 
   it("matchCustomerNames devuelve vacío si la query está vacía", () => {
     expect(matchCustomerNames(["Ana", "Beto"], "  ")).toEqual([]);
+  });
+});
+
+describe("findNearDuplicateCustomerName", () => {
+  const names = ["Pepe Aguilar", "Ana"];
+
+  it("detecta diferencia solo de mayúsculas", () => {
+    expect(findNearDuplicateCustomerName(names, "pepe aguilar")).toBe("Pepe Aguilar");
+  });
+
+  it("detecta espacios de más/de menos", () => {
+    expect(findNearDuplicateCustomerName(names, "Pepe  Aguilar ")).toBe("Pepe Aguilar");
+  });
+
+  it("no avisa si el nombre ya es exactamente igual a uno existente", () => {
+    expect(findNearDuplicateCustomerName(names, "Pepe Aguilar")).toBeNull();
+  });
+
+  it("no avisa si el nombre es realmente distinto", () => {
+    expect(findNearDuplicateCustomerName(names, "Juan Pérez")).toBeNull();
+  });
+
+  it("no avisa con query vacía", () => {
+    expect(findNearDuplicateCustomerName(names, "   ")).toBeNull();
+  });
+});
+
+describe("getCustomerPhone", () => {
+  it("devuelve el teléfono más reciente guardado para ese cliente", () => {
+    const movements = [
+      venta({ customerName: "Ana", customerPhone: "5355550001", timestamp: "2026-08-01T10:00:00.000Z" }),
+      venta({ customerName: "Ana", customerPhone: "5355550002", timestamp: "2026-08-20T10:00:00.000Z" }),
+    ];
+    expect(getCustomerPhone(movements, "Ana")).toBe("5355550002");
+  });
+
+  it("devuelve vacío si el cliente nunca tuvo teléfono guardado", () => {
+    const movements = [venta({ customerName: "Ana" })];
+    expect(getCustomerPhone(movements, "Ana")).toBe("");
   });
 });
 

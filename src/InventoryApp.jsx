@@ -19,6 +19,7 @@ export default function InventoryApp() {
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
     sendBusinessName, setSendBusinessNameSetting,
+    lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,
@@ -124,9 +125,19 @@ export default function InventoryApp() {
           <Banner
             variant="warning"
             style={{ marginBottom: 16 }}
-            actions={[{ label: "Exportar respaldo", kind: "dark", onClick: () => downloadBackup(currentPersistedState) }]}
+            actions={[{ label: "Exportar respaldo", kind: "dark", onClick: () => { downloadBackup(currentPersistedState); markBackupDone(); } }]}
           >
             El historial de movimientos está por llenarse ({movements.length}/{MOVEMENTS_CAP}). Exportá un respaldo pronto -- al llegar al tope, los movimientos más viejos se empiezan a perder.
+          </Banner>
+        )}
+
+        {!movementsNearCap && backupReminderDue && (
+          <Banner
+            variant="warning"
+            style={{ marginBottom: 16 }}
+            actions={[{ label: "Exportar respaldo", kind: "dark", onClick: () => { downloadBackup(currentPersistedState); markBackupDone(); } }]}
+          >
+            {lastBackupAt ? "Hace más de 30 días que no exportás un respaldo." : "Todavía no exportaste ningún respaldo."} Si perdés el dispositivo, se pierden los datos.
           </Banner>
         )}
 
@@ -291,7 +302,7 @@ export default function InventoryApp() {
 
         <div style={{ marginTop: 20, display: "flex", justifyContent: "center", gap: 8 }}>
           <button
-            onClick={() => downloadBackup(currentPersistedState)}
+            onClick={() => { downloadBackup(currentPersistedState); markBackupDone(); }}
             style={{
               display: "flex", alignItems: "center", gap: 6,
               background: "transparent", border: "1px solid var(--border-strong)", color: "var(--text-muted)",

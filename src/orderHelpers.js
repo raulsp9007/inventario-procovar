@@ -1,3 +1,6 @@
+import { formatDate } from "./dateUtils";
+import { formatCUP } from "./money";
+
 export function groupAllOrders(movements) {
   const orderMovements = movements.filter((m) => m.orderId);
   const byId = new Map();
@@ -7,6 +10,7 @@ export function groupAllOrders(movements) {
         orderId: m.orderId,
         customerName: m.customerName,
         businessName: m.businessName || "",
+        customerPhone: m.customerPhone || "",
         isDelivery: !!m.isDelivery,
         note: m.note || "",
         sent: !!m.sent,
@@ -41,6 +45,23 @@ export function formatOrderForWhatsApp(order, products, { senderName, sendSender
     const product = products.find((p) => p.code === line.code);
     lines.push(`${product ? product.name : line.code} - ${line.qty}`);
   });
+  return lines.join("\n");
+}
+
+// Copia del pedido para mandarle directo al cliente (a su propio teléfono,
+// no al contacto de negocio configurado) -- a propósito NO lleva nombre del
+// negocio, remitente ni nota interna: solo lo que el cliente necesita ver
+// para confirmar qué compró, cuándo pasa a buscarlo (o si es domicilio) y
+// cuánto paga.
+export function formatOrderForCustomer(order, products) {
+  const total = order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
+  const pickupInfo = order.isDelivery ? "(Domicilio)" : "(recoger entre 9:00 am y 3:00pm)";
+  const lines = [`Tu pedido para ${formatDate(order.date)}: ${pickupInfo}`, ""];
+  order.lines.forEach((line) => {
+    const product = products.find((p) => p.code === line.code);
+    lines.push(`${line.qty}x ${product ? product.name : line.code}`);
+  });
+  lines.push("", `Total: ${formatCUP(total)}`);
   return lines.join("\n");
 }
 

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getData, setData } from "./storage";
-import { todayStr, tomorrowStr } from "./dateUtils";
+import { todayStr, tomorrowStr, daysSince } from "./dateUtils";
 import { isCommittedMovement, computeScheduledTransition } from "./orderHelpers";
-import { totalHlSold } from "./money";
+import { totalHlSold, priceToCUP } from "./money";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 
@@ -20,6 +20,7 @@ export const LOW_STOCK_THRESHOLD = 20;
 // 5000 da meses de margen; igual se avisa (movementsNearCap) antes de
 // llegar, para exportar un respaldo a tiempo.
 export const MOVEMENTS_CAP = 5000;
+export const BACKUP_REMINDER_DAYS = 30;
 const STORAGE_KEY = "procovar-inventario-v1";
 const VALID_VIEWS = ["resumen", "pedidos", "portafolio", "clientes", "stock", "config"];
 const VIEW_STORAGE_KEY = "procovar-active-tab";
@@ -53,6 +54,8 @@ export function useInventoryStore() {
   const [senderName, setSenderName] = useState("");
   const [sendSenderName, setSendSenderName] = useState(false);
   const [sendBusinessName, setSendBusinessName] = useState(true);
+  const [lastBackupAt, setLastBackupAt] = useState(null);
+  const [pricesAreUsd, setPricesAreUsd] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [editMode, setEditMode] = useState(false);
@@ -109,7 +112,7 @@ export function useInventoryStore() {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, whatsappPhone,
     whatsappContactName, cierreVentasHour,
-    senderName, sendSenderName, sendBusinessName,
+    senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
   };
 
   const persist = useCallback(async (nextState) => {
@@ -133,9 +136,18 @@ export function useInventoryStore() {
     const loadedProducts = parsed.products || DEFAULT_PRODUCTS;
     const nextStock = parsed.stock || {};
     const nextLastAdjustedAt = parsed.lastAdjustedAt || {};
-    const nextPrices = parsed.prices || {};
     const nextCumulativeRevenue = parsed.cumulativeRevenue || 0;
     const nextExchangeRate = parsed.exchangeRate ?? null;
+    // Migración: `prices` se guardaba en CUP -- de acá en más se guarda en
+    // USD (precio fijo, no se mueve solo al cambiar la tasa; el CUP de cada
+    // venta se calcula al vuelo con priceToCUP). Se convierte una sola vez
+    // con la tasa que ya estaba cargada; si nunca hubo tasa, no hay nada
+    // que convertir (esos precios ya funcionaban como CUP directo, y
+    // priceToCUP los sigue tratando así sin tasa).
+    const migratedPricesToUsd = !parsed.pricesAreUsd && !!nextExchangeRate;
+    const nextPrices = migratedPricesToUsd
+      ? Object.fromEntries(Object.entries(parsed.prices || {}).map(([code, cup]) => [code, Math.round((cup / nextExchangeRate) * 100) / 100]))
+      : (parsed.prices || {});
     const nextCommissionPercent = parsed.commissionPercent || 0;
     const nextShowPrices = parsed.showPrices ?? true;
     const nextHlGoal = parsed.hlGoal ?? null;
@@ -145,6 +157,7 @@ export function useInventoryStore() {
     const nextSenderName = parsed.senderName || "";
     const nextSendSenderName = parsed.sendSenderName ?? false;
     const nextSendBusinessName = parsed.sendBusinessName ?? true;
+    const nextLastBackupAt = parsed.lastBackupAt ?? null;
     const migratedHl = parsed.cumulativeHl == null;
     // Migración: dato guardado (o backup) de antes de este campo — se siembra una sola vez
     // desde el HL ya vendido (derivado del historial), para no perder lo que ya se contó.
@@ -155,6 +168,7 @@ export function useInventoryStore() {
     setLastAdjustedAt(nextLastAdjustedAt);
     setProducts(loadedProducts);
     setPrices(nextPrices);
+    setPricesAreUsd(migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false));
     setCumulativeRevenue(nextCumulativeRevenue);
     setCumulativeHl(nextCumulativeHl);
     setExchangeRate(nextExchangeRate);
@@ -167,14 +181,17 @@ export function useInventoryStore() {
     setSenderName(nextSenderName);
     setSendSenderName(nextSendSenderName);
     setSendBusinessName(nextSendBusinessName);
+    setLastBackupAt(nextLastBackupAt);
 
-    if (alwaysPersist || migratedHl) {
+    if (alwaysPersist || migratedHl || migratedPricesToUsd) {
       persist({
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
-        prices: nextPrices, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
+        prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
+        cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
+        lastBackupAt: nextLastBackupAt,
       });
     }
   }
@@ -288,6 +305,11 @@ export function useInventoryStore() {
   // Aviso temprano antes de llegar al tope -- así hay tiempo de exportar un
   // respaldo antes de que los movimientos más viejos empiecen a perderse.
   const movementsNearCap = movements.length >= MOVEMENTS_CAP * 0.9;
+
+  // Recordatorio de respaldo periódico -- solo si hay algo que respaldar y
+  // nunca se exportó o ya pasaron BACKUP_REMINDER_DAYS desde la última vez.
+  const backupReminderDue = movements.length > 0
+    && (lastBackupAt === null || daysSince(lastBackupAt) >= BACKUP_REMINDER_DAYS);
 
   const activeProducts = products.filter((p) => !p.archived);
   const archivedProducts = products.filter((p) => p.archived);
@@ -453,7 +475,7 @@ export function useInventoryStore() {
   // "customerName" fijo en "Venta manual", ya enviado y confirmado -- así
   // aparece editable en Pedidos igual que cualquier otro.
   function registerManualSale(code, qty) {
-    const unitPrice = prices[code] || 0;
+    const unitPrice = priceToCUP(prices[code], exchangeRate);
     const product = products.find((p) => p.code === code);
     const unitHl = product?.hl || 0;
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -479,7 +501,7 @@ export function useInventoryStore() {
     });
   }
 
-  function confirmOrder({ customerName, businessName, isDelivery, note, lines, bucket, date: chosenDate }) {
+  function confirmOrder({ customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     // Numero consecutivo solo para ubicar el pedido en la app (no se manda
     // por WhatsApp) -- se deriva del maximo ya usado en vez de guardar un
@@ -492,10 +514,10 @@ export function useInventoryStore() {
     let addedRevenue = 0;
     let addedHl = 0;
     lines.forEach(({ code, qty }) => {
-      const unitPrice = prices[code] || 0;
+      const unitPrice = priceToCUP(prices[code], exchangeRate);
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", isDelivery, note, bucket, date }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone || "", isDelivery, note, bucket, date }));
       if (committed) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;
@@ -557,7 +579,7 @@ export function useInventoryStore() {
   // mañana desde el aviso de cierre de ventas, el pedido tiene que quedar
   // SIEMPRE sin comprometer (fuera de stock/estadísticas de hoy) sin
   // importar si ya estaba marcado Enviado -- por eso ahí se fuerza `false`.
-  function editOrder(orderId, { customerName, businessName, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
+  function editOrder(orderId, { customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
     const wasSent = !!originalMovements[0].sent;
@@ -584,10 +606,10 @@ export function useInventoryStore() {
     let addedRevenue = 0;
     let addedHl = 0;
     lines.forEach(({ code, qty }) => {
-      const unitPrice = prices[code] || 0;
+      const unitPrice = priceToCUP(prices[code], exchangeRate);
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", isDelivery, note, bucket, date, sent: nextSent }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone || "", isDelivery, note, bucket, date, sent: nextSent }));
       if (willBeCommitted) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;
@@ -691,6 +713,12 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, sendBusinessName: next });
   }
 
+  function markBackupDone() {
+    const next = new Date().toISOString();
+    setLastBackupAt(next);
+    persist({ ...currentPersistedState, lastBackupAt: next });
+  }
+
   return {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
@@ -699,6 +727,7 @@ export function useInventoryStore() {
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
     sendBusinessName, setSendBusinessNameSetting,
+    lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,

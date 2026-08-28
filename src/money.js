@@ -16,6 +16,16 @@ export function convertToUSD(cupAmount, exchangeRate) {
   return cupAmount / exchangeRate;
 }
 
+// `prices[code]` se guarda en USD (precio fijo que no se mueve solo al
+// cambiar la tasa) -- esto lo convierte al CUP real de una venta/total,
+// multiplicando por la tasa vigente. Sin tasa cargada (negocio que nunca
+// la configuró) el precio se usa tal cual, como CUP directo, para que
+// siga funcionando sin depender de tener una tasa.
+export function priceToCUP(price, exchangeRate) {
+  const n = Number(price) || 0;
+  return exchangeRate && exchangeRate > 0 ? n * exchangeRate : n;
+}
+
 export function revenueInRange(movements, code, start, end) {
   return movements
     .filter((m) => m.code === code && m.type === "venta" && isCommittedMovement(m) && m.date >= start && m.date <= end)

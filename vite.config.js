@@ -13,6 +13,10 @@ export default defineConfig(({ mode, isPreview }) => {
     server: {
       port: Number(process.env.PORT) || 5173,
     },
+    test: {
+      environment: "jsdom",
+      setupFiles: ["./src/setupTests.js"],
+    },
     plugins: [
       react(),
       VitePWA({

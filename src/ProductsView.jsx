@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ReceiptText, X } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
-import { formatCUP, formatUSD, convertToUSD } from "./money";
+import { formatCUP, formatUSD, priceToCUP } from "./money";
 import FieldLabel from "./FieldLabel.jsx";
 import IconButton from "./IconButton.jsx";
 import Card from "./Card.jsx";
@@ -50,36 +50,6 @@ export default function ProductsView({
   const [manualSaleCode, setManualSaleCode] = useState(null);
   const [manualSaleQty, setManualSaleQty] = useState("");
   const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
-
-  // Los precios se guardan en CUP por dentro (todo el resto de la app --
-  // pedidos, ingresos, WhatsApp -- sigue en CUP), pero ahora se cargan en
-  // USD. Este campo aparte (no editPriceInputs directo) evita que el valor
-  // se reformatee en cada tecla al ir y volver por la conversión -- se
-  // siembra una vez al entrar en modo edición, y cada cambio empuja el CUP
-  // calculado a editPriceInputs (lo que de verdad se guarda al Guardar).
-  const [usdPriceInputs, setUsdPriceInputs] = useState({});
-
-  useEffect(() => {
-    if (!editMode || !exchangeRate) return;
-    const seeded = {};
-    activeProducts.forEach((p) => {
-      const cup = parseFloat(editPriceInputs[p.code]);
-      seeded[p.code] = isNaN(cup) ? "" : String(Math.round((cup / exchangeRate) * 100) / 100);
-    });
-    setUsdPriceInputs(seeded);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editMode]);
-
-  function handleUsdPriceChange(code, raw) {
-    setUsdPriceInputs((s) => ({ ...s, [code]: raw }));
-    if (raw === "") {
-      setEditPriceInputs((s) => ({ ...s, [code]: "0" }));
-      return;
-    }
-    const usd = parseFloat(raw);
-    if (isNaN(usd) || !exchangeRate) return;
-    setEditPriceInputs((s) => ({ ...s, [code]: String(usd * exchangeRate) }));
-  }
 
   function closeManualSale() {
     setManualSaleCode(null);
@@ -196,19 +166,16 @@ export default function ProductsView({
                     )}
                     {!editMode && showPrices && (
                       prices[p.code] ? (
-                        (() => {
-                          const usd = convertToUSD(prices[p.code], exchangeRate);
-                          return usd !== null ? (
-                            <div style={{ marginTop: 2 }}>
-                              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)" }}>{formatUSD(usd)}</div>
-                              <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatCUP(prices[p.code])}</div>
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
-                              {formatCUP(prices[p.code])}
-                            </div>
-                          );
-                        })()
+                        exchangeRate ? (
+                          <div style={{ marginTop: 2 }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)" }}>{formatUSD(prices[p.code])}</div>
+                            <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatCUP(priceToCUP(prices[p.code], exchangeRate))}</div>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
+                            {formatCUP(prices[p.code])}
+                          </div>
+                        )
                       ) : (
                         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
                           Precio no definido
@@ -336,9 +303,9 @@ export default function ProductsView({
                         <input
                           type="number"
                           inputMode="decimal"
-                          value={usdPriceInputs[p.code] ?? ""}
-                          onChange={(e) => handleUsdPriceChange(p.code, e.target.value)}
-                          title="Precio en dólares"
+                          value={editPriceInputs[p.code] ?? ""}
+                          onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                          title="Precio en dólares -- fijo, no cambia solo al mover la tasa"
                           style={{
                             width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
                             border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
@@ -346,7 +313,7 @@ export default function ProductsView({
                           }}
                         />
                         <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 3 }}>
-                          {formatCUP(parseFloat(editPriceInputs[p.code]) || 0)}
+                          {formatCUP(priceToCUP(parseFloat(editPriceInputs[p.code]) || 0, exchangeRate))}
                         </div>
                       </>
                     ) : (

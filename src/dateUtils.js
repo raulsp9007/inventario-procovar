@@ -80,3 +80,11 @@ export function getDateNDaysAgoStr(n, referenceDateStr = businessDayStr()) {
   d.setDate(d.getDate() - n);
   return toDateStr(d);
 }
+
+// Días completos transcurridos desde un timestamp ISO hasta ahora --
+// usado para el recordatorio de respaldo periódico.
+export function daysSince(isoTimestamp, now = new Date()) {
+  const then = new Date(isoTimestamp);
+  const diffMs = now.getTime() - then.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}

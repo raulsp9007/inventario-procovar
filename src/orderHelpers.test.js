@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupAllOrders, formatOrderForWhatsApp, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition } from "./orderHelpers";
 
 function makeMovement(overrides = {}) {
   return {
@@ -200,5 +200,39 @@ describe("formatOrderForWhatsApp", () => {
     expect(withSender.startsWith("Raul\n")).toBe(true);
     const withoutSender = formatOrderForWhatsApp(order, products, { senderName: "Raul", sendSenderName: false });
     expect(withoutSender.startsWith("Raul")).toBe(false);
+  });
+});
+
+describe("formatOrderForCustomer", () => {
+  const products = [
+    { code: "P1500", name: "Parranda 1500ml" },
+    { code: "M330", name: "Malta Guajira 330ml" },
+  ];
+
+  it("arma el mensaje con fecha, horario de recogida, productos y total -- sin negocio ni remitente", () => {
+    const order = {
+      date: "2026-08-28", isDelivery: false,
+      lines: [{ code: "P1500", qty: 5, unitPrice: 100 }, { code: "M330", qty: 1, unitPrice: 200 }],
+    };
+    const text = formatOrderForCustomer(order, products);
+    expect(text).toBe(
+      "Tu pedido para 28 ago 2026: (recoger entre 9:00 am y 3:00pm)\n\n5x Parranda 1500ml\n1x Malta Guajira 330ml\n\nTotal: 700 CUP"
+    );
+  });
+
+  it("si es domicilio, muestra (Domicilio) en vez del horario de recogida", () => {
+    const order = { date: "2026-08-28", isDelivery: true, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
+    const text = formatOrderForCustomer(order, products);
+    expect(text.startsWith("Tu pedido para 28 ago 2026: (Domicilio)\n")).toBe(true);
+  });
+
+  it("nunca incluye nombre del negocio, nota, ni remitente", () => {
+    const order = {
+      date: "2026-08-28", isDelivery: false, businessName: "Bar X", note: "nota interna",
+      lines: [{ code: "P1500", qty: 1, unitPrice: 100 }],
+    };
+    const text = formatOrderForCustomer(order, products);
+    expect(text).not.toContain("Bar X");
+    expect(text).not.toContain("nota interna");
   });
 });

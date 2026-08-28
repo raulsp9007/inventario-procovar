@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Send, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X, Plus } from "lucide-react";
+import { Trash2, Send, Receipt, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X, Plus } from "lucide-react";
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
-import { groupAllOrders, formatOrderForWhatsApp, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
-import { getCustomerNames, matchCustomerNames, getCustomerBusinessName } from "./customerHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
+import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, findNearDuplicateCustomerName } from "./customerHelpers";
 import Banner from "./Banner.jsx";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
@@ -27,6 +27,15 @@ function openOrderWhatsApp(order, products, phone, senderOptions) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+// Copia del pedido directo al teléfono del cliente (no al contacto de
+// negocio configurado) -- mensaje aparte, sin remitente ni negocio, ver
+// formatOrderForCustomer.
+function openOrderWhatsAppToCustomer(order, products) {
+  const text = formatOrderForCustomer(order, products);
+  const url = `https://wa.me/${order.customerPhone}?text=${encodeURIComponent(text)}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
@@ -35,6 +44,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
   const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
@@ -49,6 +59,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [confirmingPostponeId, setConfirmingPostponeId] = useState(null);
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
   const [pendingPostpones, setPendingPostpones] = useState(() => new Map());
+  const [pendingEditUndo, setPendingEditUndo] = useState(null); // { orderId, customerName, revertDraft, timeoutId } | null
   const [hoyOrderSort, setHoyOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
   const [mananaOrderSort, setMananaOrderSort] = useState(() => (loadSavedFilters().sortManana === "oldest" ? "oldest" : "recent"));
   const [orderSearch, setOrderSearch] = useState("");
@@ -188,21 +199,31 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     ? selectedProductCode
     : (availableProducts[0]?.code || "");
 
+  const customerNamesList = getCustomerNames(movements);
   const suggestions = showSuggestions
-    ? matchCustomerNames(getCustomerNames(movements), customerName)
+    ? matchCustomerNames(customerNamesList, customerName)
     : [];
+  // Aviso de "cliente parecido" -- ej. typo de mayúsculas o espacio de más
+  // -- para no terminar con dos clientes que en realidad son la misma
+  // persona. No aplica mientras se están mostrando sugerencias (ya se ve
+  // la lista completa ahí) ni si el nombre ya coincide exacto.
+  const nearDuplicateName = !showSuggestions
+    ? findNearDuplicateCustomerName(customerNamesList, customerName)
+    : null;
 
   function pickSuggestion(name) {
     setCustomerName(name);
     setShowSuggestions(false);
-    // Cliente ya registrado -- autocompleta el negocio que le quedó
-    // guardado de algún pedido anterior (si nunca se cargó, queda vacío).
+    // Cliente ya registrado -- autocompleta negocio y teléfono guardados de
+    // algún pedido anterior (si nunca se cargaron, quedan vacíos).
     setBusinessName(getCustomerBusinessName(movements, name));
+    setCustomerPhone(getCustomerPhone(movements, name));
   }
 
   function resetForm() {
     setCustomerName("");
     setBusinessName("");
+    setCustomerPhone("");
     setIsDelivery(false);
     setNote("");
     setDraftLines([]);
@@ -216,6 +237,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function startEdit(order) {
     setCustomerName(order.customerName);
     setBusinessName(order.businessName || "");
+    setCustomerPhone(order.customerPhone || "");
     setIsDelivery(order.isDelivery);
     setNote(order.note || "");
     setDraftLines(order.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
@@ -300,14 +322,16 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         return;
       }
     }
-    const draft = { customerName: customerName.trim(), businessName: businessName.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
+    const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
     submittingRef.current = true;
     submitDraft(draft);
   }
 
   function submitDraft(draft) {
     if (editingOrderId) {
+      const previousOrder = allOrders.find((o) => o.orderId === editingOrderId);
       onEditOrder(editingOrderId, draft);
+      if (previousOrder) stageEditUndo(previousOrder);
     } else {
       onConfirmOrder(draft);
     }
@@ -318,6 +342,38 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setModalOpen(false);
   }
 
+  // A diferencia de Eliminar/Posponer, editar guarda al toque (el usuario
+  // ya vio el resultado en el modal antes de confirmar) -- acá el aviso con
+  // "Deshacer" aparece DESPUÉS de aplicar el cambio, y deshacer significa
+  // volver a editar el pedido con los datos que tenía antes.
+  function stageEditUndo(previousOrder) {
+    setPendingEditUndo((prev) => {
+      if (prev) clearTimeout(prev.timeoutId);
+      const timeoutId = setTimeout(() => {
+        setPendingEditUndo((cur) => (cur && cur.orderId === previousOrder.orderId ? null : cur));
+      }, 5000);
+      const revertDraft = {
+        customerName: previousOrder.customerName,
+        businessName: previousOrder.businessName,
+        customerPhone: previousOrder.customerPhone,
+        isDelivery: previousOrder.isDelivery,
+        note: previousOrder.note,
+        lines: previousOrder.lines.map((l) => ({ code: l.code, qty: l.qty })),
+        bucket: previousOrder.bucket,
+        date: previousOrder.date,
+        forceSent: previousOrder.sent,
+      };
+      return { orderId: previousOrder.orderId, customerName: previousOrder.customerName, revertDraft, timeoutId };
+    });
+  }
+
+  function undoEdit() {
+    if (!pendingEditUndo) return;
+    clearTimeout(pendingEditUndo.timeoutId);
+    onEditOrder(pendingEditUndo.orderId, pendingEditUndo.revertDraft);
+    setPendingEditUndo(null);
+  }
+
   // Revisión de cierre de ventas: reprograma un pedido de hoy sin confirmar
   // para mañana -- mismo mecanismo que editar y cambiar a "Programar" a
   // mano (devuelve el stock/ingreso de hoy, queda reservado sin comprometer).
@@ -325,6 +381,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     onEditOrder(order.orderId, {
       customerName: order.customerName,
       businessName: order.businessName,
+      customerPhone: order.customerPhone,
       isDelivery: order.isDelivery,
       note: order.note,
       lines: order.lines.map((l) => ({ code: l.code, qty: l.qty })),
@@ -515,16 +572,30 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                   openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
                   onMarkSent(order.orderId, true);
                 }}
-                title="Enviar por WhatsApp"
-                aria-label="Enviar por WhatsApp"
+                title="Registrar (WhatsApp)"
+                aria-label="Registrar (WhatsApp)"
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: "var(--whatsapp)", color: "var(--on-accent)", border: "none",
                   borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                 }}
               >
-                <Send size={16} />
+                <Receipt size={16} />
               </button>
+              {order.customerPhone && (
+                <button
+                  onClick={() => openOrderWhatsAppToCustomer(order, products)}
+                  title="Enviar copia al cliente"
+                  aria-label="Enviar copia al cliente"
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: "var(--whatsapp)", color: "var(--on-accent)", border: "none",
+                    borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
+                  }}
+                >
+                  <Send size={16} />
+                </button>
+              )}
               <button
                 onClick={() => handleDeleteClick(order)}
                 title={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
@@ -766,6 +837,19 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </div>
       )}
 
+      {pendingEditUndo && (
+        <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+          <Banner
+            variant="dark"
+            layout="row"
+            style={{ fontSize: 13 }}
+            actions={[{ label: "Deshacer", kind: "secondary", onClick: undoEdit }]}
+          >
+            Pedido de {pendingEditUndo.customerName} editado.
+          </Banner>
+        </div>
+      )}
+
       {activeSection === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
         <CierreDeVentasBanner
           unconfirmedTodayOrders={unconfirmedTodayOrders}
@@ -900,10 +984,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         onCustomerNameChange={setCustomerName}
         businessName={businessName}
         onBusinessNameChange={setBusinessName}
+        customerPhone={customerPhone}
+        onCustomerPhoneChange={setCustomerPhone}
         showSuggestions={showSuggestions}
         onShowSuggestions={setShowSuggestions}
         suggestions={suggestions}
         onPickSuggestion={pickSuggestion}
+        nearDuplicateName={nearDuplicateName}
+        onUseNearDuplicateName={() => setCustomerName(nearDuplicateName)}
         isDelivery={isDelivery}
         onIsDeliveryChange={setIsDelivery}
         note={note}
@@ -913,6 +1001,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         onRemoveDraftLine={removeDraftLine}
         showPrices={showPrices}
         prices={prices}
+        exchangeRate={exchangeRate}
         products={products}
         availableProducts={availableProducts}
         effectiveSelectedProductCode={effectiveSelectedProductCode}

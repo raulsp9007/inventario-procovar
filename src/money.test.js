@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, totalHlSold, getProductSalesTotals } from "./money";
+import { formatCUP, formatUSD, convertToUSD, priceToCUP, revenueInRange, totalRevenueInRange, totalHlSold, getProductSalesTotals } from "./money";
 
 const products = [
   { code: "P1500", name: "Parranda 1500ml", hl: 0.15 },
@@ -32,6 +32,29 @@ describe("formatCUP / formatUSD / convertToUSD", () => {
 
   it("formatUSD siempre con 2 decimales", () => {
     expect(formatUSD(3)).toBe("US$3.00");
+  });
+});
+
+describe("priceToCUP", () => {
+  it("multiplica el precio (USD) por la tasa vigente", () => {
+    expect(priceToCUP(10, 400)).toBe(4000);
+  });
+
+  it("sin tasa, usa el precio tal cual como CUP directo (compatibilidad con negocios sin tasa configurada)", () => {
+    expect(priceToCUP(4000, null)).toBe(4000);
+    expect(priceToCUP(4000, 0)).toBe(4000);
+  });
+
+  it("el precio en USD no se mueve solo porque cambia la tasa -- cada llamada recalcula el CUP desde el mismo USD fijo", () => {
+    const usdPrice = 10;
+    expect(priceToCUP(usdPrice, 400)).toBe(4000);
+    expect(priceToCUP(usdPrice, 690)).toBe(6900);
+    // el "precio" en sí (usdPrice) nunca cambió entre las dos llamadas.
+  });
+
+  it("precio vacío/no numérico se trata como 0", () => {
+    expect(priceToCUP(undefined, 400)).toBe(0);
+    expect(priceToCUP(NaN, 400)).toBe(0);
   });
 });
 
