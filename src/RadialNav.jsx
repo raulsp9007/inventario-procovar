@@ -2,12 +2,12 @@ import { useState } from "react";
 import { ClipboardList, PieChart, BarChart3, Users, Package, Settings, Menu, X } from "lucide-react";
 
 const TABS = [
-  { key: "portafolio", label: "Portafolio", Icon: PieChart },
-  { key: "resumen", label: "Resumen semanal", Icon: BarChart3 },
-  { key: "pedidos", label: "Pedidos", Icon: ClipboardList },
-  { key: "stock", label: "Productos", Icon: Package },
-  { key: "clientes", label: "Clientes", Icon: Users },
   { key: "config", label: "Configuración", Icon: Settings },
+  { key: "clientes", label: "Clientes", Icon: Users },
+  { key: "stock", label: "Productos", Icon: Package },
+  { key: "pedidos", label: "Pedidos", Icon: ClipboardList },
+  { key: "resumen", label: "Resumen semanal", Icon: BarChart3 },
+  { key: "portafolio", label: "Portafolio", Icon: PieChart },
 ];
 
 export const VIEW_LABELS = TABS.reduce((acc, t) => ({ ...acc, [t.key]: t.label }), {});
