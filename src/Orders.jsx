@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Send, Receipt, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X, Plus } from "lucide-react";
+import { Trash2, Receipt, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X, Plus } from "lucide-react";
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
@@ -19,6 +19,18 @@ function loadSavedFilters() {
   } catch {
     return {};
   }
+}
+
+// Ícono de WhatsApp (no viene en lucide-react, que es solo outline
+// genérico) -- para el botón que manda la copia al cliente, donde el
+// glifo típico ayuda a reconocer la acción de un vistazo.
+function WhatsAppIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.876 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+      <path d="M12.001 2.003c-5.514 0-9.997 4.483-9.997 9.997 0 1.762.462 3.484 1.34 5.001L2 22l5.109-1.34a9.958 9.958 0 0 0 4.892 1.284h.004c5.514 0 9.997-4.483 9.997-9.997 0-2.671-1.04-5.182-2.929-7.071a9.933 9.933 0 0 0-7.072-2.873zm0 18.164a8.16 8.16 0 0 1-4.152-1.136l-.298-.177-3.09.81.826-3.014-.194-.31a8.155 8.155 0 0 1-1.257-4.34c0-4.507 3.667-8.174 8.174-8.174a8.128 8.128 0 0 1 5.782 2.396 8.128 8.128 0 0 1 2.393 5.78c0 4.508-3.667 8.165-8.184 8.165z" />
+    </svg>
+  );
 }
 
 function openOrderWhatsApp(order, products, phone, senderOptions) {
@@ -514,7 +526,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                       color: "var(--text)",
                     }}
                   >
-                    {line.qty}x {product ? product.short : line.code}
+                    {product ? product.short : line.code} x{line.qty}
                   </span>
                 );
               })}
@@ -593,7 +605,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                     borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
                   }}
                 >
-                  <Send size={16} />
+                  <WhatsAppIcon size={16} />
                 </button>
               )}
               <button
