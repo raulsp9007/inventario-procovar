@@ -2,11 +2,11 @@ import { useState } from "react";
 import { ClipboardList, PieChart, BarChart3, Users, Package, Settings, Menu, X } from "lucide-react";
 
 const TABS = [
-  { key: "pedidos", label: "Pedidos", Icon: ClipboardList },
   { key: "portafolio", label: "Portafolio", Icon: PieChart },
   { key: "resumen", label: "Resumen semanal", Icon: BarChart3 },
-  { key: "clientes", label: "Clientes", Icon: Users },
+  { key: "pedidos", label: "Pedidos", Icon: ClipboardList },
   { key: "stock", label: "Productos", Icon: Package },
+  { key: "clientes", label: "Clientes", Icon: Users },
   { key: "config", label: "Configuración", Icon: Settings },
 ];
 
