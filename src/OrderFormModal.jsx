@@ -1,7 +1,6 @@
 import { X } from "lucide-react";
 import { tomorrowStr } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
-import { cubanPhoneLocalPart } from "./customerHelpers";
 
 function draftTotal(draftLines, prices, exchangeRate) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * priceToCUP(prices[l.code], exchangeRate), 0);
@@ -176,11 +175,8 @@ export default function OrderFormModal({
             type="text"
             inputMode="numeric"
             placeholder="Teléfono del cliente (opcional, 8 dígitos)"
-            value={cubanPhoneLocalPart(customerPhone)}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
-              onCustomerPhoneChange(digits ? `53${digits}` : "");
-            }}
+            value={customerPhone}
+            onChange={(e) => onCustomerPhoneChange(e.target.value.replace(/\D/g, "").slice(0, 8))}
             style={{
               flex: 1, minWidth: 0, border: "none", padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
             }}

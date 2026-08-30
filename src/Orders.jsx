@@ -3,7 +3,7 @@ import { Trash2, Receipt, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X,
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
-import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, findNearDuplicateCustomerName, toCubanPhone } from "./customerHelpers";
+import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import Banner from "./Banner.jsx";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
@@ -232,7 +232,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     // Cliente ya registrado -- autocompleta negocio y teléfono guardados de
     // algún pedido anterior (si nunca se cargaron, quedan vacíos).
     setBusinessName(getCustomerBusinessName(movements, name));
-    setCustomerPhone(getCustomerPhone(movements, name));
+    setCustomerPhone(cubanPhoneLocalPart(getCustomerPhone(movements, name)));
   }
 
   function resetForm() {
@@ -252,7 +252,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function startEdit(order) {
     setCustomerName(order.customerName);
     setBusinessName(order.businessName || "");
-    setCustomerPhone(order.customerPhone || "");
+    setCustomerPhone(cubanPhoneLocalPart(order.customerPhone || ""));
     setIsDelivery(order.isDelivery);
     setNote(order.note || "");
     setDraftLines(order.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
