@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { tomorrowStr } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
+import { cubanPhoneLocalPart } from "./customerHelpers";
 
 function draftTotal(draftLines, prices, exchangeRate) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * priceToCUP(prices[l.code], exchangeRate), 0);
@@ -164,17 +165,27 @@ export default function OrderFormModal({
           }}
         />
 
-        <input
-          type="text"
-          inputMode="numeric"
-          placeholder="Teléfono del cliente (opcional)"
-          value={customerPhone}
-          onChange={(e) => onCustomerPhoneChange(e.target.value.replace(/[^\d]/g, ""))}
-          style={{
-            width: "100%", border: "1px solid var(--border)", borderRadius: 7,
-            padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
-          }}
-        />
+        <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: 7, marginBottom: 10, overflow: "hidden" }}>
+          <span style={{
+            display: "flex", alignItems: "center", padding: "9px 10px", fontSize: 14,
+            color: "var(--text-muted)", background: "var(--surface)", borderRight: "1px solid var(--border)", flexShrink: 0,
+          }}>
+            +53
+          </span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="Teléfono del cliente (opcional, 8 dígitos)"
+            value={cubanPhoneLocalPart(customerPhone)}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
+              onCustomerPhoneChange(digits ? `53${digits}` : "");
+            }}
+            style={{
+              flex: 1, minWidth: 0, border: "none", padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
+            }}
+          />
+        </div>
 
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "var(--text-muted)", marginBottom: 14, cursor: "pointer" }}>
           <input

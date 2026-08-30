@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getCustomerNames, matchCustomerNames, getCustomerSalesTotals, findNearDuplicateCustomerName, getCustomerPhone } from "./customerHelpers";
+import { getCustomerNames, matchCustomerNames, getCustomerSalesTotals, findNearDuplicateCustomerName, getCustomerPhone, cubanPhoneLocalPart, toCubanPhone } from "./customerHelpers";
 
 const products = [
   { code: "P1500", name: "Parranda 1500ml" },
@@ -65,6 +65,49 @@ describe("getCustomerPhone", () => {
   it("devuelve vacío si el cliente nunca tuvo teléfono guardado", () => {
     const movements = [venta({ customerName: "Ana" })];
     expect(getCustomerPhone(movements, "Ana")).toBe("");
+  });
+});
+
+describe("cubanPhoneLocalPart", () => {
+  it("quita el 53 cuando el número completo mide exactamente 10 dígitos (53 + 8 locales)", () => {
+    expect(cubanPhoneLocalPart("5355512345")).toBe("55512345");
+  });
+
+  it("no toca un número que no mida 10 dígitos, aunque empiece con 53", () => {
+    expect(cubanPhoneLocalPart("53555123456")).toBe("53555123456");
+  });
+
+  it("no toca números que no tengan la forma esperada (53 + 8 dígitos)", () => {
+    expect(cubanPhoneLocalPart("55512345")).toBe("55512345");
+  });
+
+  it("vacío da vacío", () => {
+    expect(cubanPhoneLocalPart("")).toBe("");
+  });
+});
+
+describe("toCubanPhone", () => {
+  it("antepone 53 a un número de 8 dígitos sin prefijo (dato viejo, importado, etc.)", () => {
+    expect(toCubanPhone("55512345")).toBe("5355512345");
+  });
+
+  it("es idempotente -- aplicarlo a un número ya prefijado da el mismo resultado", () => {
+    expect(toCubanPhone("5355512345")).toBe("5355512345");
+  });
+
+  it("ignora espacios/guiones al normalizar", () => {
+    expect(toCubanPhone("5551-2345")).toBe("5355512345");
+  });
+
+  it("un número local que empieza justo con '53' (coincidencia, no prefijo) también queda bien anteponiendo 53", () => {
+    // Ej. del usuario: escribe "53192093" como sus 8 dígitos locales.
+    expect(toCubanPhone("53192093")).toBe("5353192093");
+  });
+
+  it("vacío da vacío", () => {
+    expect(toCubanPhone("")).toBe("");
+    expect(toCubanPhone(null)).toBe("");
+    expect(toCubanPhone(undefined)).toBe("");
   });
 });
 

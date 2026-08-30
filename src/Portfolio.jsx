@@ -138,6 +138,32 @@ export default function Portfolio({ products, movements, showPrices }) {
       </div>
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 }}>
+        <div style={{ fontSize: 12, letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 12 }}>TOTAL VENDIDO POR PRODUCTO</div>
+        {productRows.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: "var(--text-faint)" }}>Sin ventas en este rango.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {productRows.map((row) => (
+              <div key={row.product.code}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 3 }}>
+                  <span>{row.product.name}</span>
+                  <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{row.qty}</span>
+                </div>
+                <div style={{ height: 6, background: "var(--border)", borderRadius: 3 }}>
+                  <div
+                    style={{
+                      height: "100%", borderRadius: 3, background: row.product.color || "#8A8574",
+                      width: `${Math.max(4, Math.round((row.qty / productRows[0].qty) * 100))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 }}>
         <div style={{ fontSize: 12, letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 12 }}>CLIENTES MÁS CONSUMIDORES</div>
         {customerSlices.length === 0 ? (
           <div style={{ fontSize: 13.5, color: "var(--text-faint)" }}>Sin pedidos con cliente en este rango.</div>

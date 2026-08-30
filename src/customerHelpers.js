@@ -105,6 +105,30 @@ export function getCustomerBusinessName(movements, customerName) {
 // Teléfono guardado para ese cliente (el más reciente entre todos sus
 // pedidos) -- usado para autocompletar al armar un pedido nuevo, igual que
 // getCustomerBusinessName.
+// Los números de cliente siempre son de Cuba (+53) -- el campo del
+// formulario solo pide los 8 dígitos locales, el "53" se antepone solo al
+// guardar (necesario para que el link de wa.me funcione). Esto extrae de
+// vuelta esos 8 dígitos para mostrar/editar, a partir del número completo
+// guardado (ej. "53555XXXXX" -> "555XXXXX").
+export function cubanPhoneLocalPart(phone) {
+  if (!phone) return "";
+  return phone.startsWith("53") && phone.length === 10 ? phone.slice(2) : phone;
+}
+
+// Garantiza el "53" adelante sin importar de dónde vino el número --
+// no solo lo que se tipeó recién en el formulario, también dato viejo
+// importado de un backup, o cualquier otro camino que no haya pasado por
+// el input. Se llama siempre antes de guardar Y de nuevo antes de mandar
+// por WhatsApp, así el link de wa.me nunca sale mal armado. Toma los
+// últimos 8 dígitos (el número local) y les antepone "53" -- ya sea que
+// venga con el prefijo puesto o no (idempotente: aplicarlo dos veces da
+// el mismo resultado).
+export function toCubanPhone(phone) {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return `53${digits.slice(-8)}`;
+}
+
 export function getCustomerPhone(movements, customerName) {
   let phone = "";
   let latestTimestamp = "";

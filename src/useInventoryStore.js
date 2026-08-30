@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getData, setData } from "./storage";
 import { todayStr, tomorrowStr, daysSince } from "./dateUtils";
 import { isCommittedMovement, computeScheduledTransition } from "./orderHelpers";
+import { toCubanPhone } from "./customerHelpers";
 import { totalHlSold, priceToCUP } from "./money";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
@@ -517,7 +518,7 @@ export function useInventoryStore() {
       const unitPrice = priceToCUP(prices[code], exchangeRate);
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone || "", isDelivery, note, bucket, date }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone ? toCubanPhone(customerPhone) : "", isDelivery, note, bucket, date }));
       if (committed) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;
@@ -609,7 +610,7 @@ export function useInventoryStore() {
       const unitPrice = priceToCUP(prices[code], exchangeRate);
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone || "", isDelivery, note, bucket, date, sent: nextSent }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone ? toCubanPhone(customerPhone) : "", isDelivery, note, bucket, date, sent: nextSent }));
       if (willBeCommitted) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;

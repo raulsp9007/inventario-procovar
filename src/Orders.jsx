@@ -3,7 +3,7 @@ import { Trash2, Receipt, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X,
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
-import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, findNearDuplicateCustomerName } from "./customerHelpers";
+import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, findNearDuplicateCustomerName, toCubanPhone } from "./customerHelpers";
 import Banner from "./Banner.jsx";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
@@ -44,7 +44,10 @@ function openOrderWhatsApp(order, products, phone, senderOptions) {
 // formatOrderForCustomer.
 function openOrderWhatsAppToCustomer(order, products) {
   const text = formatOrderForCustomer(order, products);
-  const url = `https://wa.me/${order.customerPhone}?text=${encodeURIComponent(text)}`;
+  // toCubanPhone de nuevo acá (ya se aplica al guardar el pedido) -- por
+  // si el número viene de un dato viejo importado que nunca pasó por esa
+  // normalización. Así el link de wa.me nunca sale mal armado.
+  const url = `https://wa.me/${toCubanPhone(order.customerPhone)}?text=${encodeURIComponent(text)}`;
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
