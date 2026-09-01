@@ -907,6 +907,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           confirmingDeleteId={confirmingDeleteId}
           onPostponeClick={handlePostponeClick}
           onDeleteClick={handleDeleteClick}
+          onConfirmClick={(order) => onMarkConfirmed(order.orderId, true)}
         />
       )}
 

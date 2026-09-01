@@ -5,7 +5,7 @@ import Banner from "./Banner.jsx";
 // la lógica de programar/eliminar siguen en Orders.jsx.
 export default function CierreDeVentasBanner({
   unconfirmedTodayOrders, confirmingPostponeId, confirmingDeleteId,
-  onPostponeClick, onDeleteClick,
+  onPostponeClick, onDeleteClick, onConfirmClick,
 }) {
   return (
     <Banner variant="warning" style={{ marginBottom: 14 }}>
@@ -17,6 +17,15 @@ export default function CierreDeVentasBanner({
           <div key={order.orderId} style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
             <span>{order.customerName}</span>
             <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button
+                onClick={() => onConfirmClick(order)}
+                style={{
+                  background: "transparent", color: "var(--accent-green-text)", border: "1px solid var(--accent-green-text)",
+                  borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Confirmar
+              </button>
               <button
                 onClick={() => onPostponeClick(order)}
                 style={{
