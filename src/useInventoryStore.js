@@ -65,6 +65,7 @@ export function useInventoryStore() {
   const [editNameInputs, setEditNameInputs] = useState({});
   const [editHlInputs, setEditHlInputs] = useState({});
   const [editLowStockInputs, setEditLowStockInputs] = useState({});
+  const [editReserveInputs, setEditReserveInputs] = useState({});
   const [editColorInputs, setEditColorInputs] = useState({});
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
@@ -342,6 +343,7 @@ export function useInventoryStore() {
     const nameInputs = {};
     const hlInputs = {};
     const lowStockInputs = {};
+    const reserveInputs = {};
     const colorInputs = {};
     activeProducts.forEach((p) => {
       inputs[p.code] = String(stock[p.code] || 0);
@@ -349,6 +351,7 @@ export function useInventoryStore() {
       nameInputs[p.code] = p.name;
       hlInputs[p.code] = p.hl != null ? String(p.hl) : "";
       lowStockInputs[p.code] = p.lowStockThreshold != null ? String(p.lowStockThreshold) : "";
+      reserveInputs[p.code] = p.reserveQty != null ? String(p.reserveQty) : "";
       colorInputs[p.code] = p.color || "#8A8574";
     });
     setEditInputs(inputs);
@@ -356,6 +359,7 @@ export function useInventoryStore() {
     setEditNameInputs(nameInputs);
     setEditHlInputs(hlInputs);
     setEditLowStockInputs(lowStockInputs);
+    setEditReserveInputs(reserveInputs);
     setEditColorInputs(colorInputs);
     setEditMode(true);
   }
@@ -420,6 +424,9 @@ export function useInventoryStore() {
       else delete nextP.hl;
       if (Number.isFinite(lowStockVal) && lowStockVal >= 0) nextP.lowStockThreshold = lowStockVal;
       else delete nextP.lowStockThreshold;
+      const reserveVal = parseInt(editReserveInputs[p.code], 10);
+      if (Number.isFinite(reserveVal) && reserveVal > 0) nextP.reserveQty = reserveVal;
+      else delete nextP.reserveQty;
       if (editColorInputs[p.code]) nextP.color = editColorInputs[p.code];
       return nextP;
     });
@@ -733,6 +740,7 @@ export function useInventoryStore() {
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,
     editLowStockInputs, setEditLowStockInputs,
+    editReserveInputs, setEditReserveInputs,
     editColorInputs, setEditColorInputs,
     newProductName, setNewProductName, newProductHl, setNewProductHl,
     showArchived, setShowArchived, showLowStockList, setShowLowStockList,

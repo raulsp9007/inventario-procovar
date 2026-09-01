@@ -65,6 +65,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [draftLines, setDraftLines] = useState([]);
   const [draftBucket, setDraftBucket] = useState("hoy");
   const [draftDate, setDraftDate] = useState(() => tomorrowStr());
+  const [pendingReserveConfirm, setPendingReserveConfirm] = useState(null); // { draft, reserveDips } | null
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -244,6 +245,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setDraftLines([]);
     setPendingQty("");
     setEditingOrderId(null);
+    setPendingReserveConfirm(null);
     // No se resetea draftBucket: si confirmaste un pedido Programado,
     // te quedás en "Programar" para seguir cargando pedidos del mismo tipo.
     setDraftDate(tomorrowStr());
@@ -296,19 +298,27 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setDraftLines((lines) => lines.filter((l) => l.code !== code));
   }
 
-  // Techo real para una línea del pedido en edición/creación:
+  // Disponible NORMAL para una línea del pedido en edición/creación (no
+  // toca la reserva manual del producto):
   // - Si es para Hoy: stock actual (+ lo que este mismo pedido ya tenía
   //   comprometido, si se está editando uno que ya estaba comprometido).
   // - Si es para Mañana: lo mismo, menos lo que ya reservaron OTROS pedidos
   //   de mañana sin enviar (no se puede prometer más de lo que hay físico).
-  function computeAvailable(code) {
+  // Con includeReserve=true da el TECHO real (cuánto hay contando la
+  // reserva) -- se usa para saber si vale la pena avisar "¿usar la
+  // reserva?" en vez de bloquear directo por falta de stock.
+  function computeAvailable(code, { includeReserve = false } = {}) {
     const editingOrder = editingOrderId ? allOrders.find((o) => o.orderId === editingOrderId) : null;
     const creditBack = editingOrder && isCommittedOrder(editingOrder)
       ? (editingOrder.lines.find((l) => l.code === code)?.qty || 0)
       : 0;
-    const base = (stock[code] || 0) + creditBack;
-    if (draftBucket === "hoy") return base;
-    return base - reservedForTomorrow(allOrders, code, editingOrderId);
+    let base = (stock[code] || 0) + creditBack;
+    if (draftBucket === "manana") base -= reservedForTomorrow(allOrders, code, editingOrderId);
+    if (!includeReserve) {
+      const product = products.find((p) => p.code === code);
+      base -= product?.reserveQty || 0;
+    }
+    return base;
   }
 
   function confirmOrder() {
@@ -328,18 +338,43 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       onError("Elegí una fecha futura para el pedido programado.");
       return;
     }
+    const reserveDips = [];
     for (const line of lines) {
-      const available = computeAvailable(line.code);
-      if (line.qty > available) {
+      const hardAvailable = computeAvailable(line.code, { includeReserve: true });
+      if (line.qty > hardAvailable) {
         const product = products.find((p) => p.code === line.code);
         const motivo = draftBucket === "manana" ? ` para el ${formatDate(draftDate)} (ya reservado por otros pedidos)` : "";
         onError(`No hay suficiente stock de ${product ? product.name : line.code}${motivo}.`);
         return;
       }
+      const available = computeAvailable(line.code);
+      if (line.qty > available) {
+        const product = products.find((p) => p.code === line.code);
+        reserveDips.push({ code: line.code, name: product ? product.name : line.code, fromReserve: line.qty - Math.max(0, available) });
+      }
     }
     const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
+    // Si alguna línea solo entra usando la reserva, no se manda directo --
+    // se avisa primero y se confirma acá mismo (submitDraft con el draft ya
+    // armado), en vez de bloquear como si no hubiera stock.
+    if (reserveDips.length > 0) {
+      setPendingReserveConfirm({ draft, reserveDips });
+      return;
+    }
     submittingRef.current = true;
     submitDraft(draft);
+  }
+
+  function confirmUseReserve() {
+    if (!pendingReserveConfirm) return;
+    const { draft } = pendingReserveConfirm;
+    setPendingReserveConfirm(null);
+    submittingRef.current = true;
+    submitDraft(draft);
+  }
+
+  function cancelReserveConfirm() {
+    setPendingReserveConfirm(null);
   }
 
   function submitDraft(draft) {
@@ -1026,6 +1061,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         onPendingQtyChange={setPendingQty}
         onAddDraftLine={addDraftLine}
         onConfirmOrder={confirmOrder}
+        pendingReserveConfirm={pendingReserveConfirm}
+        onConfirmUseReserve={confirmUseReserve}
+        onCancelReserveConfirm={cancelReserveConfirm}
       />
     </div>
   );

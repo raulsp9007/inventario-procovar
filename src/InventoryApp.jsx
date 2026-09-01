@@ -24,6 +24,7 @@ export default function InventoryApp() {
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,
     editLowStockInputs, setEditLowStockInputs,
+    editReserveInputs, setEditReserveInputs,
     editColorInputs, setEditColorInputs,
     newProductName, setNewProductName, newProductHl, setNewProductHl,
     showArchived, setShowArchived, showLowStockList, setShowLowStockList,
@@ -174,6 +175,8 @@ export default function InventoryApp() {
             setEditHlInputs={setEditHlInputs}
             editLowStockInputs={editLowStockInputs}
             setEditLowStockInputs={setEditLowStockInputs}
+            editReserveInputs={editReserveInputs}
+            setEditReserveInputs={setEditReserveInputs}
             editColorInputs={editColorInputs}
             setEditColorInputs={setEditColorInputs}
             newProductName={newProductName}

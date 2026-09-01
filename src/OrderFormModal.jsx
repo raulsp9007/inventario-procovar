@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { tomorrowStr } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
+import Banner from "./Banner.jsx";
 
 function draftTotal(draftLines, prices, exchangeRate) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * priceToCUP(prices[l.code], exchangeRate), 0);
@@ -27,6 +28,7 @@ export default function OrderFormModal({
   computeAvailable,
   pendingQty, onPendingQtyChange, onAddDraftLine,
   onConfirmOrder,
+  pendingReserveConfirm, onConfirmUseReserve, onCancelReserveConfirm,
 }) {
   if (!open) return null;
 
@@ -261,7 +263,12 @@ export default function OrderFormModal({
             </select>
             {effectiveSelectedProductCode && (
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                ({computeAvailable(effectiveSelectedProductCode)} disponibles)
+                ({Math.max(0, computeAvailable(effectiveSelectedProductCode))} disponibles
+                {(() => {
+                  const reserveQty = products.find((p) => p.code === effectiveSelectedProductCode)?.reserveQty || 0;
+                  return reserveQty > 0 ? ` · +${reserveQty} en reserva` : "";
+                })()}
+                )
               </div>
             )}
             <div style={{ display: "flex", gap: 8 }}>
@@ -292,15 +299,29 @@ export default function OrderFormModal({
           <div style={{ fontSize: 12.5, color: "var(--text-faint)" }}>No hay productos con stock disponibles para agregar.</div>
         )}
 
-        <button
-          onClick={onConfirmOrder}
-          style={{
-            marginTop: 16, width: "100%", background: "var(--ink)", color: "var(--cream)", border: "none",
-            borderRadius: 7, padding: "11px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer",
-          }}
-        >
-          {editingOrderId ? "Guardar cambios" : "Confirmar pedido"}
-        </button>
+        {pendingReserveConfirm ? (
+          <Banner
+            variant="warning"
+            style={{ marginTop: 16 }}
+            actions={[
+              { label: "Usar reserva", kind: "dark", onClick: onConfirmUseReserve },
+              { label: "Cancelar", kind: "secondary", onClick: onCancelReserveConfirm },
+            ]}
+          >
+            No queda suficiente sin tocar la reserva. Vas a usar:{" "}
+            {pendingReserveConfirm.reserveDips.map((d) => `${d.fromReserve}x ${d.name}`).join(", ")}.
+          </Banner>
+        ) : (
+          <button
+            onClick={onConfirmOrder}
+            style={{
+              marginTop: 16, width: "100%", background: "var(--ink)", color: "var(--cream)", border: "none",
+              borderRadius: 7, padding: "11px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            {editingOrderId ? "Guardar cambios" : "Confirmar pedido"}
+          </button>
+        )}
       </div>
     </div>
   );

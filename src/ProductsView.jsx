@@ -32,6 +32,8 @@ export default function ProductsView({
   setEditHlInputs,
   editLowStockInputs,
   setEditLowStockInputs,
+  editReserveInputs,
+  setEditReserveInputs,
   editColorInputs,
   setEditColorInputs,
   newProductName,
@@ -50,6 +52,21 @@ export default function ProductsView({
   const [manualSaleCode, setManualSaleCode] = useState(null);
   const [manualSaleQty, setManualSaleQty] = useState("");
   const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
+  // Ajustador rápido de existencias (modo edición): un número que se suma o
+  // resta al stock que ya está en editInputs, en vez de tener que calcular
+  // a mano el nuevo total y tipearlo entero. No toca nada hasta "Guardar
+  // existencias" -- solo empuja el resultado a editInputs, como si lo
+  // hubieras tipeado vos.
+  const [deltaInputs, setDeltaInputs] = useState({});
+
+  function applyDelta(code, sign) {
+    const delta = parseInt(deltaInputs[code], 10);
+    if (!deltaInputs[code] || isNaN(delta) || delta <= 0) return;
+    const current = parseInt(editInputs[code], 10) || 0;
+    const next = Math.max(0, current + sign * delta);
+    setEditInputs((s) => ({ ...s, [code]: String(next) }));
+    setDeltaInputs((s) => ({ ...s, [code]: "" }));
+  }
 
   function closeManualSale() {
     setManualSaleCode(null);
@@ -182,9 +199,11 @@ export default function ProductsView({
                         </div>
                       )
                     )}
-                    {!editMode && reservedForTomorrow(allOrders, p.code) > 0 && (
+                    {!editMode && (reservedForTomorrow(allOrders, p.code) > 0 || (p.reserveQty || 0) > 0) && (
                       <div style={{ fontSize: 11.5, color: "var(--accent-orange-soft-text)", marginTop: 2 }}>
-                        Reservado: {reservedForTomorrow(allOrders, p.code)} · Libre: {qty - reservedForTomorrow(allOrders, p.code)}
+                        {reservedForTomorrow(allOrders, p.code) > 0 && `Reservado (mañana): ${reservedForTomorrow(allOrders, p.code)} · `}
+                        {(p.reserveQty || 0) > 0 && `En reserva: ${p.reserveQty} · `}
+                        Libre: {Math.max(0, qty - reservedForTomorrow(allOrders, p.code) - (p.reserveQty || 0))}
                       </div>
                     )}
                   </div>
@@ -295,6 +314,45 @@ export default function ProductsView({
                         fontVariantNumeric: "tabular-nums",
                       }}
                     />
+                    <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={deltaInputs[p.code] ?? ""}
+                        onChange={(e) => setDeltaInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        placeholder="cant."
+                        title="Cantidad a sumar o restar del stock de arriba"
+                        style={{
+                          flex: 1, minWidth: 0, boxSizing: "border-box", fontSize: 13,
+                          border: "1px solid var(--border)", borderRadius: 6, padding: "5px 7px",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => applyDelta(p.code, -1)}
+                        title="Restar del stock actual"
+                        aria-label="Restar del stock actual"
+                        style={{
+                          flexShrink: 0, width: 28, background: "transparent", border: "1px solid var(--border)",
+                          borderRadius: 6, color: "var(--text)", fontSize: 15, fontWeight: 700, cursor: "pointer",
+                        }}
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyDelta(p.code, 1)}
+                        title="Sumar al stock actual"
+                        aria-label="Sumar al stock actual"
+                        style={{
+                          flexShrink: 0, width: 28, background: "transparent", border: "1px solid var(--border)",
+                          borderRadius: 6, color: "var(--text)", fontSize: 15, fontWeight: 700, cursor: "pointer",
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                   <div>
                     {exchangeRate ? (
@@ -358,6 +416,22 @@ export default function ProductsView({
                       onChange={(e) => setEditLowStockInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                       title="Cantidad de stock a partir de la cual avisar"
                       placeholder={String(defaultLowStockThreshold)}
+                      style={{
+                        width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
+                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
+                        fontVariantNumeric: "tabular-nums", color: "var(--text)",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>RESERVA (opcional)</FieldLabel>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={editReserveInputs[p.code] ?? ""}
+                      onChange={(e) => setEditReserveInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                      title="Unidades que se guardan aparte -- no se ofrecen en pedidos salvo que confirmes usar la reserva"
+                      placeholder="0"
                       style={{
                         width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
                         border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
