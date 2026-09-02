@@ -55,7 +55,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onError, cierreVentasHour }) {
+export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onRefreshPendingPrices, onError, cierreVentasHour }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -970,6 +970,21 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             onProductClick={handleSummaryProductClick}
           />
         </div>
+      )}
+
+      {activeSection === "manana" && exchangeRate && upcomingOrders.some((o) => !o.sent) && (
+        <button
+          onClick={onRefreshPendingPrices}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%",
+            background: "transparent", border: "1px solid var(--border)", color: "var(--text)",
+            borderRadius: 7, padding: "9px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            marginBottom: 14,
+          }}
+          title="Recalcula el CUP de los pedidos programados sin enviar a la tasa de cambio actual -- los ya enviados no se tocan"
+        >
+          Actualizar a la tasa actual (1 USD = {exchangeRate})
+        </button>
       )}
 
       {activeSection === "manana" && renderOrdersSection({

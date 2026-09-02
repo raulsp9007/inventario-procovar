@@ -716,6 +716,19 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, movements: nextMovements });
   }
 
+  // Recalcula el CUP de todos los pedidos "para mañana" sin enviar (no
+  // comprometidos todavía -- no afecta stock/ingreso) a la tasa de cambio
+  // ACTUAL. Un pedido ya enviado (bucket manana + sent) es una venta
+  // consumada -- ese sigue congelado, no se toca acá.
+  function refreshPendingPricesToCurrentRate() {
+    const nextMovements = movements.map((m) => {
+      if (m.type !== "venta" || m.bucket !== "manana" || m.sent) return m;
+      return { ...m, unitPrice: priceToCUP(prices[m.code], exchangeRate), exchangeRate };
+    });
+    setMovements(nextMovements);
+    persist({ ...currentPersistedState, movements: nextMovements });
+  }
+
   function setSendBusinessNameSetting(next) {
     setSendBusinessName(next);
     persist({ ...currentPersistedState, sendBusinessName: next });
@@ -754,6 +767,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, markOrderConfirmed,
+    updateCustomer, markOrderConfirmed, refreshPendingPricesToCurrentRate,
   };
 }
