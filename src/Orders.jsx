@@ -107,6 +107,31 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     submittingRef.current = false;
   }, [customerName]);
 
+  // El filtro de producto se puede activar sin querer -- tocando un
+  // producto en el resumen embebido (Hoy o Pendiente), no solo desde acá.
+  // Como queda guardado (persiste entre pestañas y recargas) y antes no
+  // había forma de verlo salvo mirando el selector, un pedido programado
+  // podía "desaparecer" sin que se notara que había un filtro puesto. Estas
+  // etiquetas se muestran explícitas en el mensaje de "sin resultados".
+  const activeFilterLabels = [];
+  if (orderSearch.trim()) activeFilterLabels.push(`cliente "${orderSearch.trim()}"`);
+  if (filterProductCode) {
+    const product = products.find((p) => p.code === filterProductCode);
+    activeFilterLabels.push(`producto "${product ? product.name : filterProductCode}"`);
+  }
+  if (filterUnsent) activeFilterLabels.push("no enviados");
+  if (filterUnconfirmed) activeFilterLabels.push("no confirmados");
+  if (filterDelivery) activeFilterLabels.push("domicilio");
+  const hasActiveFilters = activeFilterLabels.length > 0;
+
+  function clearAllFilters() {
+    setOrderSearch("");
+    setFilterProductCode("");
+    setFilterUnsent(false);
+    setFilterUnconfirmed(false);
+    setFilterDelivery(false);
+  }
+
   // Clic en un producto dentro del resumen embebido (Hoy/Programar): filtra
   // la lista de pedidos de esta misma pestaña por ese producto, sin navegar
   // a ningún lado (ya estamos en Pedidos).
@@ -705,9 +730,22 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         )}
 
         {sorted.length === 0 ? (
-          <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
-            {searchTerm || filterUnsent || filterUnconfirmed || filterDelivery || filterProductCode ? `Ningún pedido coincide con la búsqueda/filtros.` : emptyText}
-          </div>
+          hasActiveFilters ? (
+            <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
+              <div style={{ marginBottom: 6 }}>Ningún pedido coincide con: {activeFilterLabels.join(" · ")}.</div>
+              <button
+                onClick={clearAllFilters}
+                style={{
+                  background: "transparent", border: "1px solid var(--border)", color: "var(--text)",
+                  borderRadius: 7, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Quitar filtros
+              </button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>{emptyText}</div>
+          )
         ) : (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
             {sorted.map((order, i) => renderOrderRow(order, i, { showDate }))}
@@ -747,7 +785,8 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           value={filterProductCode}
           onChange={(e) => setFilterProductCode(e.target.value)}
           style={{
-            flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
+            flex: 1, minWidth: 0, boxSizing: "border-box", borderRadius: 7,
+            border: filterProductCode ? "1px solid var(--border-warn)" : "1px solid var(--border)",
             padding: "9px 12px", fontSize: 14, background: "var(--surface)", color: "var(--text)",
           }}
         >
