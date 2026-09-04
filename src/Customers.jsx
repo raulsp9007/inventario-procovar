@@ -37,7 +37,10 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
 
   const allStats = getCustomerStats(movements, products);
   const filtered = search.trim()
-    ? allStats.filter((c) => c.customerName.toLowerCase().includes(search.trim().toLowerCase()))
+    ? allStats.filter((c) => {
+        const q = search.trim().toLowerCase();
+        return c.customerName.toLowerCase().includes(q) || (c.businessName || "").toLowerCase().includes(q);
+      })
     : allStats;
   const stats = sortStats(filtered, sortBy);
 
@@ -51,7 +54,7 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
           <input
             type="text"
-            placeholder="Buscar cliente"
+            placeholder="Buscar cliente o negocio"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
