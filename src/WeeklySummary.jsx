@@ -41,7 +41,10 @@ export default function WeeklySummary({
   // total histórico, acá acotado al rango de la semana actual. El nombre
   // del negocio sale de getCustomerStats (histórico completo, el más
   // reciente que se haya cargado), no solo de esta semana.
-  const topCustomers = getCustomerSalesTotals(movements, products, { start: weekStart, end: today }).slice(0, 5);
+  // Ordena por ingreso salvo que los precios estén ocultos -- ahí por
+  // cantidad, para no rankear con un número (ingreso) que ni se muestra.
+  const weekSalesTotals = getCustomerSalesTotals(movements, products, { start: weekStart, end: today });
+  const topCustomers = (showPrices ? weekSalesTotals : [...weekSalesTotals].sort((a, b) => b.qty - a.qty)).slice(0, 5);
   const businessNameByCustomer = Object.fromEntries(
     getCustomerStats(movements, products).map((s) => [s.customerName, s.businessName])
   );

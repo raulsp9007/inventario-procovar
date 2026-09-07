@@ -85,10 +85,14 @@ export default function Portfolio({ products, movements, showPrices }) {
     () => getProductSalesTotals(movements, products, { start, end }).sort((a, b) => b.qty - a.qty),
     [movements, products, start, end]
   );
-  const customerRows = useMemo(
-    () => getCustomerSalesTotals(movements, products, { start, end }),
-    [movements, products, start, end]
-  );
+  // getCustomerSalesTotals siempre ordena por ingreso -- acá se reordena por
+  // cantidad cuando los precios están ocultos, así "más consumidores" separa
+  // por lo que realmente se está mostrando (uds), no por un ingreso que ni
+  // se ve.
+  const customerRows = useMemo(() => {
+    const rows = getCustomerSalesTotals(movements, products, { start, end });
+    return showPrices ? rows : [...rows].sort((a, b) => b.qty - a.qty);
+  }, [movements, products, start, end, showPrices]);
 
   const productSlices = productRows.map((r) => ({
     label: r.product.name,
@@ -199,7 +203,9 @@ export default function Portfolio({ products, movements, showPrices }) {
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                   <div style={{ fontWeight: 600 }}>{valueFormatter(showPrices ? row.revenue : row.qty)}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{row.qty} uds</div>
+                  {showPrices && (
+                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{row.qty} uds</div>
+                  )}
                 </div>
               </div>
             );
