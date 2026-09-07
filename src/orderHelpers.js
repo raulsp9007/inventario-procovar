@@ -15,6 +15,7 @@ export function groupAllOrders(movements) {
         note: m.note || "",
         sent: !!m.sent,
         sentAt: m.sentAt || null,
+        sentToCustomer: !!m.sentToCustomer,
         confirmed: !!m.confirmed,
         bucket: m.bucket || "hoy",
         orderSeq: m.orderSeq || null,
