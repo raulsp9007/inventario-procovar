@@ -367,7 +367,7 @@ export default function ProductsView({
                           style={{
                             width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
                             border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                            fontVariantNumeric: "tabular-nums", color: "var(--text)",
+                            fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
                           }}
                         />
                         <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 3 }}>
@@ -386,7 +386,7 @@ export default function ProductsView({
                           style={{
                             width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
                             border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                            fontVariantNumeric: "tabular-nums", color: "var(--text)",
+                            fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
                           }}
                         />
                       </>
@@ -403,7 +403,7 @@ export default function ProductsView({
                       style={{
                         width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
                         border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "var(--text)",
+                        fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
                       }}
                     />
                   </div>
@@ -419,7 +419,7 @@ export default function ProductsView({
                       style={{
                         width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
                         border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "var(--text)",
+                        fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
                       }}
                     />
                   </div>
@@ -435,7 +435,7 @@ export default function ProductsView({
                       style={{
                         width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
                         border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "var(--text)",
+                        fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
                       }}
                     />
                   </div>
