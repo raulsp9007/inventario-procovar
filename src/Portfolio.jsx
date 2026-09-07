@@ -191,7 +191,7 @@ export default function Portfolio({ products, movements, showPrices }) {
                 key={row.customerName}
                 style={{
                   display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
-                  padding: "10px 16px", fontSize: 13.5, borderTop: i === 0 ? "1px solid var(--divider)" : "1px solid var(--divider)",
+                  padding: "10px 16px", fontSize: 13.5, borderTop: i === 0 ? "none" : "1px solid var(--divider)",
                   marginTop: i === 0 ? 10 : 0,
                 }}
               >
