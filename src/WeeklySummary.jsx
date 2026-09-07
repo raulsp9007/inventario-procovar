@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, businessDayStr, formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
+import { getCustomerSalesTotals, getCustomerStats } from "./customerHelpers";
 
 export default function WeeklySummary({
   products,
@@ -36,6 +37,15 @@ export default function WeeklySummary({
       .filter((m) => m.code === code && m.type === "venta" && m.date >= start && m.date <= end)
       .reduce((sum, m) => sum + m.qty, 0);
 
+  // Top clientes de la semana -- mismo helper que ya usa Clientes para el
+  // total histórico, acá acotado al rango de la semana actual. El nombre
+  // del negocio sale de getCustomerStats (histórico completo, el más
+  // reciente que se haya cargado), no solo de esta semana.
+  const topCustomers = getCustomerSalesTotals(movements, products, { start: weekStart, end: today }).slice(0, 5);
+  const businessNameByCustomer = Object.fromEntries(
+    getCustomerStats(movements, products).map((s) => [s.customerName, s.businessName])
+  );
+
   return (
     <div>
       <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
@@ -48,32 +58,82 @@ export default function WeeklySummary({
           const hasComparison = previous > 0;
           const pctChange = hasComparison ? Math.round(((current - previous) / previous) * 100) : null;
           const revenue = revenueInRange(movements, p.code, weekStart, today);
+          const maxUnits = Math.max(current, previous, 1);
           return (
             <div
               key={p.code}
               style={{
-                display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
-                gap: 6, padding: "12px 16px", fontSize: 14,
+                padding: "12px 16px", fontSize: 14,
                 borderTop: i === 0 ? "none" : "1px solid var(--divider)",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 6, height: 24, borderRadius: 3, background: p.color, flexShrink: 0 }} />
-                <span style={{ fontWeight: 600 }}>{p.short}</span>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ width: 6, height: 24, borderRadius: 3, background: p.color, flexShrink: 0 }} />
+                  <span style={{ fontWeight: 600 }}>{p.short}</span>
+                </div>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{current} uds</span>
+                  {showPrices && (
+                    <span style={{ fontSize: 12.5, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{formatCUP(revenue)}</span>
+                  )}
+                  <span style={{ fontSize: 12.5, color: pctChange === null ? "var(--text-faint)" : pctChange >= 0 ? "var(--accent-green-text)" : "var(--accent-orange-text)" }}>
+                    {pctChange === null ? "—" : `${pctChange >= 0 ? "↑" : "↓"} ${Math.abs(pctChange)}%`}
+                  </span>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{current} uds</span>
-                {showPrices && (
-                  <span style={{ fontSize: 12.5, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{formatCUP(revenue)}</span>
-                )}
-                <span style={{ fontSize: 12.5, color: pctChange === null ? "var(--text-faint)" : pctChange >= 0 ? "var(--accent-green-text)" : "var(--accent-orange-text)" }}>
-                  {pctChange === null ? "—" : `${pctChange >= 0 ? "↑" : "↓"} ${Math.abs(pctChange)}%`}
-                </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 8 }}>
+                <div style={{ height: 6, borderRadius: 3, background: "var(--divider)", overflow: "hidden" }}>
+                  <div style={{ width: `${(current / maxUnits) * 100}%`, height: "100%", background: p.color }} />
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: "var(--divider)", overflow: "hidden" }}>
+                  <div style={{ width: `${(previous / maxUnits) * 100}%`, height: "100%", background: "var(--border-strong)" }} />
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+      <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--text-faint)", marginTop: 8 }}>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--text-faint)", marginRight: 4 }} />esta semana (color del producto)</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--border-strong)", marginRight: 4 }} />semana anterior</span>
+      </div>
+
+      {topCustomers.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
+            TOP CLIENTES DE LA SEMANA
+          </div>
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+            {topCustomers.map((c, i) => (
+              <div
+                key={c.customerName}
+                style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  gap: 8, padding: "10px 16px", fontSize: 13.5,
+                  borderTop: i === 0 ? "none" : "1px solid var(--divider)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-faint)", width: 14, flexShrink: 0 }}>{i + 1}</span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {c.customerName}
+                    {businessNameByCustomer[c.customerName] && (
+                      <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {businessNameByCustomer[c.customerName]}</span>
+                    )}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
+                  <span style={{ fontSize: 12.5, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{c.qty} uds</span>
+                  {showPrices && (
+                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(c.revenue)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showPrices && (
         <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
