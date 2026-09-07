@@ -2,6 +2,7 @@ import { useState } from "react";
 import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, businessDayStr, formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 import { getCustomerSalesTotals, getCustomerStats } from "./customerHelpers";
+import { isCommittedMovement } from "./orderHelpers";
 
 export default function WeeklySummary({
   products,
@@ -32,9 +33,13 @@ export default function WeeklySummary({
   const hlPct = hlGoal != null && hlGoal > 0 ? Math.round((hlSold / hlGoal) * 100) : null;
   const activeProducts = products.filter((p) => !p.archived);
 
+  // isCommittedMovement filtra igual que revenueInRange (money.js) -- sin
+  // esto, una reserva para mañana sin enviar todavía sumaba a "uds" acá
+  // pero no al CUP de al lado (revenueInRange sí la excluye), y los números
+  // de la misma fila no cuadraban entre sí.
   const soldInRange = (code, start, end) =>
     movements
-      .filter((m) => m.code === code && m.type === "venta" && m.date >= start && m.date <= end)
+      .filter((m) => m.code === code && m.type === "venta" && isCommittedMovement(m) && m.date >= start && m.date <= end)
       .reduce((sum, m) => sum + m.qty, 0);
 
   // Top clientes de la semana -- mismo helper que ya usa Clientes para el
