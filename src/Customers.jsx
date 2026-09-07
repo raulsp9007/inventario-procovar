@@ -2,7 +2,8 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, Pencil, Check, X } from "lucide-react";
 import { formatDate } from "./dateUtils";
 import { formatCUP } from "./money";
-import { getCustomerStats, getCustomerOrders } from "./customerHelpers";
+import { getCustomerStats, getCustomerOrders, getCustomerNames, findNearDuplicateCustomerName } from "./customerHelpers";
+import Banner from "./Banner.jsx";
 
 function sortStats(stats, sortBy) {
   const sorted = [...stats];
@@ -36,6 +37,19 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
   }
 
   const allStats = getCustomerStats(movements, products);
+
+  // Aviso de "cliente parecido" al renombrar -- igual que ya existe al crear
+  // pedidos (Orders.jsx). Acá importa más: renombrar fusiona TODO el
+  // historial del cliente bajo el nombre nuevo, así que un typo aquí (a
+  // diferencia de un pedido nuevo) mezclaría en silencio dos clientes ya
+  // existentes. Se excluye el propio nombre viejo de la lista para no
+  // compararlo contra sí mismo.
+  const otherCustomerNames = editingCustomer
+    ? getCustomerNames(movements).filter((n) => n !== editingCustomer)
+    : [];
+  const nearDuplicateName = editingCustomer
+    ? findNearDuplicateCustomerName(otherCustomerNames, nameInput)
+    : null;
   const filtered = search.trim()
     ? allStats.filter((c) => {
         const q = search.trim().toLowerCase();
@@ -121,6 +135,22 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                         padding: "7px 10px", fontSize: 13.5, boxSizing: "border-box",
                       }}
                     />
+                    {nearDuplicateName && (
+                      <Banner variant="warning">
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <span>¿Es el mismo cliente que <strong>{nearDuplicateName}</strong>? Si guardás así, se fusiona todo su historial con el de ese cliente.</span>
+                          <button
+                            onClick={() => setNameInput(nearDuplicateName)}
+                            style={{
+                              flexShrink: 0, background: "transparent", border: "1px solid var(--border-warn)",
+                              color: "var(--warning-text)", borderRadius: 6, padding: "4px 8px", fontSize: 12, cursor: "pointer",
+                            }}
+                          >
+                            Usar ese
+                          </button>
+                        </div>
+                      </Banner>
+                    )}
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         onClick={() => saveRename(c.customerName)}
