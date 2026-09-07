@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, Pencil, ChevronDown, ChevronUp, CheckCheck, Search, X, Plus } from "lucide-react";
+import { Trash2, Receipt, Pencil, ChevronDown, ChevronUp, Check, Search, X, Plus } from "lucide-react";
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
@@ -33,6 +33,55 @@ function WhatsAppIcon({ size = 16 }) {
   );
 }
 
+// Track de 3 pasos del pedido, en el orden real del flujo de venta: primero
+// se manda al cliente, después se factura (esto es lo que antes era
+// "Enviado" -- dispara el descuento de stock/ingreso para pedidos de
+// mañana, ver markOrdersSent), y por último se confirma a mano. Cada
+// círculo se puede tocar para alternar su estado -- igual que antes con
+// los checkboxes -- por si hace falta corregir a mano.
+function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirmed }) {
+  const steps = [
+    { label: "Enviado", short: "Env.", done: !!order.sentToCustomer, onToggle: () => onMarkSentToCustomer(order.orderId, !order.sentToCustomer) },
+    { label: "Facturado", short: "Fact.", done: !!order.sent, onToggle: () => onMarkSent(order.orderId, !order.sent) },
+    { label: "Confirmado", short: "Conf.", done: !!order.confirmed, onToggle: () => onMarkConfirmed(order.orderId, !order.confirmed) },
+  ];
+  return (
+    <div style={{ minWidth: 160 }}>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        {steps.map((step, i) => (
+          <div key={step.label} style={{ display: "flex", alignItems: "center", flex: i < steps.length - 1 ? "1 1 auto" : "0 0 auto" }}>
+            <button
+              onClick={step.onToggle}
+              title={step.label}
+              aria-label={step.label}
+              aria-pressed={step.done}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                width: 20, height: 20, borderRadius: "50%", fontSize: 10, cursor: "pointer", padding: 0,
+                background: step.done ? "var(--accent-green-text)" : "transparent",
+                color: step.done ? "var(--cream)" : "var(--text-muted)",
+                border: step.done ? "none" : "1.5px solid var(--border)",
+              }}
+            >
+              {step.done ? <Check size={12} /> : i + 1}
+            </button>
+            {i < steps.length - 1 && (
+              <div style={{ flex: "1 1 auto", height: 2, minWidth: 12, background: step.done ? "var(--accent-green-text)" : "var(--border)" }} />
+            )}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", fontSize: 10, color: "var(--text-faint-2)", marginTop: 3 }}>
+        {steps.map((step, i) => (
+          <span key={step.label} style={{ width: 20, textAlign: "center", flex: i < steps.length - 1 ? "1 1 auto" : "0 0 auto" }}>
+            {step.short}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function openOrderWhatsApp(order, products, phone, senderOptions) {
   const text = formatOrderForWhatsApp(order, products, senderOptions);
   const url = `https://wa.me/${phone || ""}?text=${encodeURIComponent(text)}`;
@@ -55,7 +104,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onRefreshPendingPrices, onError, cierreVentasHour }) {
+export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onRefreshPendingPrices, onError, cierreVentasHour }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -611,24 +660,12 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={order.sent}
-                  onChange={(e) => onMarkSent(order.orderId, e.target.checked)}
-                />
-                Enviado
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={order.confirmed}
-                  onChange={(e) => onMarkConfirmed(order.orderId, e.target.checked)}
-                />
-                <CheckCheck size={13} /> Confirmado
-              </label>
-            </div>
+            <OrderStepTrack
+              order={order}
+              onMarkSentToCustomer={onMarkSentToCustomer}
+              onMarkSent={onMarkSent}
+              onMarkConfirmed={onMarkConfirmed}
+            />
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               <button
                 onClick={() => startEdit(order)}
@@ -659,7 +696,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               </button>
               {order.customerPhone && (
                 <button
-                  onClick={() => openOrderWhatsAppToCustomer(order, products)}
+                  onClick={() => {
+                    openOrderWhatsAppToCustomer(order, products);
+                    onMarkSentToCustomer(order.orderId, true);
+                  }}
                   title="Enviar copia al cliente"
                   aria-label="Enviar copia al cliente"
                   style={{

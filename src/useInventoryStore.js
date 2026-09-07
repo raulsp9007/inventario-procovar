@@ -716,6 +716,17 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, movements: nextMovements });
   }
 
+  // Solo informativo -- a diferencia de markOrdersSent, no toca stock ni
+  // ingreso. "Enviado al cliente" es el primer paso del flujo (antes de
+  // facturar), lo marca solo el botón de WhatsApp al cliente.
+  function markOrderSentToCustomer(orderId, sentToCustomer) {
+    const nextMovements = movements.map((m) =>
+      m.orderId === orderId ? { ...m, sentToCustomer } : m
+    );
+    setMovements(nextMovements);
+    persist({ ...currentPersistedState, movements: nextMovements });
+  }
+
   // Recalcula el CUP de todos los pedidos "para mañana" sin enviar (no
   // comprometidos todavía -- no afecta stock/ingreso) a la tasa de cambio
   // ACTUAL. Un pedido ya enviado (bucket manana + sent) es una venta
@@ -767,6 +778,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, markOrderConfirmed, refreshPendingPricesToCurrentRate,
+    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, refreshPendingPricesToCurrentRate,
   };
 }
