@@ -136,7 +136,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   // Vista de la lista (Hoy/Programar), independiente del bucket del pedido
   // que se está creando/editando en el modal -- podés estar mirando la
   // lista de Hoy y aun así abrir el modal para cargar un pedido Programado.
-  const [activeSection, setActiveSection] = useState("hoy");
+  // Pasado el cierre de ventas, lo que tenga sentido armar ya es un pedido
+  // para mañana -- arranca ahí en vez de "Hoy". Se recalcula solo (esta
+  // pestaña se desmonta/remonta cada vez que se entra a Pedidos) y, pasada
+  // la medianoche, getHours() vuelve a 0 así que esto vuelve a dar "hoy"
+  // sin nada especial para la medianoche.
+  const [activeSection, setActiveSection] = useState(() =>
+    cierreVentasHour != null && new Date().getHours() >= cierreVentasHour ? "manana" : "hoy"
+  );
   const [modalOpen, setModalOpen] = useState(false);
   // Bloquea envíos repetidos (doble clic/doble toque) mientras el formulario
   // todavía no reflejó el reset -- el estado de React (customerName, etc.)
