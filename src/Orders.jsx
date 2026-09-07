@@ -667,33 +667,6 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               onMarkConfirmed={onMarkConfirmed}
             />
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-              <button
-                onClick={() => startEdit(order)}
-                title="Editar pedido"
-                aria-label="Editar pedido"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
-                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
-                }}
-              >
-                <Pencil size={16} />
-              </button>
-              <button
-                onClick={() => {
-                  openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
-                  onMarkSent(order.orderId, true);
-                }}
-                title="Registrar (WhatsApp)"
-                aria-label="Registrar (WhatsApp)"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "var(--whatsapp)", color: "var(--on-accent)", border: "none",
-                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
-                }}
-              >
-                <Receipt size={16} />
-              </button>
               {order.customerPhone && (
                 <button
                   onClick={() => {
@@ -711,6 +684,33 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                   <WhatsAppIcon size={16} />
                 </button>
               )}
+              <button
+                onClick={() => {
+                  openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
+                  onMarkSent(order.orderId, true);
+                }}
+                title="Registrar (WhatsApp)"
+                aria-label="Registrar (WhatsApp)"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "var(--whatsapp)", color: "var(--on-accent)", border: "none",
+                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                <Receipt size={16} />
+              </button>
+              <button
+                onClick={() => startEdit(order)}
+                title="Editar pedido"
+                aria-label="Editar pedido"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
+                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                <Pencil size={16} />
+              </button>
               <button
                 onClick={() => handleDeleteClick(order)}
                 title={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
