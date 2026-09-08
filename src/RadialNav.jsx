@@ -1,91 +1,60 @@
-import { useState } from "react";
-import { ClipboardList, PieChart, BarChart3, Users, Package, Settings, Menu, X } from "lucide-react";
+import { ClipboardList, PieChart, BarChart3, Users, Package, Settings } from "lucide-react";
 
 const TABS = [
-  { key: "config", label: "Configuración", Icon: Settings },
-  { key: "clientes", label: "Clientes", Icon: Users },
-  { key: "stock", label: "Productos", Icon: Package },
-  { key: "pedidos", label: "Pedidos", Icon: ClipboardList },
-  { key: "resumen", label: "Resumen semanal", Icon: BarChart3 },
-  { key: "portafolio", label: "Portafolio", Icon: PieChart },
+  { key: "portafolio", label: "Portafolio", short: "Portafolio", Icon: PieChart },
+  { key: "resumen", label: "Resumen semanal", short: "Resumen", Icon: BarChart3 },
+  { key: "pedidos", label: "Pedidos", short: "Pedidos", Icon: ClipboardList },
+  { key: "stock", label: "Productos", short: "Productos", Icon: Package },
+  { key: "clientes", label: "Clientes", short: "Clientes", Icon: Users },
+  { key: "config", label: "Configuración", short: "Config.", Icon: Settings },
 ];
 
 export const VIEW_LABELS = TABS.reduce((acc, t) => ({ ...acc, [t.key]: t.label }), {});
 
-// Botón flotante abajo a la izquierda -- al tocarlo despliega las 6 pestañas
-// en una columna hacia arriba, una encima de otra (ícono + nombre completo
-// lado a lado en cada pastilla), para que ambos se lean bien sin recortarse.
-const FAB_SIZE = 56;
-const ITEM_HEIGHT = 44;
-const GAP = 8;
-const CORNER_OFFSET = 20;
-const STACK_BASE = CORNER_OFFSET + FAB_SIZE + GAP; // bottom del primer ítem (más cercano al FAB)
-const COLLAPSE_DY = STACK_BASE - CORNER_OFFSET; // cuánto baja cada ítem para "recogerse" en el FAB al cerrar
-
+// Menú inferior fijo, siempre visible -- reemplaza al FAB radial de antes
+// (abrir/cerrar de más para elegir una de 6 pestañas). Ícono relleno +
+// nombre corto debajo, la activa en fondo --ink como el resto de estados
+// "seleccionado" ya usados en la app (Hoy/Para mañana, Guardar existencias).
 export default function RadialNav({ view, setView }) {
-  const [open, setOpen] = useState(false);
-
-  function pick(key) {
-    setView(key);
-    setOpen(false);
-  }
-
   return (
-    <>
-      {open && (
-        <div
-          onClick={() => setOpen(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 55 }}
-        />
-      )}
-
-      {TABS.map((tab, i) => {
+    <nav
+      style={{
+        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 56,
+        display: "flex", background: "var(--surface)", borderTop: "1px solid var(--border)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}
+    >
+      {TABS.map((tab) => {
         const active = view === tab.key;
-        const bottom = STACK_BASE + i * (ITEM_HEIGHT + GAP);
-        const dy = COLLAPSE_DY + i * (ITEM_HEIGHT + GAP);
         return (
           <button
             key={tab.key}
-            onClick={() => pick(tab.key)}
+            onClick={() => setView(tab.key)}
             title={tab.label}
             aria-label={tab.label}
+            aria-current={active ? "page" : undefined}
             style={{
-              position: "fixed", left: CORNER_OFFSET, bottom,
-              height: ITEM_HEIGHT, borderRadius: ITEM_HEIGHT / 2,
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "0 16px 0 12px", whiteSpace: "nowrap",
-              background: active ? "var(--ink)" : "var(--surface)",
-              color: active ? "var(--cream)" : "var(--text)",
-              border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-              cursor: "pointer", zIndex: 56,
-              transform: open ? "translateY(0) scale(1)" : `translateY(${dy}px) scale(0.4)`,
-              opacity: open ? 1 : 0,
-              pointerEvents: open ? "auto" : "none",
-              transition: `transform 0.25s ease ${open ? i * 0.03 : 0}s, opacity 0.2s ease`,
+              flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center",
+              justifyContent: "center", gap: 3, padding: "8px 2px 7px",
+              background: "transparent", border: "none", cursor: "pointer",
+              color: active ? "var(--text)" : "var(--text-faint)",
             }}
           >
-            <tab.Icon size={19} />
-            <span style={{ fontSize: 13.5, fontWeight: 600 }}>{tab.label}</span>
+            <span
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 34, height: 26, borderRadius: 9, flexShrink: 0,
+                background: active ? "var(--ink)" : "transparent",
+              }}
+            >
+              <tab.Icon size={18} color={active ? "var(--cream)" : "currentColor"} />
+            </span>
+            <span style={{ fontSize: 10, fontWeight: active ? 600 : 500, lineHeight: 1, whiteSpace: "nowrap" }}>
+              {tab.short}
+            </span>
           </button>
         );
       })}
-
-      <button
-        onClick={() => setOpen((o) => !o)}
-        title={open ? "Cerrar menú" : "Abrir menú"}
-        aria-label={open ? "Cerrar menú" : "Abrir menú"}
-        style={{
-          position: "fixed", left: CORNER_OFFSET, bottom: CORNER_OFFSET,
-          width: FAB_SIZE, height: FAB_SIZE, borderRadius: "50%",
-          background: "var(--ink)", color: "var(--cream)", border: "none",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer", zIndex: 57, boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
-          transform: open ? "rotate(90deg)" : "rotate(0deg)",
-          transition: "transform 0.25s ease",
-        }}
-      >
-        {open ? <X size={24} /> : <Menu size={24} />}
-      </button>
-    </>
+    </nav>
   );
 }

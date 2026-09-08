@@ -12,37 +12,28 @@ describe("VIEW_LABELS", () => {
 });
 
 describe("RadialNav", () => {
-  it("arranca cerrado -- las pestañas no reciben clicks hasta abrir el menú", () => {
-    const setView = vi.fn();
-    render(<RadialNav view="pedidos" setView={setView} />);
-    // Los botones de pestaña existen en el DOM (para animar la apertura)
-    // pero no son interactuables mientras el menú está cerrado.
+  it("muestra las 6 pestañas siempre visibles, sin necesidad de abrir nada", () => {
+    render(<RadialNav view="pedidos" setView={() => {}} />);
     const productosBtn = screen.getByRole("button", { name: "Productos" });
-    expect(productosBtn).toHaveStyle({ pointerEvents: "none" });
+    expect(productosBtn).toBeInTheDocument();
   });
 
-  it("al abrir el menú, tocar una pestaña la selecciona y cierra el menú", async () => {
+  it("tocar una pestaña la selecciona", async () => {
     const user = userEvent.setup();
     const setView = vi.fn();
     render(<RadialNav view="pedidos" setView={setView} />);
 
-    await user.click(screen.getByRole("button", { name: "Abrir menú" }));
-    const productosBtn = screen.getByRole("button", { name: "Productos" });
-    expect(productosBtn).toHaveStyle({ pointerEvents: "auto" });
-
-    await user.click(productosBtn);
+    await user.click(screen.getByRole("button", { name: "Productos" }));
     expect(setView).toHaveBeenCalledWith("stock");
-    // Vuelve a "Abrir menú" -- se cerró solo al elegir una pestaña.
-    expect(screen.getByRole("button", { name: "Abrir menú" })).toBeInTheDocument();
   });
 
-  it("marca la pestaña activa con background distinto", async () => {
-    const user = userEvent.setup();
+  it("marca la pestaña activa con color distinto", () => {
     render(<RadialNav view="clientes" setView={() => {}} />);
-    await user.click(screen.getByRole("button", { name: "Abrir menú" }));
 
     const clientesBtn = screen.getByRole("button", { name: "Clientes" });
     const pedidosBtn = screen.getByRole("button", { name: "Pedidos" });
-    expect(clientesBtn.style.background).not.toBe(pedidosBtn.style.background);
+    expect(clientesBtn.style.color).not.toBe(pedidosBtn.style.color);
+    expect(clientesBtn).toHaveAttribute("aria-current", "page");
+    expect(pedidosBtn).not.toHaveAttribute("aria-current");
   });
 });

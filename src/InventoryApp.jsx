@@ -50,7 +50,7 @@ export default function InventoryApp() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "'Inter', system-ui, sans-serif", color: "var(--text)", paddingBottom: 48 }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "'Inter', system-ui, sans-serif", color: "var(--text)", paddingBottom: "calc(64px + env(safe-area-inset-bottom, 0px))" }}>
       <style>{`
         * { box-sizing: border-box; }
         input[type=number]::-webkit-inner-spin-button,

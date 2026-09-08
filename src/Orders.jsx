@@ -291,7 +291,14 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   );
   const filterableProducts = products.filter((p) => productCodesWithOrders.has(p.code));
 
-  const availableProducts = products.filter((p) => !p.archived && (stock[p.code] || 0) > 0 && !draftLines.some((l) => l.code === p.code));
+  // Techo duro (incluye reserva manual) -- si un producto ya llegó a cero,
+  // sea porque el stock real está en 0 o porque otros pedidos ya reservaron
+  // toda la cantidad disponible, desaparece del selector. Si todavía queda
+  // algo en la reserva manual, sigue apareciendo (se puede seguir pidiendo,
+  // avisando antes de tocarla -- ver pendingReserveConfirm).
+  const availableProducts = products.filter((p) =>
+    !p.archived && computeAvailable(p.code, { includeReserve: true }) > 0 && !draftLines.some((l) => l.code === p.code)
+  );
   const effectiveSelectedProductCode = availableProducts.some((p) => p.code === selectedProductCode)
     ? selectedProductCode
     : (availableProducts[0]?.code || "");
@@ -1115,7 +1122,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         title="Nuevo pedido"
         aria-label="Nuevo pedido"
         style={{
-          position: "fixed", bottom: 24, right: 20, width: 56, height: 56, borderRadius: "50%",
+          position: "fixed", bottom: "calc(76px + env(safe-area-inset-bottom, 0px))", right: 20, width: 56, height: 56, borderRadius: "50%",
           background: "var(--ink)", color: "var(--cream)", border: "none", cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center",
           boxShadow: "0 4px 14px rgba(0,0,0,0.35)", zIndex: 40,
