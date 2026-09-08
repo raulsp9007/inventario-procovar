@@ -175,7 +175,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const product = products.find((p) => p.code === filterProductCode);
     activeFilterLabels.push(`producto "${product ? product.name : filterProductCode}"`);
   }
-  if (filterUnsent) activeFilterLabels.push("no enviados");
+  if (filterUnsent) activeFilterLabels.push("no facturados");
   if (filterUnconfirmed) activeFilterLabels.push("no confirmados");
   if (filterDelivery) activeFilterLabels.push("domicilio");
   const hasActiveFilters = activeFilterLabels.length > 0;
@@ -928,7 +928,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             checked={filterUnsent}
             onChange={(e) => setFilterUnsent(e.target.checked)}
           />
-          No enviados ({filterCounts.unsent})
+          No facturados ({filterCounts.unsent})
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
           <input
@@ -1035,7 +1035,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             borderRadius: 7, padding: "9px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer",
             marginBottom: 14,
           }}
-          title="Recalcula el CUP de los pedidos programados sin enviar a la tasa de cambio actual -- los ya enviados no se tocan"
+          title="Recalcula el CUP de los pedidos programados sin facturar a la tasa de cambio actual -- los ya facturados no se tocan"
         >
           Actualizar a la tasa actual (1 USD = {exchangeRate})
         </button>
