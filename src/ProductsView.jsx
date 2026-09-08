@@ -65,6 +65,7 @@ export default function ProductsView({
   // producto con ventas pendientes que dejarían el disponible en 0 sigue
   // apareciendo hasta que esa venta se confirme de verdad.
   const [hideZeroStock, setHideZeroStock] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const zeroStockCount = activeProducts.filter((p) => (stock[p.code] || 0) === 0).length;
   const visibleProducts = !editMode && hideZeroStock
     ? activeProducts.filter((p) => (stock[p.code] || 0) > 0)
@@ -93,21 +94,44 @@ export default function ProductsView({
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
         <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>PRODUCTOS</div>
-        <button
-          onClick={onToggleEditMode}
-          style={{
-            display: "flex", alignItems: "center", gap: 6,
-            background: editMode ? "var(--ink)" : "transparent",
-            color: editMode ? "var(--cream)" : "var(--text)",
-            border: "1px solid var(--text)",
-            borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-          }}
-        >
-          <Settings2 size={14} />
-          {editMode ? "Guardar existencias" : "Ajustar existencias"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
+            1$ =
+            <input
+              type="number"
+              inputMode="decimal"
+              value={rateInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setRateInput(raw);
+                const val = parseFloat(raw);
+                onExchangeRateChange(isNaN(val) || val <= 0 ? null : val);
+              }}
+              placeholder="tasa"
+              title="Tasa de cambio: 1 USD en CUP"
+              style={{
+                width: 56, border: "1px solid var(--border)", borderRadius: 7, background: "var(--surface)", color: "var(--text)",
+                padding: "6px 6px", fontSize: 12.5, fontVariantNumeric: "tabular-nums", textAlign: "center",
+              }}
+            />
+            CUP
+          </label>
+          <button
+            onClick={onToggleEditMode}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: editMode ? "var(--ink)" : "transparent",
+              color: editMode ? "var(--cream)" : "var(--text)",
+              border: "1px solid var(--text)",
+              borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            <Settings2 size={14} />
+            {editMode ? "Guardar existencias" : "Ajustar"}
+          </button>
+        </div>
       </div>
 
       {!editMode && (zeroStockCount > 0 || hideZeroStock) && (
@@ -122,32 +146,6 @@ export default function ProductsView({
           {hideZeroStock ? `Mostrar productos en 0 (${zeroStockCount})` : `Ocultar productos en 0 (${zeroStockCount})`}
         </button>
       )}
-
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
-        <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
-          TASA DE CAMBIO
-        </div>
-        <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
-          1 USD =
-          <input
-            type="number"
-            inputMode="decimal"
-            value={rateInput}
-            onChange={(e) => {
-              const raw = e.target.value;
-              setRateInput(raw);
-              const val = parseFloat(raw);
-              onExchangeRateChange(isNaN(val) || val <= 0 ? null : val);
-            }}
-            placeholder="tasa"
-            style={{
-              width: 90, border: "1px solid var(--border)", borderRadius: 7,
-              padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums",
-            }}
-          />
-          CUP
-        </label>
-      </div>
 
       {visibleProducts.length === 0 && activeProducts.length > 0 && (
         <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
@@ -168,11 +166,11 @@ export default function ProductsView({
                 background: "var(--surface)",
                 border: `1px solid ${isLow ? "var(--border-warn)" : "var(--border)"}`,
                 borderRadius: 12,
-                padding: "16px 18px",
+                padding: editMode ? "16px 18px" : "10px 14px",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
-                <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flex: "1 1 200px", minWidth: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: editMode ? "flex-start" : "center", flexWrap: "wrap", gap: 12 }}>
+                <div style={{ display: "flex", gap: editMode ? 12 : 10, alignItems: editMode ? "flex-start" : "center", flex: "1 1 200px", minWidth: 0 }}>
                   {editMode ? (
                     <input
                       type="color"
@@ -186,7 +184,7 @@ export default function ProductsView({
                     />
                   ) : (
                     <div style={{
-                      width: 6, height: 40, borderRadius: 3, background: p.color, flexShrink: 0,
+                      width: 5, height: 30, borderRadius: 3, background: p.color, flexShrink: 0,
                     }} />
                   )}
                   <div style={{ minWidth: 0 }}>
@@ -201,7 +199,7 @@ export default function ProductsView({
                         }}
                       />
                     ) : (
-                      <div style={{ fontWeight: 700, fontSize: 15.5 }}>{p.name}</div>
+                      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{p.name}</div>
                     )}
                     {editMode && (
                       <>
@@ -214,23 +212,23 @@ export default function ProductsView({
                     {!editMode && showPrices && (
                       prices[p.code] ? (
                         exchangeRate ? (
-                          <div style={{ marginTop: 2 }}>
-                            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)" }}>{formatUSD(prices[p.code])}</div>
-                            <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatCUP(priceToCUP(prices[p.code], exchangeRate))}</div>
+                          <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-green-text)" }}>
+                            {formatUSD(prices[p.code])}{" "}
+                            <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>· {formatCUP(priceToCUP(prices[p.code], exchangeRate))}</span>
                           </div>
                         ) : (
-                          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
+                          <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-green-text)" }}>
                             {formatCUP(prices[p.code])}
                           </div>
                         )
                       ) : (
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green-text)", marginTop: 2 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-green-text)" }}>
                           Precio no definido
                         </div>
                       )
                     )}
                     {!editMode && (reservedForTomorrow(allOrders, p.code) > 0 || (p.reserveQty || 0) > 0) && (
-                      <div style={{ fontSize: 11.5, color: "var(--accent-orange-soft-text)", marginTop: 2 }}>
+                      <div style={{ fontSize: 10.5, color: "var(--accent-orange-soft-text)" }}>
                         {reservedForTomorrow(allOrders, p.code) > 0 && `Reservado (mañana): ${reservedForTomorrow(allOrders, p.code)} · `}
                         {(p.reserveQty || 0) > 0 && `En reserva: ${p.reserveQty} · `}
                         Libre: {Math.max(0, qty - reservedForTomorrow(allOrders, p.code) - (p.reserveQty || 0))}
@@ -240,10 +238,22 @@ export default function ProductsView({
                 </div>
 
                 {!editMode && (
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "var(--accent-orange-text)" : "var(--text)" }}>
-                      {qty} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)" }}>uds</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "var(--accent-orange-text)" : "var(--text)" }}>
+                      {qty} <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)" }}>uds</span>
                     </div>
+                    <button
+                      onClick={() => { setManualSaleCode(manualSaleCode === p.code ? null : p.code); setManualSaleQty(""); }}
+                      title="Venta manual"
+                      aria-label="Venta manual"
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+                        background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", cursor: "pointer",
+                      }}
+                    >
+                      <ReceiptText size={13} />
+                    </button>
                   </div>
                 )}
 
@@ -267,9 +277,8 @@ export default function ProductsView({
                 )}
               </div>
 
-              {!editMode && (
-                manualSaleCode === p.code ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 12 }}>
+              {!editMode && manualSaleCode === p.code && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 10 }}>
                     <input
                       type="number"
                       inputMode="numeric"
@@ -314,19 +323,7 @@ export default function ProductsView({
                     >
                       <X size={16} />
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => { setManualSaleCode(p.code); setManualSaleQty(""); }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 5,
-                      background: "transparent", border: "none", color: "var(--text-muted)",
-                      fontSize: 12, padding: 0, marginTop: 10, cursor: "pointer",
-                    }}
-                  >
-                    <ReceiptText size={13} /> Venta manual
-                  </button>
-                )
+                </div>
               )}
 
               {editMode && (
@@ -577,10 +574,18 @@ export default function ProductsView({
       )}
 
       <div style={{ marginTop: 28 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
-          <History size={14} /> HISTORIAL DE MOVIMIENTOS
-        </div>
-        {movements.length === 0 ? (
+        <button
+          onClick={() => setShowHistory((s) => !s)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
+            color: "var(--text-muted)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
+            padding: 0, marginBottom: showHistory ? 10 : 0,
+          }}
+        >
+          {showHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          <History size={14} /> HISTORIAL DE MOVIMIENTOS ({movements.length})
+        </button>
+        {showHistory && (movements.length === 0 ? (
           <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
             Aún no hay movimientos registrados.
           </div>
@@ -619,7 +624,7 @@ export default function ProductsView({
               );
             })}
           </Card>
-        )}
+        ))}
       </div>
     </>
   );
