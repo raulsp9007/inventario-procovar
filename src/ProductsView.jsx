@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ReceiptText, X } from "lucide-react";
+import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ReceiptText, X, EyeOff, Eye } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP, formatUSD, priceToCUP } from "./money";
 import FieldLabel from "./FieldLabel.jsx";
@@ -58,6 +58,17 @@ export default function ProductsView({
   // existencias" -- solo empuja el resultado a editInputs, como si lo
   // hubieras tipeado vos.
   const [deltaInputs, setDeltaInputs] = useState({});
+  // Solo se aplica fuera de modo edición -- si estás ajustando existencias
+  // querés ver justo los productos en 0 para reponerlos, no que desaparezcan.
+  // Se basa en `stock` (existencia real) nunca en "Libre": una reserva o un
+  // pedido para mañana sin enviar todavía no tocan `stock`, así que un
+  // producto con ventas pendientes que dejarían el disponible en 0 sigue
+  // apareciendo hasta que esa venta se confirme de verdad.
+  const [hideZeroStock, setHideZeroStock] = useState(false);
+  const zeroStockCount = activeProducts.filter((p) => (stock[p.code] || 0) === 0).length;
+  const visibleProducts = !editMode && hideZeroStock
+    ? activeProducts.filter((p) => (stock[p.code] || 0) > 0)
+    : activeProducts;
 
   function applyDelta(code, sign) {
     const delta = parseInt(deltaInputs[code], 10);
@@ -99,6 +110,19 @@ export default function ProductsView({
         </button>
       </div>
 
+      {!editMode && (zeroStockCount > 0 || hideZeroStock) && (
+        <button
+          onClick={() => setHideZeroStock((s) => !s)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
+            color: "var(--text-muted)", fontSize: 12.5, padding: 0, marginBottom: 12, cursor: "pointer",
+          }}
+        >
+          {hideZeroStock ? <Eye size={14} /> : <EyeOff size={14} />}
+          {hideZeroStock ? `Mostrar productos en 0 (${zeroStockCount})` : `Ocultar productos en 0 (${zeroStockCount})`}
+        </button>
+      )}
+
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
         <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
           TASA DE CAMBIO
@@ -125,8 +149,14 @@ export default function ProductsView({
         </label>
       </div>
 
+      {visibleProducts.length === 0 && activeProducts.length > 0 && (
+        <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
+          Todos los productos están en 0.
+        </div>
+      )}
+
       <div style={{ display: "grid", gap: 10 }}>
-        {activeProducts.map((p, i) => {
+        {visibleProducts.map((p, i) => {
           const qty = stock[p.code] || 0;
           const isLow = qty <= lowStockThresholdFor(p);
           const lastMovement = movements.find((m) => m.code === p.code);
