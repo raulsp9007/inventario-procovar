@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ReceiptText, X, EyeOff, Eye } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP, formatUSD, priceToCUP } from "./money";
@@ -64,7 +64,21 @@ export default function ProductsView({
   // pedido para mañana sin enviar todavía no tocan `stock`, así que un
   // producto con ventas pendientes que dejarían el disponible en 0 sigue
   // apareciendo hasta que esa venta se confirme de verdad.
-  const [hideZeroStock, setHideZeroStock] = useState(false);
+  // Persiste entre pestañas y recargas -- queda activo hasta que se
+  // desactive a mano (esta vista se desmonta al cambiar de pestaña, si no
+  // se guardara se perdería cada vez).
+  const [hideZeroStock, setHideZeroStock] = useState(() => {
+    try {
+      return localStorage.getItem("procovar-ocultar-productos-cero") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("procovar-ocultar-productos-cero", hideZeroStock ? "1" : "0");
+    } catch {}
+  }, [hideZeroStock]);
   const [showHistory, setShowHistory] = useState(false);
   const zeroStockCount = activeProducts.filter((p) => (stock[p.code] || 0) === 0).length;
   const visibleProducts = !editMode && hideZeroStock
