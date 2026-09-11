@@ -70,7 +70,7 @@ export function useInventoryStore() {
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [showLowStockList, setShowLowStockList] = useState(false);
+  const [showLowStockList, setShowLowStockList] = useState(true);
   const [error, setError] = useState("");
   const [pendingImport, setPendingImport] = useState(null);
   const fileInputRef = useRef(null);

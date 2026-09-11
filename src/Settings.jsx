@@ -22,6 +22,7 @@ export default function Settings({
   senderName, sendSenderName, onSenderSettingsChange,
   theme, onToggleTheme,
   showPrices, onToggleShowPrices,
+  commissionPercent, hlGoal, sendBusinessName,
 }) {
   const [phoneInput, setPhoneInput] = useState(whatsappPhone || "");
   const [contactNameInput, setContactNameInput] = useState(whatsappContactName || "");
@@ -134,6 +135,7 @@ export default function Settings({
             value={phoneInput}
             onChange={(e) => { setPhoneInput(e.target.value); setContactNameInput(""); }}
             onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+            onBlur={save}
             style={{
               flex: "1 1 auto", minWidth: 140, border: "1px solid var(--border)", borderRadius: 7,
               padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
@@ -220,6 +222,27 @@ export default function Settings({
             Guardado: {senderName}
           </div>
         )}
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Otros ajustes</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Se editan junto al número que afectan, para ver el efecto al toque.
+        </div>
+        <div style={{ display: "grid", gap: 8, fontSize: 13 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ color: "var(--text-muted)" }}>Comisión (en Resumen)</span>
+            <span style={{ fontWeight: 600 }}>{commissionPercent > 0 ? `${commissionPercent}%` : "sin definir"}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ color: "var(--text-muted)" }}>Meta HL (en Resumen)</span>
+            <span style={{ fontWeight: 600 }}>{hlGoal != null ? `${hlGoal} hL` : "sin definir"}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ color: "var(--text-muted)" }}>Mostrar negocio en pedidos (en Pedidos)</span>
+            <span style={{ fontWeight: 600 }}>{sendBusinessName ? "Sí" : "No"}</span>
+          </div>
+        </div>
       </div>
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>

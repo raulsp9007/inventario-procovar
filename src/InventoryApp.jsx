@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
 import { downloadBackup } from "./backup";
+import { formatDate } from "./dateUtils.js";
 import RadialNav, { VIEW_LABELS } from "./RadialNav.jsx";
 import Banner from "./Banner.jsx";
 import ProductsView from "./ProductsView.jsx";
@@ -302,21 +303,35 @@ export default function InventoryApp() {
               setShowPrices(next);
               persist({ ...currentPersistedState, showPrices: next });
             }}
+            commissionPercent={commissionPercent}
+            hlGoal={hlGoal}
+            sendBusinessName={sendBusinessName}
           />
         )}
 
-        {pendingImport && (
-          <Banner
-            variant="warning"
-            style={{ marginTop: 20 }}
-            actions={[
-              { label: "Sí, reemplazar", kind: "primary", onClick: confirmImport },
-              { label: "Cancelar", kind: "secondary", onClick: () => setPendingImport(null) },
-            ]}
-          >
-            Vas a reemplazar TODOS los datos actuales con el archivo importado. Esta acción no se puede deshacer.
-          </Banner>
-        )}
+        {pendingImport && (() => {
+          const importedMovements = pendingImport.movements || [];
+          const importedProducts = pendingImport.products || [];
+          const latestDate = importedMovements.reduce((max, m) => (m.date && m.date > max ? m.date : max), "");
+          return (
+            <Banner
+              variant="warning"
+              style={{ marginTop: 20 }}
+              actions={[
+                { label: "Sí, reemplazar", kind: "primary", onClick: confirmImport },
+                { label: "Cancelar", kind: "secondary", onClick: () => setPendingImport(null) },
+              ]}
+            >
+              <div style={{ marginBottom: 6 }}>
+                Vas a reemplazar TODOS los datos actuales con el archivo importado. Esta acción no se puede deshacer.
+              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                El archivo trae: {importedProducts.length} producto{importedProducts.length === 1 ? "" : "s"}, {importedMovements.length} movimiento{importedMovements.length === 1 ? "" : "s"}
+                {latestDate ? `, el más reciente del ${formatDate(latestDate)}` : ""}.
+              </div>
+            </Banner>
+          );
+        })()}
 
         <div style={{ marginTop: 20, display: "flex", justifyContent: "center", gap: 8 }}>
           <button
