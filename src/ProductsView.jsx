@@ -1,9 +1,8 @@
 import { useMemo, useState, useEffect } from "react";
-import { Settings2, Trash2, History, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ReceiptText, X, EyeOff, Eye } from "lucide-react";
+import { Settings2, Trash2, History, ChevronDown, ChevronUp, GripVertical, ReceiptText, X, EyeOff, Eye } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP, formatUSD, priceToCUP } from "./money";
 import FieldLabel from "./FieldLabel.jsx";
-import IconButton from "./IconButton.jsx";
 import Card from "./Card.jsx";
 import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
 
@@ -44,6 +43,7 @@ export default function ProductsView({
   onArchiveProduct,
   onRestoreProduct,
   onMoveProduct,
+  onReorderProducts,
   showArchived,
   setShowArchived,
   onRegisterManualSale,
@@ -80,10 +80,50 @@ export default function ProductsView({
     } catch {}
   }, [hideZeroStock]);
   const [showHistory, setShowHistory] = useState(false);
+  // Arrastrar y soltar para reordenar (modo edición) -- a mano con pointer
+  // events, sin dependencia nueva ni HTML5 drag nativo (ese no anda en
+  // touch, y esto es una app mobile-first). dragOrder es el orden en
+  // progreso mientras se arrastra (null = no se está arrastrando); se
+  // confirma de una sola vez en onReorderProducts al soltar.
+  const [draggingCode, setDraggingCode] = useState(null);
+  const [dragOrder, setDragOrder] = useState(null);
+
+  function handleDragStart(e, code) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDraggingCode(code);
+    setDragOrder(activeProducts.map((p) => p.code));
+  }
+
+  function handleDragMove(e) {
+    if (!draggingCode) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const row = el?.closest("[data-product-code]");
+    const overCode = row?.getAttribute("data-product-code");
+    if (!overCode || overCode === draggingCode) return;
+    setDragOrder((order) => {
+      if (!order) return order;
+      const from = order.indexOf(draggingCode);
+      const to = order.indexOf(overCode);
+      if (from === -1 || to === -1 || from === to) return order;
+      const next = [...order];
+      next.splice(from, 1);
+      next.splice(to, 0, draggingCode);
+      return next;
+    });
+  }
+
+  function handleDragEnd() {
+    if (draggingCode && dragOrder) onReorderProducts(dragOrder);
+    setDraggingCode(null);
+    setDragOrder(null);
+  }
   const zeroStockCount = activeProducts.filter((p) => (stock[p.code] || 0) === 0).length;
   const visibleProducts = !editMode && hideZeroStock
     ? activeProducts.filter((p) => (stock[p.code] || 0) > 0)
     : activeProducts;
+  const displayedProducts = editMode && dragOrder
+    ? dragOrder.map((code) => activeProducts.find((p) => p.code === code)).filter(Boolean)
+    : visibleProducts;
 
   function applyDelta(code, sign) {
     const delta = parseInt(deltaInputs[code], 10);
@@ -168,19 +208,21 @@ export default function ProductsView({
       )}
 
       <div style={{ display: "grid", gap: 10 }}>
-        {visibleProducts.map((p, i) => {
+        {displayedProducts.map((p) => {
           const qty = stock[p.code] || 0;
           const isLow = qty <= lowStockThresholdFor(p);
           const lastMovement = movements.find((m) => m.code === p.code);
           return (
             <div
               key={p.code}
+              data-product-code={p.code}
               className="rowfade"
               style={{
                 background: "var(--surface)",
                 border: `1px solid ${isLow ? "var(--border-warn)" : "var(--border)"}`,
                 borderRadius: 12,
                 padding: editMode ? "16px 18px" : "10px 14px",
+                opacity: draggingCode === p.code ? 0.45 : 1,
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: editMode ? "flex-start" : "center", flexWrap: "wrap", gap: 12 }}>
@@ -272,22 +314,22 @@ export default function ProductsView({
                 )}
 
                 {editMode && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-                    <IconButton
-                      icon={<ArrowUp size={14} />}
-                      onClick={() => onMoveProduct(p.code, -1)}
-                      disabled={i === 0}
-                      title="Subir"
-                      size={30}
-                    />
-                    <IconButton
-                      icon={<ArrowDown size={14} />}
-                      onClick={() => onMoveProduct(p.code, 1)}
-                      disabled={i === activeProducts.length - 1}
-                      title="Bajar"
-                      size={30}
-                    />
-                  </div>
+                  <button
+                    onPointerDown={(e) => handleDragStart(e, p.code)}
+                    onPointerMove={handleDragMove}
+                    onPointerUp={handleDragEnd}
+                    onPointerCancel={handleDragEnd}
+                    title="Arrastrar para reordenar"
+                    aria-label="Arrastrar para reordenar"
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                      background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
+                      cursor: "grab", touchAction: "none",
+                    }}
+                  >
+                    <GripVertical size={16} />
+                  </button>
                 )}
               </div>
 

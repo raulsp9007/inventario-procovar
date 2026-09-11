@@ -35,7 +35,7 @@ export default function InventoryApp() {
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
     movementsNearCap,
-    openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
+    openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent,
     updateCustomer, markOrderConfirmed, markOrderSentToCustomer, refreshPendingPricesToCurrentRate,
@@ -187,6 +187,7 @@ export default function InventoryApp() {
             onArchiveProduct={archiveProduct}
             onRestoreProduct={restoreProduct}
             onMoveProduct={moveProduct}
+            onReorderProducts={reorderActiveProducts}
             showArchived={showArchived}
             setShowArchived={setShowArchived}
             onRegisterManualSale={registerManualSale}

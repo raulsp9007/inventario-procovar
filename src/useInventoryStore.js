@@ -475,6 +475,30 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, products: nextProducts });
   }
 
+  // Reordena TODOS los activos de una (arrastrar y soltar), en vez de
+  // moverlos de a uno con moveProduct. orderedCodes trae los códigos
+  // activos en el orden nuevo -- los archivados no se tocan, quedan en la
+  // misma posición relativa que ya tenían. Si orderedCodes no tiene
+  // exactamente los mismos códigos activos que hay ahora (mismatch por un
+  // cambio de datos a mitad del arrastre), no hace nada -- mejor no
+  // reordenar mal que reordenar con productos repetidos o perdidos.
+  function reorderActiveProducts(orderedCodes) {
+    const activeCodes = products.filter((p) => !p.archived).map((p) => p.code);
+    const sameSet = orderedCodes.length === activeCodes.length
+      && new Set(orderedCodes).size === orderedCodes.length
+      && activeCodes.every((c) => orderedCodes.includes(c));
+    if (!sameSet) return;
+    const byCode = new Map(products.map((p) => [p.code, p]));
+    const queue = [...orderedCodes];
+    const nextProducts = products.map((p) => (p.archived ? p : byCode.get(queue.shift())));
+    // Salvaguarda dura: si por lo que sea algún casillero quedó vacío, no se
+    // persiste nada -- perder o duplicar un producto es mucho peor que un
+    // reordenamiento que no se aplicó.
+    if (nextProducts.some((p) => !p)) return;
+    setProducts(nextProducts);
+    persist({ ...currentPersistedState, products: nextProducts });
+  }
+
   // Venta suelta sin cliente real (ej. venta de mostrador que no se armó
   // como pedido, o corregir un conteo de ventas del día) -- resta stock y
   // suma ingreso/HL de inmediato, igual que un pedido de Hoy ya enviado.
@@ -775,9 +799,9 @@ export function useInventoryStore() {
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
     movementsNearCap,
-    openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct,
+    openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, refreshPendingPricesToCurrentRate,
+    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, refreshPendingPricesToCurrentRate, reorderActiveProducts,
   };
 }
