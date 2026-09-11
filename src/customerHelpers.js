@@ -50,6 +50,27 @@ export function getCustomerOrders(movements, customerName) {
   return Array.from(byId.values()).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 
+// Historial de compras de un cliente agrupado por PRODUCTO en vez de por
+// pedido -- cuántas veces lo compró (pedidos distintos, no líneas), unidades
+// totales, y fecha de la última vez. Ordenado por fecha reciente primero,
+// igual que getCustomerOrders.
+export function getCustomerProductHistory(movements, customerName) {
+  const byCode = new Map();
+  movements.forEach((m) => {
+    if (m.customerName !== customerName || !m.orderId) return;
+    if (!byCode.has(m.code)) {
+      byCode.set(m.code, { code: m.code, qty: 0, orderIds: new Set(), lastDate: m.date });
+    }
+    const entry = byCode.get(m.code);
+    entry.qty += m.qty;
+    entry.orderIds.add(m.orderId);
+    if (m.date > entry.lastDate) entry.lastDate = m.date;
+  });
+  return Array.from(byCode.values())
+    .map((entry) => ({ code: entry.code, qty: entry.qty, times: entry.orderIds.size, lastDate: entry.lastDate }))
+    .sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+}
+
 export function getCustomerStats(movements, products) {
   const byCustomer = new Map();
 

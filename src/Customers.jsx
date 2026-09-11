@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, Pencil, Check, X } from "lucide-react";
 import { formatDate } from "./dateUtils";
 import { formatCUP } from "./money";
-import { getCustomerStats, getCustomerOrders, getCustomerNames, findNearDuplicateCustomerName } from "./customerHelpers";
+import { getCustomerStats, getCustomerOrders, getCustomerProductHistory, getCustomerNames, findNearDuplicateCustomerName } from "./customerHelpers";
 import Banner from "./Banner.jsx";
 
 function sortStats(stats, sortBy) {
@@ -21,6 +21,7 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [expandedCustomer, setExpandedCustomer] = useState(null);
+  const [historyMode, setHistoryMode] = useState("pedido"); // "pedido" | "producto"
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [nameInput, setNameInput] = useState("");
   const [businessNameInput, setBusinessNameInput] = useState("");
@@ -104,7 +105,8 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
           {stats.map((c, i) => {
             const product = products.find((p) => p.code === c.favoriteProductCode);
             const isExpanded = expandedCustomer === c.customerName;
-            const orders = isExpanded ? getCustomerOrders(movements, c.customerName) : [];
+            const orders = isExpanded && historyMode === "pedido" ? getCustomerOrders(movements, c.customerName) : [];
+            const productHistory = isExpanded && historyMode === "producto" ? getCustomerProductHistory(movements, c.customerName) : [];
             return (
               <div
                 key={c.customerName}
@@ -216,7 +218,56 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
 
                 {isExpanded && (
                   <div style={{ borderTop: "1px solid var(--divider)", padding: "8px 16px 12px", background: "var(--panel-alt)" }}>
-                    {orders.map((order, oi) => {
+                    <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 7, padding: 2, marginBottom: 8 }}>
+                      <button
+                        onClick={() => setHistoryMode("pedido")}
+                        style={{
+                          border: "none", borderRadius: 5, padding: "5px 10px", fontSize: 12, cursor: "pointer",
+                          background: historyMode === "pedido" ? "var(--ink)" : "transparent",
+                          color: historyMode === "pedido" ? "var(--cream)" : "var(--text-muted)",
+                          fontWeight: historyMode === "pedido" ? 600 : 400,
+                        }}
+                      >
+                        Por pedido
+                      </button>
+                      <button
+                        onClick={() => setHistoryMode("producto")}
+                        style={{
+                          border: "none", borderRadius: 5, padding: "5px 10px", fontSize: 12, cursor: "pointer",
+                          background: historyMode === "producto" ? "var(--ink)" : "transparent",
+                          color: historyMode === "producto" ? "var(--cream)" : "var(--text-muted)",
+                          fontWeight: historyMode === "producto" ? 600 : 400,
+                        }}
+                      >
+                        Por producto
+                      </button>
+                    </div>
+
+                    {historyMode === "producto" && productHistory.map((entry, pi) => {
+                      const product = products.find((p) => p.code === entry.code);
+                      return (
+                        <div
+                          key={entry.code}
+                          style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            gap: 8, padding: "8px 0", borderTop: pi === 0 ? "none" : "1px solid var(--divider)",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{product ? product.short : entry.code}</div>
+                            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                              {entry.times} {entry.times === 1 ? "vez" : "veces"} &middot; {entry.qty} unid. en total
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>última</div>
+                            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{formatDate(entry.lastDate)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {historyMode === "pedido" && orders.map((order, oi) => {
                       const total = order.lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
                       return (
                         <div
