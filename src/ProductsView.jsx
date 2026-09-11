@@ -243,7 +243,7 @@ export default function ProductsView({
                 opacity: draggingCode === p.code ? 0.45 : 1,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: editMode ? "flex-start" : "center", flexWrap: "wrap", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: editMode ? "flex-start" : "center", flexWrap: editMode ? "wrap" : "nowrap", gap: 12 }}>
                 <div style={{ display: "flex", gap: editMode ? 12 : 10, alignItems: editMode ? "flex-start" : "center", flex: "1 1 200px", minWidth: 0 }}>
                   {editMode ? (
                     <input
