@@ -56,7 +56,11 @@ export function formatOrderForWhatsApp(order, products, { senderName, sendSender
 // cuánto paga.
 export function formatOrderForCustomer(order, products) {
   const total = order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
-  const pickupInfo = order.isDelivery ? "(Domicilio)" : "(recoger entre 9:00 am y 3:00pm)";
+  // Los sábados el local cierra temprano -- la ventana de recogida es más
+  // corta. getDay() 6 = sábado.
+  const isSaturday = new Date(order.date + "T00:00:00").getDay() === 6;
+  const pickupWindow = isSaturday ? "(recoger entre 9:00 am y 11am)" : "(recoger entre 9:00 am y 3:00pm)";
+  const pickupInfo = order.isDelivery ? "(Domicilio)" : pickupWindow;
   const lines = [`Tu pedido para ${formatDate(order.date)}: ${pickupInfo}`, ""];
   order.lines.forEach((line) => {
     const product = products.find((p) => p.code === line.code);

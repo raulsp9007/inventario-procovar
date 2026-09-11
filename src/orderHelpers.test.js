@@ -220,6 +220,19 @@ describe("formatOrderForCustomer", () => {
     );
   });
 
+  it("si la fecha cae sábado, la ventana de recogida es más corta (9 a 11)", () => {
+    // 2026-08-29 es sábado
+    const order = { date: "2026-08-29", isDelivery: false, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
+    const text = formatOrderForCustomer(order, products);
+    expect(text.startsWith("Tu pedido para 29 ago 2026: (recoger entre 9:00 am y 11am)\n")).toBe(true);
+  });
+
+  it("un sábado con domicilio sigue mostrando (Domicilio), no la ventana corta", () => {
+    const order = { date: "2026-08-29", isDelivery: true, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
+    const text = formatOrderForCustomer(order, products);
+    expect(text.startsWith("Tu pedido para 29 ago 2026: (Domicilio)\n")).toBe(true);
+  });
+
   it("si es domicilio, muestra (Domicilio) en vez del horario de recogida", () => {
     const order = { date: "2026-08-28", isDelivery: true, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
     const text = formatOrderForCustomer(order, products);
