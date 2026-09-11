@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Settings2, Trash2, History, ChevronDown, ChevronUp, GripVertical, ReceiptText, X, EyeOff, Eye } from "lucide-react";
 import { formatDate, formatDateTime } from "./dateUtils";
 import { formatCUP, formatUSD, priceToCUP } from "./money";
@@ -80,40 +80,51 @@ export default function ProductsView({
     } catch {}
   }, [hideZeroStock]);
   const [showHistory, setShowHistory] = useState(false);
-  // Arrastrar y soltar para reordenar (modo edición) -- a mano con pointer
-  // events, sin dependencia nueva ni HTML5 drag nativo (ese no anda en
-  // touch, y esto es una app mobile-first). dragOrder es el orden en
-  // progreso mientras se arrastra (null = no se está arrastrando); se
-  // confirma de una sola vez en onReorderProducts al soltar.
+  // Arrastrar y soltar para reordenar -- a mano con pointer events, sin
+  // dependencia nueva ni HTML5 drag nativo (ese no anda en touch, y esto es
+  // una app mobile-first). La fuente de verdad es dragStateRef (un ref, no
+  // React state): con eventos de puntero rápidos seguidos (como dispara un
+  // drag automatizado, o simplemente arrastrar rápido), React 18 puede
+  // agrupar varios pointermove + el pointerup final en un solo batch, y
+  // handleDragEnd terminaba leyendo un dragOrder de un render viejo (el de
+  // antes del batch) en vez del último calculado -- el ref siempre está al
+  // día porque se escribe de inmediato, sin pasar por el ciclo de render.
+  // draggingCode/dragOrder en React state son solo para pintar (opacidad de
+  // la fila, orden visual mientras se arrastra); el commit final siempre
+  // sale del ref.
+  const dragStateRef = useRef({ code: null, order: null });
   const [draggingCode, setDraggingCode] = useState(null);
   const [dragOrder, setDragOrder] = useState(null);
 
   function handleDragStart(e, code) {
     e.currentTarget.setPointerCapture(e.pointerId);
+    const order = activeProducts.map((p) => p.code);
+    dragStateRef.current = { code, order };
     setDraggingCode(code);
-    setDragOrder(activeProducts.map((p) => p.code));
+    setDragOrder(order);
   }
 
   function handleDragMove(e) {
-    if (!draggingCode) return;
+    const st = dragStateRef.current;
+    if (!st.code) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
     const row = el?.closest("[data-product-code]");
     const overCode = row?.getAttribute("data-product-code");
-    if (!overCode || overCode === draggingCode) return;
-    setDragOrder((order) => {
-      if (!order) return order;
-      const from = order.indexOf(draggingCode);
-      const to = order.indexOf(overCode);
-      if (from === -1 || to === -1 || from === to) return order;
-      const next = [...order];
-      next.splice(from, 1);
-      next.splice(to, 0, draggingCode);
-      return next;
-    });
+    if (!overCode || overCode === st.code) return;
+    const from = st.order.indexOf(st.code);
+    const to = st.order.indexOf(overCode);
+    if (from === -1 || to === -1 || from === to) return;
+    const next = [...st.order];
+    next.splice(from, 1);
+    next.splice(to, 0, st.code);
+    dragStateRef.current = { code: st.code, order: next };
+    setDragOrder(next);
   }
 
   function handleDragEnd() {
-    if (draggingCode && dragOrder) onReorderProducts(dragOrder);
+    const st = dragStateRef.current;
+    if (st.code && st.order) onReorderProducts(st.order);
+    dragStateRef.current = { code: null, order: null };
     setDraggingCode(null);
     setDragOrder(null);
   }
@@ -121,8 +132,15 @@ export default function ProductsView({
   const visibleProducts = !editMode && hideZeroStock
     ? activeProducts.filter((p) => (stock[p.code] || 0) > 0)
     : activeProducts;
-  const displayedProducts = editMode && dragOrder
-    ? dragOrder.map((code) => activeProducts.find((p) => p.code === code)).filter(Boolean)
+  // El arrastre también vale en la vista simple, no solo en modo edición --
+  // dragOrder siempre es una permutación de TODOS los activos (hacen falta
+  // todos para reorderActiveProducts), así que acá se filtra de nuevo por
+  // "ocultar en 0" para no mostrar durante el arrastre algo que la vista
+  // simple ya tenía escondido.
+  const displayedProducts = dragOrder
+    ? dragOrder
+        .map((code) => activeProducts.find((p) => p.code === code))
+        .filter((p) => p && (editMode || !hideZeroStock || (stock[p.code] || 0) > 0))
     : visibleProducts;
 
   function applyDelta(code, sign) {
@@ -207,7 +225,7 @@ export default function ProductsView({
         </div>
       )}
 
-      <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 10 }}>
         {displayedProducts.map((p) => {
           const qty = stock[p.code] || 0;
           const isLow = qty <= lowStockThresholdFor(p);
@@ -310,6 +328,22 @@ export default function ProductsView({
                     >
                       <ReceiptText size={13} />
                     </button>
+                    <button
+                      onPointerDown={(e) => handleDragStart(e, p.code)}
+                      onPointerMove={handleDragMove}
+                      onPointerUp={handleDragEnd}
+                      onPointerCancel={handleDragEnd}
+                      onLostPointerCapture={handleDragEnd}
+                      title="Arrastrar para reordenar"
+                      aria-label="Arrastrar para reordenar"
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        width: 26, height: 26, borderRadius: 8, flexShrink: 0, cursor: "grab", touchAction: "none",
+                        background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
+                      }}
+                    >
+                      <GripVertical size={14} />
+                    </button>
                   </div>
                 )}
 
@@ -383,21 +417,21 @@ export default function ProductsView({
               )}
 
               {editMode && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px", marginTop: 12 }}>
-                  <div>
+                <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+                  <div style={{ flex: "3 1 0", minWidth: 0 }}>
                     <FieldLabel>STOCK ACTUAL</FieldLabel>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={editInputs[p.code]}
-                      onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                      style={{
-                        width: "100%", boxSizing: "border-box", fontSize: 18, fontWeight: 700,
-                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "7px 10px",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    />
-                    <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                    <div style={{ display: "flex", gap: 3, minWidth: 0 }}>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={editInputs[p.code]}
+                        onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        style={{
+                          flex: "1 1 0", minWidth: 0, boxSizing: "border-box", fontSize: 15, fontWeight: 700,
+                          border: "1px solid var(--border-strong)", borderRadius: 7, padding: "6px 8px",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      />
                       <input
                         type="number"
                         inputMode="numeric"
@@ -406,8 +440,8 @@ export default function ProductsView({
                         placeholder="cant."
                         title="Cantidad a sumar o restar del stock de arriba"
                         style={{
-                          flex: 1, minWidth: 0, boxSizing: "border-box", fontSize: 13,
-                          border: "1px solid var(--border)", borderRadius: 6, padding: "5px 7px",
+                          width: 40, minWidth: 0, flexShrink: 0, boxSizing: "border-box", fontSize: 11, textAlign: "center",
+                          border: "1px solid var(--border)", borderRadius: 6, padding: "4px 2px",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       />
@@ -417,8 +451,8 @@ export default function ProductsView({
                         title="Restar del stock actual"
                         aria-label="Restar del stock actual"
                         style={{
-                          flexShrink: 0, width: 28, background: "transparent", border: "1px solid var(--border)",
-                          borderRadius: 6, color: "var(--text)", fontSize: 15, fontWeight: 700, cursor: "pointer",
+                          flexShrink: 0, width: 22, background: "transparent", border: "1px solid var(--border)",
+                          borderRadius: 6, color: "var(--text)", fontSize: 13, fontWeight: 700, cursor: "pointer",
                         }}
                       >
                         −
@@ -429,15 +463,15 @@ export default function ProductsView({
                         title="Sumar al stock actual"
                         aria-label="Sumar al stock actual"
                         style={{
-                          flexShrink: 0, width: 28, background: "transparent", border: "1px solid var(--border)",
-                          borderRadius: 6, color: "var(--text)", fontSize: 15, fontWeight: 700, cursor: "pointer",
+                          flexShrink: 0, width: 22, background: "transparent", border: "1px solid var(--border)",
+                          borderRadius: 6, color: "var(--text)", fontSize: 13, fontWeight: 700, cursor: "pointer",
                         }}
                       >
                         +
                       </button>
                     </div>
                   </div>
-                  <div>
+                  <div style={{ flex: "1 1 0", minWidth: 0 }}>
                     {exchangeRate ? (
                       <>
                         <FieldLabel>PRECIO USD</FieldLabel>
@@ -475,6 +509,11 @@ export default function ProductsView({
                       </>
                     )}
                   </div>
+                </div>
+              )}
+
+              {editMode && (
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "10px 12px", marginTop: 10 }}>
                   <div>
                     <FieldLabel>HL POR UNIDAD</FieldLabel>
                     <input
@@ -522,23 +561,20 @@ export default function ProductsView({
                       }}
                     />
                   </div>
-                </div>
-              )}
-
-              {editMode && (
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
-                  <button
-                    onClick={() => onArchiveProduct(p.code)}
-                    title="Eliminar producto"
-                    aria-label="Eliminar producto"
-                    style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      background: "transparent", border: "1px solid var(--border)", color: "var(--warning-text)",
-                      borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer",
-                    }}
-                  >
-                    <Trash2 size={13} /> Eliminar producto
-                  </button>
+                  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={() => onArchiveProduct(p.code)}
+                      title="Eliminar producto"
+                      aria-label="Eliminar producto"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        background: "transparent", border: "1px solid var(--border)", color: "var(--warning-text)",
+                        borderRadius: 7, padding: "8px 10px", fontSize: 12, cursor: "pointer",
+                      }}
+                    >
+                      <Trash2 size={13} /> Eliminar
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
