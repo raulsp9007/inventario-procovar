@@ -122,6 +122,12 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [confirmingPostponeId, setConfirmingPostponeId] = useState(null);
+  // Momento en que se armó cada "¿Seguro?" -- si el segundo toque llega
+  // demasiado rápido (mal-tap doble sin querer, no una decisión real) se
+  // ignora en vez de confirmar la acción destructiva.
+  const armedDeleteAtRef = useRef(new Map());
+  const armedPostponeAtRef = useRef(new Map());
+  const DOUBLE_TAP_GUARD_MS = 400;
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
   const [pendingPostpones, setPendingPostpones] = useState(() => new Map());
   const [pendingEditUndo, setPendingEditUndo] = useState(null); // { orderId, customerName, revertDraft, timeoutId } | null
@@ -534,10 +540,13 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   // un toque accidental en el aviso de cierre de ventas.
   function handlePostponeClick(order) {
     if (confirmingPostponeId === order.orderId) {
+      const armedAt = armedPostponeAtRef.current.get(order.orderId);
+      if (armedAt && Date.now() - armedAt < DOUBLE_TAP_GUARD_MS) return;
       setConfirmingPostponeId(null);
       stagePostpone(order);
       return;
     }
+    armedPostponeAtRef.current.set(order.orderId, Date.now());
     setConfirmingPostponeId(order.orderId);
     setTimeout(() => {
       setConfirmingPostponeId((current) => (current === order.orderId ? null : current));
@@ -571,10 +580,13 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   function handleDeleteClick(order) {
     if (confirmingDeleteId === order.orderId) {
+      const armedAt = armedDeleteAtRef.current.get(order.orderId);
+      if (armedAt && Date.now() - armedAt < DOUBLE_TAP_GUARD_MS) return;
       setConfirmingDeleteId(null);
       stageDelete(order);
       return;
     }
+    armedDeleteAtRef.current.set(order.orderId, Date.now());
     setConfirmingDeleteId(order.orderId);
     setTimeout(() => {
       setConfirmingDeleteId((current) => (current === order.orderId ? null : current));

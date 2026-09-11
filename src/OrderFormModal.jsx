@@ -261,17 +261,32 @@ export default function OrderFormModal({
                 <option key={p.code} value={p.code}>{p.name}</option>
               ))}
             </select>
-            {effectiveSelectedProductCode && (
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                ({Math.max(0, computeAvailable(effectiveSelectedProductCode))} disponibles
-                {(() => {
-                  const reserveQty = products.find((p) => p.code === effectiveSelectedProductCode)?.reserveQty || 0;
-                  return reserveQty > 0 ? ` · +${reserveQty} en reserva` : "";
-                })()}
-                )
-              </div>
-            )}
+            {effectiveSelectedProductCode && (() => {
+              const available = Math.max(0, computeAvailable(effectiveSelectedProductCode));
+              const reserveQty = products.find((p) => p.code === effectiveSelectedProductCode)?.reserveQty || 0;
+              const qtyNum = parseInt(pendingQty, 10) || 0;
+              const exceedsStock = qtyNum > available;
+              return (
+                <div style={{ fontSize: 12.5, fontWeight: exceedsStock ? 600 : 400, color: exceedsStock ? "var(--warning-text)" : "var(--text-muted)" }}>
+                  {exceedsStock ? "⚠ solo " : "("}{available} disponibles
+                  {reserveQty > 0 ? ` · +${reserveQty} en reserva` : ""}
+                  {exceedsStock ? "" : ")"}
+                </div>
+              );
+            })()}
             <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => onPendingQtyChange(String(Math.max(1, (parseInt(pendingQty, 10) || 0) - 1)))}
+                title="Restar"
+                aria-label="Restar cantidad"
+                style={{
+                  flexShrink: 0, width: 36, background: "transparent", border: "1px solid var(--border)",
+                  borderRadius: 7, color: "var(--text)", fontSize: 16, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                −
+              </button>
               <input
                 type="number"
                 inputMode="numeric"
@@ -284,6 +299,18 @@ export default function OrderFormModal({
                   padding: "9px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
                 }}
               />
+              <button
+                type="button"
+                onClick={() => onPendingQtyChange(String((parseInt(pendingQty, 10) || 0) + 1))}
+                title="Sumar"
+                aria-label="Sumar cantidad"
+                style={{
+                  flexShrink: 0, width: 36, background: "transparent", border: "1px solid var(--border)",
+                  borderRadius: 7, color: "var(--text)", fontSize: 16, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                +
+              </button>
               <button
                 onClick={onAddDraftLine}
                 style={{

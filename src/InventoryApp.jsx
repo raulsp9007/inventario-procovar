@@ -61,6 +61,18 @@ export default function InventoryApp() {
 
       <RadialNav view={view} setView={setView} />
 
+      {saveState !== "idle" && (
+        <div
+          style={{
+            position: "fixed", top: "calc(10px + env(safe-area-inset-top, 0px))", left: "50%", transform: "translateX(-50%)",
+            zIndex: 70, background: "var(--ink)", color: "var(--cream)", borderRadius: 20,
+            padding: "6px 14px", fontSize: 12, fontWeight: 600, boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+          }}
+        >
+          {saveState === "saving" ? "Guardando…" : "Guardado ✓"}
+        </div>
+      )}
+
       <div style={{ background: "var(--ink)", color: "var(--cream)", padding: "24px 16px 20px" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
