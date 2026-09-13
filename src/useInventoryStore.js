@@ -758,6 +758,17 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, movements: nextMovements });
   }
 
+  // Deshacer genérico para ediciones de cliente -- restaura el array de
+  // movements completo tal como estaba antes del cambio, en vez de intentar
+  // "revertir" el rename campo por campo. Si el rename fusionó dos clientes
+  // ya existentes (mismo nombre nuevo), revertir campo por campo movería
+  // también el historial del OTRO cliente por error; restaurar el snapshot
+  // completo es la única forma segura de deshacer sin importar si hubo fusión.
+  function restoreMovements(snapshot) {
+    setMovements(snapshot);
+    persist({ ...currentPersistedState, movements: snapshot });
+  }
+
   function markOrderConfirmed(orderId, confirmed) {
     const nextMovements = movements.map((m) =>
       m.orderId === orderId ? { ...m, confirmed } : m
@@ -828,6 +839,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
+    updateCustomer, restoreMovements, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
   };
 }

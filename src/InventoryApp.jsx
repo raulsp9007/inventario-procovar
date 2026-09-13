@@ -42,7 +42,7 @@ export default function InventoryApp() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent,
-    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
+    updateCustomer, restoreMovements, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
   } = useInventoryStore();
 
   if (!loaded) {
@@ -241,6 +241,7 @@ export default function InventoryApp() {
             movements={movements}
             showPrices={showPrices}
             onUpdateCustomer={updateCustomer}
+            onRestoreMovements={restoreMovements}
           />
         )}
 
