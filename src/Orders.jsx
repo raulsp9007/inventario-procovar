@@ -4,6 +4,7 @@ import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr }
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
 import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
+import { productChipColors } from "./colorUtils";
 import Banner from "./Banner.jsx";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
@@ -33,51 +34,105 @@ function WhatsAppIcon({ size = 16 }) {
   );
 }
 
+// Ícono de moto (domicilio) -- tampoco viene en lucide-react.
+function MotoIcon({ size = 15, color = "currentColor", strokeWidth = 1.7 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="6" cy="17.5" r="2.8" />
+      <circle cx="18" cy="17.5" r="2.8" />
+      <path d="M8.8 17.5h6.4M6 14.7V9h5l3.2 4.4 3.8 1.2v2.9" />
+      <path d="M11 9V6h2.6" />
+    </svg>
+  );
+}
+
 // Track de 3 pasos del pedido, en el orden real del flujo de venta: primero
 // se manda al cliente, después se factura (esto es lo que antes era
 // "Enviado" -- dispara el descuento de stock/ingreso para pedidos de
 // mañana, ver markOrdersSent), y por último se confirma a mano. Cada
-// círculo se puede tocar para alternar su estado -- igual que antes con
-// los checkboxes -- por si hace falta corregir a mano.
-function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirmed }) {
+// columna entera es el área tocable (no solo el círculo). Marcar un paso no
+// encadena a los anteriores (se puede corregir uno solo a mano), pero
+// DESmarcar sí encadena hacia adelante -- no tiene sentido un pedido
+// "Confirmado" sin estar "Facturado". Con los 3 hechos, colapsa a una
+// pastilla para no ocupar tanto alto; tocarla la vuelve a expandir.
+function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirmed, onSetOrderSteps, expanded, onToggleExpanded }) {
   const steps = [
-    { label: "Enviado", short: "Env.", done: !!order.sentToCustomer, onToggle: () => onMarkSentToCustomer(order.orderId, !order.sentToCustomer) },
-    { label: "Facturado", short: "Fact.", done: !!order.sent, onToggle: () => onMarkSent(order.orderId, !order.sent) },
-    { label: "Confirmado", short: "Conf.", done: !!order.confirmed, onToggle: () => onMarkConfirmed(order.orderId, !order.confirmed) },
+    { key: "sentToCustomer", label: "Enviado", short: "ENV.", done: !!order.sentToCustomer },
+    { key: "sent", label: "Facturado", short: "FACT.", done: !!order.sent },
+    { key: "confirmed", label: "Confirmado", short: "CONF.", done: !!order.confirmed },
   ];
+  const allDone = steps.every((s) => s.done);
+  const firstPendingIndex = steps.findIndex((s) => !s.done);
+
+  function toggleStep(index) {
+    const step = steps[index];
+    if (!step.done) {
+      if (index === 0) onMarkSentToCustomer(order.orderId, true);
+      else if (index === 1) onMarkSent(order.orderId, true);
+      else onMarkConfirmed(order.orderId, true);
+      return;
+    }
+    const patch = {};
+    steps.slice(index).forEach((s) => { if (s.done) patch[s.key] = false; });
+    onSetOrderSteps(order.orderId, patch);
+  }
+
+  if (allDone && !expanded) {
+    return (
+      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 7, height: 44 }}>
+        <button
+          onClick={onToggleExpanded}
+          style={{
+            display: "flex", alignItems: "center", gap: 6, background: "rgba(60,110,74,.1)",
+            border: "none", borderRadius: 999, padding: "6px 11px", cursor: "pointer",
+          }}
+        >
+          <Check size={13} strokeWidth={3} color="var(--green)" />
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--green)" }}>Confirmado</span>
+        </button>
+        <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--faintest)", whiteSpace: "nowrap" }}>tocar para editar</span>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ minWidth: 160 }}>
-      <div style={{ display: "flex", alignItems: "center" }}>
-        {steps.map((step, i) => (
-          <div key={step.label} style={{ display: "flex", alignItems: "center", flex: i < steps.length - 1 ? "1 1 auto" : "0 0 auto" }}>
-            <button
-              onClick={step.onToggle}
-              title={step.label}
-              aria-label={step.label}
-              aria-pressed={step.done}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                width: 20, height: 20, borderRadius: "50%", fontSize: 10, cursor: "pointer", padding: 0,
-                background: step.done ? "var(--accent-green-text)" : "transparent",
-                color: step.done ? "var(--cream)" : "var(--text-muted)",
-                border: step.done ? "none" : "1.5px solid var(--border)",
-              }}
-            >
-              {step.done ? <Check size={12} /> : i + 1}
-            </button>
+    <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "flex-start", height: 44 }}>
+      {steps.map((step, i) => {
+        const isNextPending = i === firstPendingIndex;
+        const circleColor = step.done ? "var(--green)" : isNextPending ? "var(--orange)" : "var(--muted)";
+        const labelColor = step.done ? "var(--green)" : isNextPending ? "var(--orange)" : "var(--faint)";
+        return (
+          <button
+            key={step.key}
+            onClick={() => toggleStep(i)}
+            title={step.label}
+            aria-label={step.label}
+            aria-pressed={step.done}
+            style={{
+              flex: 1, minWidth: 0, position: "relative", display: "flex", flexDirection: "column",
+              alignItems: "center", gap: 4, background: "transparent", border: "none", cursor: "pointer", padding: 0,
+            }}
+          >
             {i < steps.length - 1 && (
-              <div style={{ flex: "1 1 auto", height: 2, minWidth: 12, background: step.done ? "var(--accent-green-text)" : "var(--border)" }} />
+              <div style={{
+                position: "absolute", top: 12, left: "50%", right: "-50%", height: 2,
+                background: step.done ? "var(--green)" : "var(--border)",
+              }} />
             )}
-          </div>
-        ))}
-      </div>
-      <div style={{ display: "flex", fontSize: 10, color: "var(--text-faint-2)", marginTop: 3 }}>
-        {steps.map((step, i) => (
-          <span key={step.label} style={{ width: 20, textAlign: "center", flex: i < steps.length - 1 ? "1 1 auto" : "0 0 auto" }}>
-            {step.short}
-          </span>
-        ))}
-      </div>
+            <div style={{
+              position: "relative", width: 24, height: 24, borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: step.done ? "var(--green)" : "var(--surface-sunken)",
+              border: step.done ? "none" : isNextPending ? "1.5px solid var(--orange-2)" : "1px solid var(--border-strong)",
+            }}>
+              {step.done
+                ? <Check size={12} strokeWidth={3} color="var(--cream)" />
+                : <span style={{ fontSize: 12, fontWeight: isNextPending ? 700 : 600, color: circleColor }}>{i + 1}</span>}
+            </div>
+            <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.04em", color: labelColor }}>{step.short}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -104,7 +159,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onRefreshPendingPrices, onError, cierreVentasHour }) {
+export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -119,9 +174,20 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(null);
+  const [editingOrderSeq, setEditingOrderSeq] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [confirmingPostponeId, setConfirmingPostponeId] = useState(null);
+  // Trackers ya completados que el usuario reabrió a mano para corregir un
+  // paso -- por default un pedido con los 3 pasos hechos se ve colapsado.
+  const [expandedCompletedTrackers, setExpandedCompletedTrackers] = useState(() => new Set());
+  function toggleTrackerExpanded(orderId) {
+    setExpandedCompletedTrackers((s) => {
+      const next = new Set(s);
+      if (next.has(orderId)) next.delete(orderId); else next.add(orderId);
+      return next;
+    });
+  }
   // Momento en que se armó cada "¿Seguro?" -- si el segundo toque llega
   // demasiado rápido (mal-tap doble sin querer, no una decisión real) se
   // ignora en vez de confirmar la acción destructiva.
@@ -339,6 +405,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setDraftLines([]);
     setPendingQty("");
     setEditingOrderId(null);
+    setEditingOrderSeq(null);
     setPendingReserveConfirm(null);
     // No se resetea draftBucket: si confirmaste un pedido Programado,
     // te quedás en "Programar" para seguir cargando pedidos del mismo tipo.
@@ -354,6 +421,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setDraftLines(order.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
     setPendingQty("");
     setEditingOrderId(order.orderId);
+    setEditingOrderSeq(order.orderSeq);
     setDraftBucket(order.bucket);
     setDraftDate(order.bucket === "manana" ? order.date : tomorrowStr());
     setModalOpen(true);
@@ -593,6 +661,20 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     }, 3000);
   }
 
+  // La tarjeta de pedido (a diferencia del aviso de cierre de ventas, que
+  // sigue con el botón único que alterna a "¿Seguro?") arma la confirmación
+  // reemplazando todo el pie por dos botones separados -- Cancelar y
+  // Eliminar ya no son el mismo control tocado dos veces, así que no hace
+  // falta el guard anti-doble-tap acá.
+  function cancelDeleteArm() {
+    setConfirmingDeleteId(null);
+  }
+
+  function confirmDeleteFromCard(order) {
+    setConfirmingDeleteId(null);
+    stageDelete(order);
+  }
+
   // Borrado real recién pasa cuando expiran los 5s sin que se apriete
   // "Deshacer" -- nada se pierde hasta ese momento, el pedido solo se
   // esconde de las listas mientras tanto (pendingDeletes). Se guarda el
@@ -621,141 +703,187 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   }
 
   function renderOrderRow(order, i, { showDate }) {
+    const isDeleting = confirmingDeleteId === order.orderId;
+    const allStepsDone = order.sentToCustomer && order.sent && order.confirmed;
+    const statusColor = isDeleting ? "var(--red)" : allStepsDone ? "var(--green)" : "var(--orange-2)";
+    const totalStr = formatCUP(orderTotal(order));
+    const [totalNumber, totalUnit] = totalStr.split(" ");
     return (
       <div
         key={order.orderId}
         style={{
-          padding: "12px 16px", fontSize: 13.5,
-          borderTop: i === 0 ? "none" : "1px solid var(--divider)",
+          display: "flex", alignItems: "stretch", background: "var(--surface)",
+          border: `1px solid ${isDeleting ? "var(--danger-border)" : "var(--border)"}`,
+          borderRadius: 12, overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              {order.orderSeq && (
-                <span style={{ color: "var(--text-faint)", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>#{order.orderSeq}</span>
+        <div style={{ width: 4, flexShrink: 0, background: statusColor }} />
+        <div style={{ flex: 1, minWidth: 0, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                {order.orderSeq && (
+                  <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 500, color: "var(--faintest)", fontVariantNumeric: "tabular-nums" }}>#{order.orderSeq}</span>
+                )}
+                {order.isDelivery && <MotoIcon size={15} color="var(--text)" />}
+                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {order.customerName}
+                </span>
+              </div>
+              {sendBusinessName && order.businessName && (
+                <div style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {order.businessName}
+                </div>
               )}
-              {order.isDelivery ? "🛺 " : ""}{order.customerName}
+            </div>
+            <div style={{ flexShrink: 0, textAlign: "right" }}>
+              {showPrices && (
+                <div style={{ display: "flex", alignItems: "baseline", gap: 3, justifyContent: "flex-end" }}>
+                  <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{totalNumber}</span>
+                  <span style={{ fontSize: 10, fontWeight: 500, color: "var(--faint)" }}>{totalUnit}</span>
+                </div>
+              )}
               {showDate && (
                 <span style={{
-                  fontSize: 11, fontWeight: 600, color: "var(--accent-orange-soft-text)",
-                  border: "1px solid var(--border-warn)", borderRadius: 5, padding: "1px 6px",
+                  display: "inline-flex", marginTop: 4, background: "var(--banner-bg)", border: "1px solid var(--border-warn)",
+                  borderRadius: 999, padding: "2px 7px", fontSize: 10, fontWeight: 600, color: "var(--orange-text)",
                 }}>
                   {formatDate(order.date)}
                 </span>
               )}
             </div>
-            {sendBusinessName && order.businessName && (
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
-                {order.businessName}
-              </div>
-            )}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
-              {order.lines.map((line) => {
-                const product = products.find((p) => p.code === line.code);
-                const color = product?.color || "#8A8574";
-                return (
-                  <span
-                    key={line.code}
-                    style={{
-                      display: "inline-flex", alignItems: "center",
-                      background: `${color}22`, border: `1px solid ${color}55`,
-                      borderRadius: 20, padding: "3px 10px", fontSize: 12, fontWeight: 600,
-                      color: "var(--text)",
-                    }}
-                  >
-                    {product ? product.short : line.code} x{line.qty}
-                  </span>
-                );
-              })}
-            </div>
-            {showPrices && (
-              <div style={{ fontWeight: 700, fontSize: 13.5, marginTop: 6 }}>
-                {formatCUP(orderTotal(order))}
-              </div>
-            )}
-            <div style={{ color: "var(--text-faint-2)", fontSize: 11.5, marginTop: 4 }}>
-              {formatDateTime(order.timestamp)}
-            </div>
-            {order.note && (
-              <div style={{ color: "var(--warning-text)", fontSize: 12.5, marginTop: 4, fontStyle: "italic" }}>
-                📝 {order.note}
-              </div>
-            )}
           </div>
-        </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
-            <OrderStepTrack
-              order={order}
-              onMarkSentToCustomer={onMarkSentToCustomer}
-              onMarkSent={onMarkSent}
-              onMarkConfirmed={onMarkConfirmed}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-              {order.customerPhone && (
-                <button
-                  onClick={() => {
-                    openOrderWhatsAppToCustomer(order, products);
-                    onMarkSentToCustomer(order.orderId, true);
-                  }}
-                  title="Enviar copia al cliente"
-                  aria-label="Enviar copia al cliente"
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {order.lines.map((line) => {
+              const product = products.find((p) => p.code === line.code);
+              const colors = productChipColors(product?.color);
+              return (
+                <span
+                  key={line.code}
                   style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    background: "var(--whatsapp)", color: "var(--on-accent)", border: "none",
-                    borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    background: colors.bg, border: `1px solid ${colors.border}`,
+                    borderRadius: 999, padding: "3px 9px",
                   }}
                 >
-                  <WhatsAppIcon size={16} />
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
-                  onMarkSent(order.orderId, true);
-                }}
-                title="Registrar (WhatsApp)"
-                aria-label="Registrar (WhatsApp)"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "var(--whatsapp)", color: "var(--on-accent)", border: "none",
-                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
-                }}
-              >
-                <Receipt size={16} />
-              </button>
-              <button
-                onClick={() => startEdit(order)}
-                title="Editar pedido"
-                aria-label="Editar pedido"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
-                  borderRadius: 7, width: 40, height: 40, cursor: "pointer", flexShrink: 0,
-                }}
-              >
-                <Pencil size={16} />
-              </button>
-              <button
-                onClick={() => handleDeleteClick(order)}
-                title={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
-                aria-label={confirmingDeleteId === order.orderId ? "Confirmar eliminación" : "Eliminar pedido"}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  gap: 4, width: confirmingDeleteId === order.orderId ? "auto" : 40, height: 40,
-                  padding: confirmingDeleteId === order.orderId ? "0 10px" : 0,
-                  background: confirmingDeleteId === order.orderId ? "var(--danger)" : "transparent",
-                  border: confirmingDeleteId === order.orderId ? "1px solid var(--danger)" : "1px solid var(--border)",
-                  color: confirmingDeleteId === order.orderId ? "var(--on-accent)" : "var(--text-muted)",
-                  borderRadius: 7, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600,
-                }}
-              >
-                <Trash2 size={14} />
-                {confirmingDeleteId === order.orderId && "¿Seguro?"}
-              </button>
-            </div>
+                  <span style={{ fontSize: 11.5, fontWeight: 500, color: colors.text }}>{product ? product.short : line.code}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: colors.text, fontVariantNumeric: "tabular-nums" }}>x{line.qty}</span>
+                </span>
+              );
+            })}
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faintest)", fontVariantNumeric: "tabular-nums" }}>
+              {formatDateTime(order.timestamp)}
+            </span>
           </div>
+
+          {order.note && (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 6, background: "var(--surface-subtle)", borderLeft: "2px solid var(--border)", borderRadius: "0 7px 7px 0", padding: "6px 8px" }}>
+              <span style={{ flexShrink: 0, marginTop: 1, fontSize: 12, color: "var(--faint)" }}>📝</span>
+              <span style={{ fontSize: 12, fontStyle: "italic", color: "var(--muted)" }}>{order.note}</span>
+            </div>
+          )}
+
+          {isDeleting ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 8, borderTop: "1px solid var(--hairline)" }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--red)" }}>
+                Se elimina el pedido {order.orderSeq ? `#${order.orderSeq}` : ""}
+              </div>
+              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                <button
+                  onClick={cancelDeleteArm}
+                  style={{
+                    height: 36, padding: "0 12px", borderRadius: 999, border: "1px solid var(--border-strong)",
+                    background: "var(--surface)", color: "var(--text)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => confirmDeleteFromCard(order)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, height: 36, padding: "0 14px", borderRadius: 999,
+                    border: "none", background: "var(--red)", color: "#FFFFFF", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  <Trash2 size={13} strokeWidth={1.9} /> Eliminar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 8, borderTop: "1px solid var(--hairline)" }}>
+              <OrderStepTrack
+                order={order}
+                onMarkSentToCustomer={onMarkSentToCustomer}
+                onMarkSent={onMarkSent}
+                onMarkConfirmed={onMarkConfirmed}
+                onSetOrderSteps={onSetOrderSteps}
+                expanded={expandedCompletedTrackers.has(order.orderId)}
+                onToggleExpanded={() => toggleTrackerExpanded(order.orderId)}
+              />
+              <div style={{ flexShrink: 0, width: 1, height: 34, background: "var(--hairline)" }} />
+              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                {order.customerPhone && (
+                  <button
+                    onClick={() => {
+                      openOrderWhatsAppToCustomer(order, products);
+                      onMarkSentToCustomer(order.orderId, true);
+                    }}
+                    title="Enviar copia al cliente"
+                    aria-label="Enviar copia al cliente"
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "var(--whatsapp)", border: "none", borderRadius: "50%", color: "#FFFFFF",
+                      width: 40, height: 40, cursor: "pointer", flexShrink: 0,
+                    }}
+                  >
+                    <WhatsAppIcon size={20} />
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
+                    onMarkSent(order.orderId, true);
+                  }}
+                  title="Registrar (negocio)"
+                  aria-label="Registrar (negocio)"
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
+                    width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                    background: "var(--surface-subtle)", border: "1px solid var(--border-strong)", color: "var(--text)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <Receipt size={15} strokeWidth={1.7} />
+                  <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: "0.06em", color: "var(--muted)" }}>NEG.</span>
+                </button>
+                <button
+                  onClick={() => startEdit(order)}
+                  title="Editar pedido"
+                  aria-label="Editar pedido"
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 32, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
+                  }}
+                >
+                  <Pencil size={16} strokeWidth={1.8} />
+                </button>
+                <button
+                  onClick={() => handleDeleteClick(order)}
+                  title="Eliminar pedido"
+                  aria-label="Eliminar pedido"
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 32, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
+                  }}
+                >
+                  <Trash2 size={16} strokeWidth={1.8} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -813,7 +941,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>{emptyText}</div>
           )
         ) : (
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ display: "grid", gap: 10 }}>
             {sorted.map((order, i) => renderOrderRow(order, i, { showDate }))}
           </div>
         )}
@@ -1121,7 +1249,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
               <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
                 {formatDate(date)}
               </div>
-              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ display: "grid", gap: 10 }}>
                 {pastOrdersByDate.get(date).map((order, i) => renderOrderRow(order, i, {}))}
               </div>
             </div>
@@ -1147,6 +1275,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         open={modalOpen}
         onClose={closeModal}
         editingOrderId={editingOrderId}
+        editingOrderSeq={editingOrderSeq}
         draftBucket={draftBucket}
         onDraftBucketChange={setDraftBucket}
         draftDate={draftDate}

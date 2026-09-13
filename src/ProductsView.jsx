@@ -765,7 +765,7 @@ export default function ProductsView({
               >
                 <div style={{ width: 4, flexShrink: 0, background: p.color }} />
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: isVentaOpen ? "column" : "row" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0 10px 12px", minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0 10px 12px", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {p.name}
@@ -795,7 +795,7 @@ export default function ProductsView({
                         </div>
                       )}
                     </div>
-                    <div style={{ flexShrink: 0, display: "flex", alignItems: "baseline", gap: 3 }}>
+                    <div style={{ flexShrink: 0, minWidth: 76, display: "flex", alignItems: "baseline", gap: 3 }}>
                       <span style={{
                         fontSize: 27, fontWeight: 700, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums",
                         color: isLow ? "var(--orange)" : "var(--text)",

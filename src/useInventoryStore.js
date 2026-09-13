@@ -693,6 +693,55 @@ export function useInventoryStore() {
     });
   }
 
+  // Cambia varios pasos del tracker de una vez (ej. al desmarcar "Facturado"
+  // el tracker desmarca en cascada "Confirmado" también) -- mismo motivo que
+  // updateCustomer: dos persist() seguidos sobre el mismo `movements` se
+  // pisarían entre sí (el segundo partiría del estado de antes del primero).
+  // "sent" es el único paso que mueve stock/ingreso (factura la venta de
+  // pedidos para mañana) -- mismo cálculo que markOrdersSent.
+  function setOrderSteps(orderId, { sentToCustomer, sent, confirmed }) {
+    const orderMovements = movements.filter((m) => m.orderId === orderId);
+    if (orderMovements.length === 0) return;
+    const bucket = orderMovements[0].bucket || "hoy";
+    const wasSent = !!orderMovements[0].sent;
+    const nextStock = { ...stock };
+    let revenueDelta = 0;
+    let hlDelta = 0;
+    if (bucket === "manana" && sent !== undefined && wasSent !== sent) {
+      const sign = sent ? 1 : -1;
+      orderMovements.forEach((m) => {
+        nextStock[m.code] = (nextStock[m.code] || 0) - sign * m.qty;
+        revenueDelta += sign * m.qty * (m.unitPrice || 0);
+        hlDelta += sign * m.qty * (m.unitHl || 0);
+      });
+    }
+    const nowIso = new Date().toISOString();
+    const nextMovements = movements.map((m) => {
+      if (m.orderId !== orderId) return m;
+      const next = { ...m };
+      if (sentToCustomer !== undefined) next.sentToCustomer = sentToCustomer;
+      if (sent !== undefined) {
+        next.sent = sent;
+        next.sentAt = sent ? nowIso : m.sentAt;
+      }
+      if (confirmed !== undefined) next.confirmed = confirmed;
+      return next;
+    });
+    const nextCumulativeRevenue = cumulativeRevenue + revenueDelta;
+    const nextCumulativeHl = cumulativeHl + hlDelta;
+    setStock(nextStock);
+    setMovements(nextMovements);
+    setCumulativeRevenue(nextCumulativeRevenue);
+    setCumulativeHl(nextCumulativeHl);
+    persist({
+      ...currentPersistedState,
+      stock: nextStock,
+      movements: nextMovements,
+      cumulativeRevenue: nextCumulativeRevenue,
+      cumulativeHl: nextCumulativeHl,
+    });
+  }
+
   // Edita nombre y/o negocio del cliente en un solo paso -- no hay un
   // registro de clientes aparte, así que ambos campos se guardan en todos
   // los movimientos que tenga ese cliente. Van juntos (no dos funciones
@@ -779,6 +828,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, refreshPendingPricesToCurrentRate, reorderActiveProducts,
+    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
   };
 }

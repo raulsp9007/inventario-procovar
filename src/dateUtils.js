@@ -37,6 +37,14 @@ export function formatDate(dateStr) {
   return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Fecha corta para el selector "Para mañana" del modal de pedido -- se
+// muestra como texto tocable en vez de ocupar una fila propia, no hace
+// falta el año ahí.
+export function formatDateShort(dateStr) {
+  const date = new Date(dateStr + "T00:00:00");
+  return date.toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "short" }).replace(/\.(?=\s|$)/g, "");
+}
+
 export function formatDateTime(isoTimestamp) {
   const date = new Date(isoTimestamp);
   return date.toLocaleString("es-ES", {

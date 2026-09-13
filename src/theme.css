@@ -62,6 +62,11 @@
   --orange: #B4661E;
   --orange-text: #8A5A1E;
   --red: #B4291E;
+
+  /* Rediseño Pedidos (design_handoff_pedidos) -- valores propios de esta
+     pantalla (pista del segmented control, botones deshabilitados). */
+  --segment-track: #DED7C4;
+  --disabled-bg: #CFC8B4;
 }
 
 [data-theme="dark"] {
@@ -124,4 +129,7 @@
   --orange: #E0954A;
   --orange-text: #E0B96A;
   --red: #C4382C;
+
+  --segment-track: #363A2D;
+  --disabled-bg: #4A4D3E;
 }

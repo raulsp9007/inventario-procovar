@@ -1,18 +1,36 @@
-import { X } from "lucide-react";
-import { tomorrowStr } from "./dateUtils";
+import { useState } from "react";
+import { X, Check, Info, AlertTriangle, ChevronDown } from "lucide-react";
+import { tomorrowStr, formatDateShort } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
-import Banner from "./Banner.jsx";
+import { productChipColors } from "./colorUtils";
+
+// Ícono de moto (domicilio) -- no viene en lucide-react. Repetido acá en vez
+// de importado de Orders.jsx para no crear una dependencia cruzada entre
+// dos componentes de presentación; es un ícono chico, no vale la pena.
+function MotoIcon({ size = 16, color = "currentColor", strokeWidth = 1.7 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="6" cy="17.5" r="2.8" />
+      <circle cx="18" cy="17.5" r="2.8" />
+      <path d="M8.8 17.5h6.4M6 14.7V9h5l3.2 4.4 3.8 1.2v2.9" />
+      <path d="M11 9V6h2.6" />
+    </svg>
+  );
+}
 
 function draftTotal(draftLines, prices, exchangeRate) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * priceToCUP(prices[l.code], exchangeRate), 0);
 }
 
 // Modal de crear/editar pedido -- componente de presentación pura, sin
-// estado propio. Todo el estado (draftLines, draftBucket, etc.) y la
-// lógica de negocio (confirmOrder, computeAvailable) siguen viviendo en
-// Orders.jsx; acá solo se arma el JSX a partir de las props.
+// estado propio (salvo el colapso de la nota). Todo el estado de negocio
+// (draftLines, draftBucket, etc.) y la lógica (confirmOrder, computeAvailable)
+// siguen viviendo en Orders.jsx; acá solo se arma el JSX a partir de las props.
+// Estructura de 3 partes -- cabecera fija (tinta) / cuerpo scrolleable
+// (fondo --bg-edit) / pie fijo -- mismo "modo de trabajo" que Ajustar en
+// Productos: mesa de trabajo oscurecida, una sola salida de ancho completo.
 export default function OrderFormModal({
-  open, onClose, editingOrderId,
+  open, onClose, editingOrderId, editingOrderSeq,
   draftBucket, onDraftBucketChange,
   draftDate, onDraftDateChange,
   customerName, onCustomerNameChange,
@@ -30,324 +48,433 @@ export default function OrderFormModal({
   onConfirmOrder,
   pendingReserveConfirm, onConfirmUseReserve, onCancelReserveConfirm,
 }) {
+  const [noteOpen, setNoteOpen] = useState(false);
   if (!open) return null;
+
+  const total = draftTotal(draftLines, prices, exchangeRate);
+  const canConfirm = customerName.trim().length > 0 && draftLines.length > 0;
 
   return (
     <div
       onClick={onClose}
       style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 60,
+        position: "fixed", inset: 0, background: "rgba(34,38,31,.55)", zIndex: 60,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box",
-          background: "var(--surface)", borderRadius: "16px 16px 0 0", padding: "16px 18px 24px",
+          width: "100%", maxWidth: 480, maxHeight: "88vh", boxSizing: "border-box",
+          background: "var(--bg-edit)", borderRadius: "20px 20px 0 0",
+          display: "flex", flexDirection: "column", overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>
+        {/* Cabecera fija */}
+        <div style={{ flexShrink: 0, background: "var(--ink)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.12em", color: "var(--cream)" }}>
             {editingOrderId ? "EDITAR PEDIDO" : "NUEVO PEDIDO"}
-          </div>
+          </span>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--on-ink-subtitle)", fontVariantNumeric: "tabular-nums" }}>
+            {editingOrderId
+              ? (editingOrderSeq ? `#${editingOrderSeq}` : "")
+              : (draftLines.length > 0 ? `${draftLines.length} producto${draftLines.length === 1 ? "" : "s"}` : "")}
+          </span>
           <button
             onClick={onClose}
             title="Cerrar"
             aria-label="Cerrar"
             style={{
-              background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 30, height: 30, borderRadius: 8, background: "var(--ink-2)", border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
             }}
           >
-            <X size={20} />
+            <X size={14} strokeWidth={2} color="var(--on-ink-subtitle)" />
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: draftBucket === "manana" ? 8 : 12 }}>
-          <button
-            onClick={() => onDraftBucketChange("hoy")}
-            style={{
-              flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
-              background: draftBucket === "hoy" ? "var(--ink)" : "transparent",
-              color: draftBucket === "hoy" ? "var(--cream)" : "var(--text)",
-            }}
-          >
-            Hoy
-          </button>
-          <button
-            onClick={() => onDraftBucketChange("manana")}
-            style={{
-              flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
-              background: draftBucket === "manana" ? "var(--ink)" : "transparent",
-              color: draftBucket === "manana" ? "var(--cream)" : "var(--text)",
-            }}
-          >
-            Para mañana
-          </button>
-        </div>
-
-        {draftBucket === "manana" && (
-          <input
-            type="date"
-            value={draftDate}
-            min={tomorrowStr()}
-            onChange={(e) => onDraftDateChange(e.target.value)}
-            style={{
-              width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
-              padding: "9px 10px", fontSize: 14, marginBottom: 12, background: "var(--surface)", color: "var(--text)",
-            }}
-          />
-        )}
-
-        <div style={{ position: "relative", marginBottom: 10 }}>
-          <input
-            type="text"
-            placeholder="Nombre y apellidos del cliente"
-            value={customerName}
-            onChange={(e) => onCustomerNameChange(e.target.value)}
-            onFocus={() => onShowSuggestions(true)}
-            onBlur={() => setTimeout(() => onShowSuggestions(false), 150)}
-            style={{
-              width: "100%", border: "1px solid var(--border)", borderRadius: 7,
-              padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
-            }}
-          />
-          {suggestions.length > 0 && (
-            <div
+        {/* Cuerpo scrolleable */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", gap: 4, background: "var(--segment-track)", borderRadius: 9, padding: 3 }}>
+            <button
+              onClick={() => onDraftBucketChange("hoy")}
               style={{
-                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
-                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 7,
-                marginTop: 4, overflow: "hidden",
+                flex: 1, height: 34, borderRadius: 7, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                background: draftBucket === "hoy" ? "var(--ink)" : "transparent",
+                color: draftBucket === "hoy" ? "var(--cream)" : "var(--muted)",
               }}
             >
-              {suggestions.map((name) => (
-                <div
-                  key={name}
-                  onClick={() => onPickSuggestion(name)}
-                  style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer" }}
-                >
-                  {name}
+              Hoy
+            </button>
+            <button
+              onClick={() => onDraftBucketChange("manana")}
+              style={{
+                flex: 1, height: 34, borderRadius: 7, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                background: draftBucket === "manana" ? "var(--ink)" : "transparent",
+                color: draftBucket === "manana" ? "var(--cream)" : "var(--muted)",
+              }}
+            >
+              Para mañana
+            </button>
+          </div>
+
+          {/* Tarjeta CLIENTE */}
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>CLIENTE</span>
+              <span style={{ flex: 1 }} />
+              {draftBucket === "manana" && (
+                <div style={{ position: "relative", display: "inline-flex" }}>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)", fontVariantNumeric: "tabular-nums" }}>
+                    {formatDateShort(draftDate)}
+                  </span>
+                  <input
+                    type="date"
+                    value={draftDate}
+                    min={tomorrowStr()}
+                    onChange={(e) => onDraftDateChange(e.target.value)}
+                    style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", border: "none" }}
+                  />
                 </div>
-              ))}
+              )}
             </div>
+
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                autoFocus={!editingOrderId}
+                placeholder="Nombre del cliente"
+                value={customerName}
+                onChange={(e) => onCustomerNameChange(e.target.value)}
+                onFocus={() => onShowSuggestions(true)}
+                onBlur={() => setTimeout(() => onShowSuggestions(false), 150)}
+                style={{
+                  width: "100%", boxSizing: "border-box", height: 42, border: "1.5px solid var(--ink)", borderRadius: 9,
+                  padding: "0 12px", fontSize: 15, fontWeight: 600, color: "var(--text)", background: "var(--surface)",
+                }}
+              />
+              {suggestions.length > 0 && (
+                <div style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, marginTop: 4,
+                  background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 9, overflow: "hidden",
+                }}>
+                  {suggestions.map((name) => (
+                    <div key={name} onClick={() => onPickSuggestion(name)} style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer" }}>
+                      {name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {nearDuplicateName && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8, background: "var(--banner-bg)", border: "1px solid var(--border-warn)",
+                borderRadius: 9, padding: "8px 10px",
+              }}>
+                <Info size={14} strokeWidth={2} color="var(--orange)" style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 500, color: "var(--orange-text)" }}>
+                  ¿Es la misma que <strong>{nearDuplicateName}</strong>?
+                </span>
+                <button
+                  onClick={onUseNearDuplicateName}
+                  style={{
+                    flexShrink: 0, height: 28, padding: "0 10px", borderRadius: 999, border: "none",
+                    background: "var(--orange-text)", color: "var(--banner-bg)", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Usar ese
+                </button>
+              </div>
+            )}
+
+            <input
+              type="text"
+              placeholder="Negocio · opcional"
+              value={businessName}
+              onChange={(e) => onBusinessNameChange(e.target.value)}
+              style={{
+                width: "100%", boxSizing: "border-box", height: 40, border: "1px solid var(--border)", borderRadius: 9,
+                padding: "0 12px", fontSize: 14, fontWeight: 500, color: "var(--text)", background: "var(--surface-sunken)",
+              }}
+            />
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0, height: 40, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface-sunken)", display: "flex", alignItems: "center", overflow: "hidden" }}>
+                <span style={{ flexShrink: 0, height: "100%", display: "flex", alignItems: "center", padding: "0 10px", background: "var(--surface-subtle)", borderRight: "1px solid var(--border)", fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>
+                  +53
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Teléfono"
+                  value={customerPhone}
+                  onChange={(e) => onCustomerPhoneChange(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                  style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: "0 10px", fontSize: 14, fontWeight: 500, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => onIsDeliveryChange(!isDelivery)}
+                title="Entrega a domicilio"
+                aria-label="Entrega a domicilio"
+                aria-pressed={isDelivery}
+                style={{
+                  flexShrink: 0, width: 96, height: 40, borderRadius: 9, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                  background: isDelivery ? "var(--ink)" : "var(--surface-sunken)",
+                  border: `1px solid ${isDelivery ? "var(--ink)" : "var(--border)"}`,
+                }}
+              >
+                <span style={{
+                  width: 17, height: 17, borderRadius: 5, flexShrink: 0,
+                  background: isDelivery ? "var(--cream)" : "transparent",
+                  border: isDelivery ? "none" : "1.5px solid var(--faintest)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {isDelivery && <Check size={11} strokeWidth={3.4} color="var(--ink)" />}
+                </span>
+                <MotoIcon size={16} color={isDelivery ? "var(--cream)" : "var(--muted)"} />
+              </button>
+            </div>
+
+            {noteOpen ? (
+              <textarea
+                autoFocus
+                placeholder="Nota"
+                value={note}
+                onChange={(e) => onNoteChange(e.target.value)}
+                rows={2}
+                style={{
+                  width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 9,
+                  padding: "9px 12px", fontSize: 14, resize: "vertical", fontFamily: "inherit", background: "var(--surface-sunken)", color: "var(--text)",
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setNoteOpen(true)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
+                  padding: 0, cursor: "pointer", alignSelf: "flex-start",
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 600, color: "var(--muted)", lineHeight: 1 }}>+</span>
+                <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--muted)" }}>Agregar nota</span>
+              </button>
+            )}
+          </div>
+
+          {/* EN EL PEDIDO */}
+          {draftLines.length > 0 && (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--ink)", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ background: "var(--ink)", padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--cream)" }}>EN EL PEDIDO</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--on-ink-subtitle)" }}>{draftLines.length}</span>
+              </div>
+              {draftLines.map((line, i) => {
+                const product = products.find((p) => p.code === line.code);
+                const qtyNum = parseInt(line.qty, 10) || 0;
+                const available = Math.max(0, computeAvailable(line.code));
+                const exceeds = qtyNum > available;
+                return (
+                  <div key={line.code} style={{ borderTop: i === 0 ? "none" : "1px solid var(--hairline)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px" }}>
+                      <div style={{ flexShrink: 0, width: 4, height: 28, borderRadius: 2, background: product?.color || "var(--faintest)" }} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {product ? product.name : line.code}
+                      </span>
+                      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5 }}>
+                        <button
+                          type="button"
+                          onClick={() => onUpdateDraftLineQty(line.code, String(Math.max(0, qtyNum - 1)))}
+                          style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--surface-sunken)", color: "var(--text)", fontSize: 17, fontWeight: 600, cursor: "pointer" }}
+                        >
+                          −
+                        </button>
+                        <span style={{ minWidth: 34, textAlign: "center", fontSize: 16, fontWeight: 700, color: exceeds ? "var(--orange)" : "var(--text)", fontVariantNumeric: "tabular-nums" }}>
+                          {qtyNum}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onUpdateDraftLineQty(line.code, String(qtyNum + 1))}
+                          style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--surface-sunken)", color: "var(--text)", fontSize: 17, fontWeight: 600, cursor: "pointer" }}
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveDraftLine(line.code)}
+                          title="Quitar producto"
+                          aria-label="Quitar producto"
+                          style={{ width: 26, height: 30, background: "transparent", border: "none", color: "var(--faintest)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        >
+                          <X size={13} strokeWidth={2.2} />
+                        </button>
+                      </div>
+                    </div>
+                    {exceeds && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 12px 9px 24px" }}>
+                        <AlertTriangle size={12} strokeWidth={2.2} color="var(--orange)" style={{ flexShrink: 0 }} />
+                        <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--orange)" }}>
+                          Solo {available} libres · {qtyNum - available} salen de la reserva
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {showPrices && (
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "9px 12px", borderTop: "1px solid var(--border)", background: "var(--surface-subtle)" }}>
+                  <span style={{ flex: 1, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", color: "var(--muted)" }}>TOTAL</span>
+                  <span style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
+                    {formatCUP(total).replace(" CUP", "")}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 500, color: "var(--faint)" }}>CUP</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* AGREGAR PRODUCTO / OTRO */}
+          {availableProducts.length > 0 ? (
+            <div style={{ border: "1.5px dashed var(--border-edit)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 9, background: "var(--surface)" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>
+                {draftLines.length > 0 ? "AGREGAR OTRO" : "AGREGAR PRODUCTO"}
+              </span>
+              <div style={{ position: "relative" }}>
+                <select
+                  value={effectiveSelectedProductCode}
+                  onChange={(e) => onSelectedProductCodeChange(e.target.value)}
+                  style={{
+                    width: "100%", boxSizing: "border-box", height: 40, border: "1px solid var(--border)", borderRadius: 9,
+                    padding: "0 32px 0 12px", fontSize: 14, fontWeight: 500, background: "var(--surface)", color: "var(--text)",
+                    appearance: "none", WebkitAppearance: "none",
+                  }}
+                >
+                  {availableProducts.map((p) => (
+                    <option key={p.code} value={p.code}>{p.name}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} strokeWidth={2} color="var(--muted)" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => onPendingQtyChange(String(Math.max(1, (parseInt(pendingQty, 10) || 0) - 1)))}
+                  style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 9, border: "1px solid var(--border-strong)", background: "var(--surface)", color: "var(--text)", fontSize: 21, fontWeight: 600, cursor: "pointer" }}
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="1"
+                  value={pendingQty}
+                  onChange={(e) => onPendingQtyChange(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") onAddDraftLine(); }}
+                  style={{
+                    flexShrink: 0, width: 48, height: 40, textAlign: "center", borderRadius: 9,
+                    border: pendingQty ? "1.5px solid var(--ink)" : "1px solid var(--border-strong)",
+                    background: "var(--surface)", color: "var(--text)", fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => onPendingQtyChange(String((parseInt(pendingQty, 10) || 0) + 1))}
+                  style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 9, border: "1px solid var(--border-strong)", background: "var(--surface)", color: "var(--text)", fontSize: 21, fontWeight: 600, cursor: "pointer" }}
+                >
+                  +
+                </button>
+                <button
+                  onClick={onAddDraftLine}
+                  disabled={!effectiveSelectedProductCode || !pendingQty}
+                  style={{
+                    flex: 1, height: 40, borderRadius: 9, border: "none", fontSize: 13.5, fontWeight: 600,
+                    cursor: effectiveSelectedProductCode && pendingQty ? "pointer" : "default",
+                    background: effectiveSelectedProductCode && pendingQty ? "var(--ink)" : "var(--segment-track)",
+                    color: effectiveSelectedProductCode && pendingQty ? "var(--cream)" : "var(--faint)",
+                  }}
+                >
+                  Agregar
+                </button>
+              </div>
+
+              {effectiveSelectedProductCode && (() => {
+                const available = Math.max(0, computeAvailable(effectiveSelectedProductCode));
+                const reserveQty = products.find((p) => p.code === effectiveSelectedProductCode)?.reserveQty || 0;
+                const qtyNum = parseInt(pendingQty, 10) || 0;
+                const exceedsStock = qtyNum > available;
+                return exceedsStock ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <AlertTriangle size={12} strokeWidth={2.2} color="var(--orange)" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--orange)" }}>solo {available} disponibles</span>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--faint)" }}>
+                    {available} disponibles{reserveQty > 0 ? ` · +${reserveQty} en reserva` : ""}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--muted)" }}>No hay productos con stock disponible.</div>
           )}
         </div>
 
-        {nearDuplicateName && (
-          <div
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-              background: "var(--banner-warning-bg)", border: `1px solid var(--border-warn)`, borderRadius: 7,
-              padding: "7px 10px", fontSize: 12.5, color: "var(--warning-text)", marginBottom: 10,
-            }}
-          >
-            <span>¿Es el mismo cliente que <strong>{nearDuplicateName}</strong>?</span>
-            <button
-              onClick={onUseNearDuplicateName}
-              style={{
-                flexShrink: 0, background: "transparent", border: "1px solid var(--border-warn)",
-                color: "var(--warning-text)", borderRadius: 6, padding: "4px 8px", fontSize: 12, cursor: "pointer",
-              }}
-            >
-              Usar ese
-            </button>
-          </div>
-        )}
-
-        <input
-          type="text"
-          placeholder="Nombre del negocio (opcional)"
-          value={businessName}
-          onChange={(e) => onBusinessNameChange(e.target.value)}
-          style={{
-            width: "100%", border: "1px solid var(--border)", borderRadius: 7,
-            padding: "9px 12px", fontSize: 14, boxSizing: "border-box", marginBottom: 10,
-          }}
-        />
-
-        <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: 7, marginBottom: 10, overflow: "hidden" }}>
-          <span style={{
-            display: "flex", alignItems: "center", padding: "9px 10px", fontSize: 14,
-            color: "var(--text-muted)", background: "var(--surface)", borderRight: "1px solid var(--border)", flexShrink: 0,
-          }}>
-            +53
-          </span>
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="Teléfono del cliente (opcional, 8 dígitos)"
-            value={customerPhone}
-            onChange={(e) => onCustomerPhoneChange(e.target.value.replace(/\D/g, "").slice(0, 8))}
-            style={{
-              flex: 1, minWidth: 0, border: "none", padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
-            }}
-          />
-        </div>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "var(--text-muted)", marginBottom: 14, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={isDelivery}
-            onChange={(e) => onIsDeliveryChange(e.target.checked)}
-          />
-          Entrega a domicilio
-        </label>
-
-        <textarea
-          placeholder="Nota (opcional)"
-          value={note}
-          onChange={(e) => onNoteChange(e.target.value)}
-          rows={2}
-          style={{
-            width: "100%", border: "1px solid var(--border)", borderRadius: 7,
-            padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
-            marginBottom: 14, resize: "vertical", fontFamily: "inherit",
-          }}
-        />
-
-        {draftLines.length > 0 && (
-          <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
-            {draftLines.map((line) => {
-              const product = products.find((p) => p.code === line.code);
-              return (
-                <div key={line.code} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontSize: 13.5 }}>{product ? product.name : line.code}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={line.qty}
-                      onChange={(e) => onUpdateDraftLineQty(line.code, e.target.value)}
-                      style={{
-                        width: 60, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
-                        padding: "6px 8px", fontSize: 14, fontVariantNumeric: "tabular-nums",
-                      }}
-                    />
-                    <button
-                      onClick={() => onRemoveDraftLine(line.code)}
-                      title="Quitar producto"
-                      aria-label="Quitar producto"
-                      style={{
-                        background: "transparent", border: "none", color: "var(--text-muted)",
-                        cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px",
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {showPrices && (
-              <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13.5, fontWeight: 600 }}>
-                Total: {formatCUP(draftTotal(draftLines, prices, exchangeRate))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {availableProducts.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <select
-              value={effectiveSelectedProductCode}
-              onChange={(e) => onSelectedProductCodeChange(e.target.value)}
-              style={{
-                width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 7,
-                padding: "9px 10px", fontSize: 14, background: "var(--surface)",
-              }}
-            >
-              {availableProducts.map((p) => (
-                <option key={p.code} value={p.code}>{p.name}</option>
-              ))}
-            </select>
-            {effectiveSelectedProductCode && (() => {
-              const available = Math.max(0, computeAvailable(effectiveSelectedProductCode));
-              const reserveQty = products.find((p) => p.code === effectiveSelectedProductCode)?.reserveQty || 0;
-              const qtyNum = parseInt(pendingQty, 10) || 0;
-              const exceedsStock = qtyNum > available;
-              return (
-                <div style={{ fontSize: 12.5, fontWeight: exceedsStock ? 600 : 400, color: exceedsStock ? "var(--warning-text)" : "var(--text-muted)" }}>
-                  {exceedsStock ? "⚠ solo " : "("}{available} disponibles
-                  {reserveQty > 0 ? ` · +${reserveQty} en reserva` : ""}
-                  {exceedsStock ? "" : ")"}
-                </div>
-              );
-            })()}
+        {/* Pie fijo */}
+        {pendingReserveConfirm ? (
+          <div style={{ flexShrink: 0, borderTop: "1px solid var(--border-warn)", background: "var(--banner-bg)", padding: "12px 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <AlertTriangle size={15} strokeWidth={2} color="var(--orange)" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 500, color: "var(--orange-text)" }}>
+                Este pedido usa la reserva de mañana: <strong>{pendingReserveConfirm.reserveDips.map((d) => `${d.fromReserve}x ${d.name}`).join(", ")}</strong>.
+              </span>
+            </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
-                type="button"
-                onClick={() => onPendingQtyChange(String(Math.max(1, (parseInt(pendingQty, 10) || 0) - 1)))}
-                title="Restar"
-                aria-label="Restar cantidad"
+                onClick={onCancelReserveConfirm}
                 style={{
-                  flexShrink: 0, width: 36, background: "transparent", border: "1px solid var(--border)",
-                  borderRadius: 7, color: "var(--text)", fontSize: 16, fontWeight: 700, cursor: "pointer",
+                  flexShrink: 0, width: 104, height: 48, borderRadius: 10, border: "1px solid var(--border-warn)",
+                  background: "transparent", color: "var(--orange-text)", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
                 }}
               >
-                −
-              </button>
-              <input
-                type="number"
-                inputMode="numeric"
-                placeholder="Cant."
-                value={pendingQty}
-                onChange={(e) => onPendingQtyChange(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") onAddDraftLine(); }}
-                style={{
-                  flex: "1 1 auto", minWidth: 0, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
-                  padding: "9px 10px", fontSize: 14, fontVariantNumeric: "tabular-nums",
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => onPendingQtyChange(String((parseInt(pendingQty, 10) || 0) + 1))}
-                title="Sumar"
-                aria-label="Sumar cantidad"
-                style={{
-                  flexShrink: 0, width: 36, background: "transparent", border: "1px solid var(--border)",
-                  borderRadius: 7, color: "var(--text)", fontSize: 16, fontWeight: 700, cursor: "pointer",
-                }}
-              >
-                +
+                Cancelar
               </button>
               <button
-                onClick={onAddDraftLine}
+                onClick={onConfirmUseReserve}
                 style={{
-                  flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
-                  borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  flex: 1, height: 48, borderRadius: 10, border: "none",
+                  background: "var(--orange-text)", color: "var(--banner-bg)", fontSize: 14.5, fontWeight: 700, cursor: "pointer",
                 }}
               >
-                Agregar
+                Usar reserva y guardar
               </button>
             </div>
           </div>
         ) : (
-          <div style={{ fontSize: 12.5, color: "var(--text-faint)" }}>No hay productos con stock disponibles para agregar.</div>
-        )}
-
-        {pendingReserveConfirm ? (
-          <Banner
-            variant="warning"
-            style={{ marginTop: 16 }}
-            actions={[
-              { label: "Usar reserva", kind: "dark", onClick: onConfirmUseReserve },
-              { label: "Cancelar", kind: "secondary", onClick: onCancelReserveConfirm },
-            ]}
-          >
-            No queda suficiente sin tocar la reserva. Vas a usar:{" "}
-            {pendingReserveConfirm.reserveDips.map((d) => `${d.fromReserve}x ${d.name}`).join(", ")}.
-          </Banner>
-        ) : (
-          <button
-            onClick={onConfirmOrder}
-            style={{
-              marginTop: 16, width: "100%", background: "var(--ink)", color: "var(--cream)", border: "none",
-              borderRadius: 7, padding: "11px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            {editingOrderId ? "Guardar cambios" : "Confirmar pedido"}
-          </button>
+          <div style={{ flexShrink: 0, borderTop: "1px solid var(--border-strong)", background: "var(--bg-edit)", padding: "12px 16px 16px" }}>
+            <button
+              onClick={onConfirmOrder}
+              disabled={!canConfirm}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 48,
+                borderRadius: 10, border: "none", cursor: canConfirm ? "pointer" : "default",
+                background: canConfirm ? "var(--ink)" : "var(--disabled-bg)",
+                color: canConfirm ? "var(--cream)" : "var(--faint)",
+              }}
+            >
+              {canConfirm && <Check size={16} strokeWidth={2.4} />}
+              <span style={{ fontSize: 14.5, fontWeight: 700 }}>{editingOrderId ? "Guardar cambios" : "Confirmar pedido"}</span>
+              {canConfirm && showPrices && (
+                <span style={{ fontSize: 13, fontWeight: 500, color: "var(--on-ink-subtitle)", fontVariantNumeric: "tabular-nums" }}>
+                  · {formatCUP(total)}
+                </span>
+              )}
+            </button>
+          </div>
         )}
       </div>
     </div>

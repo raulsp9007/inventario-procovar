@@ -42,7 +42,7 @@ export default function InventoryApp() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent,
-    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, refreshPendingPricesToCurrentRate,
+    updateCustomer, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
   } = useInventoryStore();
 
   if (!loaded) {
@@ -220,6 +220,7 @@ export default function InventoryApp() {
             onMarkSent={markOrderSent}
             onMarkConfirmed={markOrderConfirmed}
             onMarkSentToCustomer={markOrderSentToCustomer}
+            onSetOrderSteps={setOrderSteps}
             onRefreshPendingPrices={refreshPendingPricesToCurrentRate}
             onError={(message) => {
               setError(message);
