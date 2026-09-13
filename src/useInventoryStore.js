@@ -70,7 +70,6 @@ export function useInventoryStore() {
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [showLowStockList, setShowLowStockList] = useState(true);
   const [error, setError] = useState("");
   const [pendingImport, setPendingImport] = useState(null);
   const fileInputRef = useRef(null);
@@ -316,14 +315,9 @@ export function useInventoryStore() {
   const activeProducts = products.filter((p) => !p.archived);
   const archivedProducts = products.filter((p) => p.archived);
   const totalStock = activeProducts.reduce((sum, p) => sum + (stock[p.code] || 0), 0);
-  const lowStockCount = activeProducts.filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p)).length;
   const todaysUnitsSold = todaysMovements
     .filter((m) => m.type === "venta")
     .reduce((sum, m) => sum + m.qty, 0);
-  const todaysPendingSales = todaysMovements.filter((m) => m.type === "venta" && !m.sent);
-  function pendingTodayFor(code) {
-    return todaysPendingSales.filter((m) => m.code === code).reduce((sum, m) => sum + m.qty, 0);
-  }
 
   function makeMovement(code, type, qty, extra = {}) {
     return {
@@ -459,24 +453,7 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, products: nextProducts });
   }
 
-  // Intercambia el producto con su vecino activo más cercano en esa dirección
-  // (salta los archivados, que no se muestran ni se reordenan a mano).
-  function moveProduct(code, direction) {
-    const currentIndex = products.findIndex((p) => p.code === code);
-    if (currentIndex === -1) return;
-    let targetIndex = currentIndex + direction;
-    while (targetIndex >= 0 && targetIndex < products.length && products[targetIndex].archived) {
-      targetIndex += direction;
-    }
-    if (targetIndex < 0 || targetIndex >= products.length) return;
-    const nextProducts = [...products];
-    [nextProducts[currentIndex], nextProducts[targetIndex]] = [nextProducts[targetIndex], nextProducts[currentIndex]];
-    setProducts(nextProducts);
-    persist({ ...currentPersistedState, products: nextProducts });
-  }
-
-  // Reordena TODOS los activos de una (arrastrar y soltar), en vez de
-  // moverlos de a uno con moveProduct. orderedCodes trae los códigos
+  // Reordena TODOS los activos de una (arrastrar y soltar). orderedCodes trae los códigos
   // activos en el orden nuevo -- los archivados no se tocan, quedan en la
   // misma posición relativa que ya tenían. Si orderedCodes no tiene
   // exactamente los mismos códigos activos que hay ahora (mismatch por un
@@ -791,15 +768,15 @@ export function useInventoryStore() {
     editReserveInputs, setEditReserveInputs,
     editColorInputs, setEditColorInputs,
     newProductName, setNewProductName, newProductHl, setNewProductHl,
-    showArchived, setShowArchived, showLowStockList, setShowLowStockList,
+    showArchived, setShowArchived,
     pendingImport, setPendingImport, fileInputRef,
     view, setView, theme, toggleTheme,
     currentPersistedState, persist,
     handleImportFileChange, confirmImport,
     todaysMovements, mananaMovements,
-    activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
+    activeProducts, archivedProducts, totalStock, todaysUnitsSold,
     movementsNearCap,
-    openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct, reorderActiveProducts,
+    openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
     updateCustomer, markOrderConfirmed, markOrderSentToCustomer, refreshPendingPricesToCurrentRate, reorderActiveProducts,

@@ -1,8 +1,10 @@
-import { AlertTriangle, ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
+import { useState } from "react";
+import { Download, Upload } from "lucide-react";
 import { downloadBackup } from "./backup";
 import { formatDate } from "./dateUtils.js";
 import RadialNav, { VIEW_LABELS } from "./RadialNav.jsx";
 import Banner from "./Banner.jsx";
+import LowStockBanner from "./LowStockBanner.jsx";
 import ProductsView from "./ProductsView.jsx";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
@@ -12,6 +14,7 @@ import Settings from "./Settings.jsx";
 import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, lowStockThresholdFor } from "./useInventoryStore.js";
 
 export default function InventoryApp() {
+  const [lowStockFilterActive, setLowStockFilterActive] = useState(false);
   const {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
@@ -36,7 +39,7 @@ export default function InventoryApp() {
     todaysMovements, mananaMovements,
     activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
     movementsNearCap,
-    openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, moveProduct, reorderActiveProducts,
+    openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent,
     updateCustomer, markOrderConfirmed, markOrderSentToCustomer, refreshPendingPricesToCurrentRate,
@@ -95,45 +98,12 @@ export default function InventoryApp() {
       </div>
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "20px 16px 0" }}>
-        {lowStockCount > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <button
-              onClick={() => setShowLowStockList((s) => !s)}
-              style={{
-                display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
-                background: "var(--banner-warning-bg)", border: "1px solid var(--border-warn)", color: "var(--warning-text)",
-                padding: "10px 14px", borderRadius: 8, fontSize: 13.5, cursor: "pointer",
-              }}
-            >
-              <AlertTriangle size={16} strokeWidth={2} />
-              {lowStockCount === 1
-                ? "1 producto con stock bajo."
-                : `${lowStockCount} productos con stock bajo.`}
-              {showLowStockList ? <ChevronUp size={14} style={{ marginLeft: "auto" }} /> : <ChevronDown size={14} style={{ marginLeft: "auto" }} />}
-            </button>
-            {showLowStockList && (
-              <div style={{ background: "var(--surface)", border: "1px solid var(--border-warn)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
-                {activeProducts
-                  .filter((p) => (stock[p.code] || 0) > 0 && (stock[p.code] || 0) <= lowStockThresholdFor(p))
-                  .map((p, i) => (
-                    <div
-                      key={p.code}
-                      style={{
-                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                        padding: "9px 14px", fontSize: 13, borderTop: i === 0 ? "none" : "1px solid var(--divider)",
-                      }}
-                    >
-                      <span>{p.name}</span>
-                      <span style={{ color: "var(--warning-text)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                        {stock[p.code] || 0} uds (aviso ≤ {lowStockThresholdFor(p)})
-                        {pendingTodayFor(p.code) > 0 && ` · Pendiente: ${pendingTodayFor(p.code)}`}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        )}
+        <LowStockBanner
+          activeProducts={activeProducts}
+          stock={stock}
+          lowStockThresholdFor={lowStockThresholdFor}
+          onViewAll={() => { setView("stock"); setLowStockFilterActive(true); }}
+        />
 
         {movementsNearCap && (
           <Banner
@@ -199,11 +169,12 @@ export default function InventoryApp() {
             onAddProduct={addProduct}
             onArchiveProduct={archiveProduct}
             onRestoreProduct={restoreProduct}
-            onMoveProduct={moveProduct}
             onReorderProducts={reorderActiveProducts}
             showArchived={showArchived}
             setShowArchived={setShowArchived}
             onRegisterManualSale={registerManualSale}
+            lowStockFilterActive={lowStockFilterActive}
+            onClearLowStockFilter={() => setLowStockFilterActive(false)}
           />
         )}
 

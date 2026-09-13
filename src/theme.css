@@ -36,6 +36,32 @@
 
   --whatsapp: #25D366;
   --danger: #B4291E;
+
+  /* Rediseño Productos (design_handoff_productos) */
+  --bg-edit: #E9E3D2;
+  --surface-sunken: #F7F4EC;
+  --surface-subtle: #FBFAF5;
+  --hairline: #F0ECE0;
+  --border-edit: #D2CBB6;
+  --ink-2: #2C302A;
+  --faintest: #B9B3A2;
+  --orange-2: #B57A2E;
+  --orange-text-2: #5E4A2B;
+  --banner-bg: #FBEFE0;
+  --chip-bg: #FFF8EE;
+  --banner-divider: #EFDCC2;
+  --danger-bg: #FDF5F4;
+  --danger-border: #EAC7C3;
+  --warn-tint: #FDF6EC;
+  /* Alias cortos usados por el handoff de diseño -- mismos valores que sus
+     equivalentes de siempre (--text-muted, --text-faint, etc), para no
+     tener que reescribir el resto de la app ni duplicar la paleta. */
+  --muted: #8A8574;
+  --faint: #9A9484;
+  --green: #3C6E4A;
+  --orange: #B4661E;
+  --orange-text: #8A5A1E;
+  --red: #B4291E;
 }
 
 [data-theme="dark"] {
@@ -72,4 +98,30 @@
 
   --whatsapp: #25D366;
   --danger: #C4382C;
+
+  /* Rediseño Productos (design_handoff_productos) -- mismos nombres que en
+     claro, valores adaptados; --bg-edit va MÁS CLARO que --bg (al revés que
+     en claro) para que el modo Ajustar siga leyéndose como "otra mesa de
+     trabajo" por contraste contra el fondo base oscuro. */
+  --bg-edit: #282B22;
+  --surface-sunken: #1C1E17;
+  --surface-subtle: #2A2D23;
+  --hairline: #34372B;
+  --border-edit: #4A4D3E;
+  --ink-2: #4A4E3E;
+  --faintest: #6E6857;
+  --orange-2: #DB9F5C;
+  --orange-text-2: #D9B98A;
+  --banner-bg: #3A2E18;
+  --chip-bg: #332A18;
+  --banner-divider: #4A3B20;
+  --danger-bg: #3A211C;
+  --danger-border: #6B342C;
+  --warn-tint: #332A18;
+  --muted: #ABA492;
+  --faint: #8C8672;
+  --green: #6FBE8A;
+  --orange: #E0954A;
+  --orange-text: #E0B96A;
+  --red: #C4382C;
 }

@@ -1,10 +1,31 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Settings2, Trash2, History, ChevronDown, ChevronUp, GripVertical, ReceiptText, X, EyeOff, Eye } from "lucide-react";
-import { formatDate, formatDateTime } from "./dateUtils";
+import { Check, Pencil, Trash2, History, ChevronDown, ChevronUp, GripVertical, ReceiptText, X, EyeOff, Eye } from "lucide-react";
+import { formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, priceToCUP } from "./money";
-import FieldLabel from "./FieldLabel.jsx";
 import Card from "./Card.jsx";
 import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
+
+// Franja/agarradera de puntos (6, en 2 columnas x 3 filas) -- reemplaza el
+// ícono GripVertical de lucide para calzar con el diseño exacto del
+// rediseño (radios y separación propios), en vez de aproximarlo con un
+// ícono genérico.
+function DragDots({ color, size = 16 }) {
+  return (
+    <svg width={size * 0.625} height={size} viewBox="0 0 10 16" fill={color}>
+      <circle cx="2.5" cy="3" r="1.3" />
+      <circle cx="7.5" cy="3" r="1.3" />
+      <circle cx="2.5" cy="8" r="1.3" />
+      <circle cx="7.5" cy="8" r="1.3" />
+      <circle cx="2.5" cy="13" r="1.3" />
+      <circle cx="7.5" cy="13" r="1.3" />
+    </svg>
+  );
+}
+
+const STEPPER_REPEAT_START_MS = 300;
+const STEPPER_REPEAT_MIN_MS = 100;
+const STEPPER_REPEAT_RAMP_MS = 1000;
+const DRAG_HOLD_MS = 120;
 
 export default function ProductsView({
   products,
@@ -42,11 +63,12 @@ export default function ProductsView({
   onAddProduct,
   onArchiveProduct,
   onRestoreProduct,
-  onMoveProduct,
   onReorderProducts,
   showArchived,
   setShowArchived,
   onRegisterManualSale,
+  lowStockFilterActive,
+  onClearLowStockFilter,
 }) {
   const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
   const [manualSaleCode, setManualSaleCode] = useState(null);
@@ -80,6 +102,57 @@ export default function ProductsView({
     } catch {}
   }, [hideZeroStock]);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Modo Ajustar muestra UNA sola ficha expandida a la vez (el resto queda
+  // en fila compacta) -- así se ve el listado entero, se puede reordenar, y
+  // no hay scroll infinito de formularios abiertos. Se reinicia a "ninguna"
+  // cada vez que se entra de nuevo al modo.
+  const [expandedEditCode, setExpandedEditCode] = useState(null);
+  useEffect(() => {
+    if (!editMode) setExpandedEditCode(null);
+  }, [editMode]);
+
+  // Contador de "cambios sin guardar" del modo Ajustar: cuenta PRODUCTOS con
+  // al menos un campo modificado, no campos individuales. Se compara contra
+  // una foto de los valores tal como quedaron sembrados al entrar al modo
+  // (openEdit ya los llena con el valor actual) -- se toma una sola vez por
+  // entrada al modo, nunca se vuelve a pisar mientras siga activo.
+  const originalEditSnapshotRef = useRef(null);
+  useEffect(() => {
+    if (editMode) {
+      originalEditSnapshotRef.current = {
+        editInputs: { ...editInputs },
+        editPriceInputs: { ...editPriceInputs },
+        editNameInputs: { ...editNameInputs },
+        editHlInputs: { ...editHlInputs },
+        editLowStockInputs: { ...editLowStockInputs },
+        editReserveInputs: { ...editReserveInputs },
+        editColorInputs: { ...editColorInputs },
+      };
+    } else {
+      originalEditSnapshotRef.current = null;
+    }
+    // Solo nos interesa el momento en que editMode cambia -- es a propósito
+    // que no dependa de los inputs (si no, se re-tomaría la foto en cada
+    // tecla y el contador siempre daría 0).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMode]);
+
+  function isProductChanged(code) {
+    const orig = originalEditSnapshotRef.current;
+    if (!orig) return false;
+    return (
+      (editInputs[code] ?? "") !== (orig.editInputs[code] ?? "") ||
+      (editPriceInputs[code] ?? "") !== (orig.editPriceInputs[code] ?? "") ||
+      (editNameInputs[code] ?? "") !== (orig.editNameInputs[code] ?? "") ||
+      (editHlInputs[code] ?? "") !== (orig.editHlInputs[code] ?? "") ||
+      (editLowStockInputs[code] ?? "") !== (orig.editLowStockInputs[code] ?? "") ||
+      (editReserveInputs[code] ?? "") !== (orig.editReserveInputs[code] ?? "") ||
+      (editColorInputs[code] ?? "") !== (orig.editColorInputs[code] ?? "")
+    );
+  }
+  const changedCount = editMode ? activeProducts.filter((p) => isProductChanged(p.code)).length : 0;
+
   // Arrastrar y soltar para reordenar -- a mano con pointer events, sin
   // dependencia nueva ni HTML5 drag nativo (ese no anda en touch, y esto es
   // una app mobile-first). La fuente de verdad es dragStateRef (un ref, no
@@ -95,13 +168,39 @@ export default function ProductsView({
   const dragStateRef = useRef({ code: null, order: null });
   const [draggingCode, setDraggingCode] = useState(null);
   const [dragOrder, setDragOrder] = useState(null);
+  // La agarradera ya no dispara el arrastre al toque: espera ~120ms de
+  // mantener presionado antes de armar el drag, para no robarle el scroll a
+  // la lista con un roce accidental (la franja es angosta y vive pegada al
+  // borde derecho, justo donde el pulgar apoya al scrollear).
+  const pendingDragRef = useRef({ timer: null });
 
-  function handleDragStart(e, code) {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const order = activeProducts.map((p) => p.code);
-    dragStateRef.current = { code, order };
-    setDraggingCode(code);
-    setDragOrder(order);
+  function cancelPendingDrag() {
+    if (pendingDragRef.current.timer) {
+      clearTimeout(pendingDragRef.current.timer);
+      pendingDragRef.current.timer = null;
+    }
+  }
+
+  function handleHandlePointerDown(e, code) {
+    const target = e.currentTarget;
+    const pointerId = e.pointerId;
+    cancelPendingDrag();
+    pendingDragRef.current.timer = setTimeout(() => {
+      pendingDragRef.current.timer = null;
+      // El pointerup pudo llegar justo en el filo de los 120ms, antes de que
+      // este timeout corriera pero después de que ya estuviera encolado --
+      // en ese caso el puntero ya no está activo y setPointerCapture tira
+      // NotFoundError. No hay drag que armar si eso pasó.
+      try {
+        target.setPointerCapture(pointerId);
+      } catch {
+        return;
+      }
+      const order = activeProducts.map((p) => p.code);
+      dragStateRef.current = { code, order };
+      setDraggingCode(code);
+      setDragOrder(order);
+    }, DRAG_HOLD_MS);
   }
 
   function handleDragMove(e) {
@@ -122,34 +221,76 @@ export default function ProductsView({
   }
 
   function handleDragEnd() {
+    cancelPendingDrag();
     const st = dragStateRef.current;
     if (st.code && st.order) onReorderProducts(st.order);
     dragStateRef.current = { code: null, order: null };
     setDraggingCode(null);
     setDragOrder(null);
   }
+
   const zeroStockCount = activeProducts.filter((p) => (stock[p.code] || 0) === 0).length;
-  const visibleProducts = !editMode && hideZeroStock
-    ? activeProducts.filter((p) => (stock[p.code] || 0) > 0)
+  const lowStockFiltered = lowStockFilterActive
+    ? activeProducts.filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p))
     : activeProducts;
+  const visibleProducts = !editMode && hideZeroStock
+    ? lowStockFiltered.filter((p) => (stock[p.code] || 0) > 0)
+    : lowStockFiltered;
   // El arrastre también vale en la vista simple, no solo en modo edición --
   // dragOrder siempre es una permutación de TODOS los activos (hacen falta
   // todos para reorderActiveProducts), así que acá se filtra de nuevo por
-  // "ocultar en 0" para no mostrar durante el arrastre algo que la vista
-  // simple ya tenía escondido.
+  // "ocultar en 0" / filtro de stock bajo para no mostrar durante el
+  // arrastre algo que la vista ya tenía escondido.
   const displayedProducts = dragOrder
     ? dragOrder
         .map((code) => activeProducts.find((p) => p.code === code))
         .filter((p) => p && (editMode || !hideZeroStock || (stock[p.code] || 0) > 0))
+        .filter((p) => !lowStockFilterActive || (stock[p.code] || 0) <= lowStockThresholdFor(p))
     : visibleProducts;
 
-  function applyDelta(code, sign) {
-    const delta = parseInt(deltaInputs[code], 10);
-    if (!deltaInputs[code] || isNaN(delta) || delta <= 0) return;
-    const current = parseInt(editInputs[code], 10) || 0;
-    const next = Math.max(0, current + sign * delta);
-    setEditInputs((s) => ({ ...s, [code]: String(next) }));
-    setDeltaInputs((s) => ({ ...s, [code]: "" }));
+  function applyDeltaOnce(code, sign, clearAfter) {
+    setDeltaInputs((ds) => {
+      const delta = parseInt(ds[code], 10);
+      if (!ds[code] || isNaN(delta) || delta <= 0) return ds;
+      setEditInputs((s) => {
+        const current = parseInt(s[code], 10) || 0;
+        const next = Math.max(0, current + sign * delta);
+        return { ...s, [code]: String(next) };
+      });
+      return clearAfter ? { ...ds, [code]: "" } : ds;
+    });
+  }
+
+  // Stepper −/+ del bloque de stock: un toque simple aplica una vez (y
+  // limpia "cant."). Mantener presionado repite cada 300ms, acelerando
+  // hasta 100ms pasado 1s sostenido -- sin volver a limpiar "cant." en cada
+  // repetición (si no, la segunda vuelta ya no tendría nada que aplicar),
+  // recién se limpia al soltar.
+  const stepperRef = useRef({ code: null, holdTimer: null, repeatTimer: null, startedAt: 0 });
+
+  function stopStepper() {
+    const st = stepperRef.current;
+    if (st.holdTimer) clearTimeout(st.holdTimer);
+    if (st.repeatTimer) clearTimeout(st.repeatTimer);
+    if (st.code) setDeltaInputs((ds) => ({ ...ds, [st.code]: "" }));
+    stepperRef.current = { code: null, holdTimer: null, repeatTimer: null, startedAt: 0 };
+  }
+
+  function startStepper(code, sign) {
+    applyDeltaOnce(code, sign, false);
+    const st = stepperRef.current;
+    st.code = code;
+    st.startedAt = Date.now();
+    function scheduleNext() {
+      const held = Date.now() - st.startedAt;
+      const ramp = Math.min(1, held / STEPPER_REPEAT_RAMP_MS);
+      const delay = STEPPER_REPEAT_START_MS - ramp * (STEPPER_REPEAT_START_MS - STEPPER_REPEAT_MIN_MS);
+      st.repeatTimer = setTimeout(() => {
+        applyDeltaOnce(code, sign, false);
+        scheduleNext();
+      }, delay);
+    }
+    st.holdTimer = setTimeout(scheduleNext, STEPPER_REPEAT_START_MS);
   }
 
   function closeManualSale() {
@@ -164,172 +305,232 @@ export default function ProductsView({
     closeManualSale();
   }
 
+  const screenBg = editMode ? "var(--bg-edit)" : "transparent";
+
   return (
-    <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>PRODUCTOS</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
-            1$ =
-            <input
-              type="number"
-              inputMode="decimal"
-              value={rateInput}
-              onChange={(e) => {
-                const raw = e.target.value;
-                setRateInput(raw);
-                const val = parseFloat(raw);
-                onExchangeRateChange(isNaN(val) || val <= 0 ? null : val);
-              }}
-              placeholder="tasa"
-              title="Tasa de cambio: 1 USD en CUP"
+    <div style={{ background: screenBg, margin: "-20px -16px 0", padding: "0 16px 16px", transition: "background 180ms ease-out", fontFamily: "'Archivo', system-ui, sans-serif" }}>
+      <div
+        style={{
+          position: "sticky", top: 0, zIndex: 5, background: editMode ? "var(--ink)" : "var(--bg)",
+          margin: "0 -16px", padding: "20px 16px 12px", transition: "background 180ms ease-out",
+        }}
+      >
+        {!editMode && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+            <div style={{ fontSize: 15, letterSpacing: "0.1em", color: "var(--text)", fontWeight: 700 }}>PRODUCTOS</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5, height: 32, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", boxSizing: "border-box" }}>
+                1$ =
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={rateInput}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setRateInput(raw);
+                    const val = parseFloat(raw);
+                    onExchangeRateChange(isNaN(val) || val <= 0 ? null : val);
+                  }}
+                  placeholder="tasa"
+                  title="Tasa de cambio: 1 USD en CUP"
+                  style={{
+                    width: 44, border: "none", background: "transparent", color: "var(--text)",
+                    padding: 0, fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", textAlign: "center",
+                  }}
+                />
+                CUP
+              </label>
+              <button
+                onClick={onToggleEditMode}
+                style={{
+                  height: 32, padding: "0 12px", borderRadius: 8, border: "1px solid var(--text)",
+                  background: "transparent", color: "var(--text)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Ajustar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {editMode && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--ink-2)", borderRadius: 10, padding: "9px 12px" }}>
+              <Pencil size={14} strokeWidth={2} color="var(--border-warn)" />
+              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", color: "var(--cream)" }}>MODO AJUSTAR</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 11, fontWeight: 500, color: "var(--on-ink-subtitle)" }}>
+                {changedCount === 0 ? "sin cambios" : changedCount === 1 ? "1 cambio sin guardar" : `${changedCount} cambios sin guardar`}
+              </span>
+            </div>
+            <button
+              onClick={onToggleEditMode}
               style={{
-                width: 56, border: "1px solid var(--border)", borderRadius: 7, background: "var(--surface)", color: "var(--text)",
-                padding: "6px 6px", fontSize: 12.5, fontVariantNumeric: "tabular-nums", textAlign: "center",
-              }}
-            />
-            CUP
-          </label>
-          <button
-            onClick={onToggleEditMode}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: editMode ? "var(--ink)" : "transparent",
-              color: editMode ? "var(--cream)" : "var(--text)",
-              border: "1px solid var(--text)",
-              borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            <Settings2 size={14} />
-            {editMode ? "Guardar existencias" : "Ajustar"}
-          </button>
-        </div>
-      </div>
-
-      {!editMode && (zeroStockCount > 0 || hideZeroStock) && (
-        <button
-          onClick={() => setHideZeroStock((s) => !s)}
-          style={{
-            display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
-            color: "var(--text-muted)", fontSize: 12.5, padding: 0, marginBottom: 12, cursor: "pointer",
-          }}
-        >
-          {hideZeroStock ? <Eye size={14} /> : <EyeOff size={14} />}
-          {hideZeroStock ? `Mostrar productos en 0 (${zeroStockCount})` : `Ocultar productos en 0 (${zeroStockCount})`}
-        </button>
-      )}
-
-      {visibleProducts.length === 0 && activeProducts.length > 0 && (
-        <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
-          Todos los productos están en 0.
-        </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 10 }}>
-        {displayedProducts.map((p) => {
-          const qty = stock[p.code] || 0;
-          const isLow = qty <= lowStockThresholdFor(p);
-          const lastMovement = movements.find((m) => m.code === p.code);
-          return (
-            <div
-              key={p.code}
-              data-product-code={p.code}
-              className="rowfade"
-              style={{
-                background: "var(--surface)",
-                border: `1px solid ${isLow ? "var(--border-warn)" : "var(--border)"}`,
-                borderRadius: 12,
-                padding: editMode ? "16px 18px" : "10px 14px",
-                opacity: draggingCode === p.code ? 0.45 : 1,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%",
+                height: 40, borderRadius: 9, background: "var(--cream)", color: "var(--ink)", border: "none",
+                fontSize: 13.5, fontWeight: 700, cursor: "pointer",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: editMode ? "flex-start" : "center", flexWrap: editMode ? "wrap" : "nowrap", gap: 12 }}>
-                <div style={{ display: "flex", gap: editMode ? 12 : 10, alignItems: editMode ? "flex-start" : "center", flex: "1 1 200px", minWidth: 0 }}>
-                  {editMode ? (
-                    <input
-                      type="color"
-                      value={editColorInputs[p.code] ?? p.color}
-                      onChange={(e) => setEditColorInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                      title="Color del producto"
-                      style={{
-                        width: 40, height: 40, borderRadius: 8, border: "1px solid var(--border-strong)",
-                        padding: 2, cursor: "pointer", flexShrink: 0, background: "var(--surface)",
-                      }}
-                    />
-                  ) : (
-                    <div style={{
-                      width: 5, height: 30, borderRadius: 3, background: p.color, flexShrink: 0,
-                    }} />
-                  )}
-                  <div style={{ minWidth: 0 }}>
-                    {editMode ? (
+              <Check size={15} strokeWidth={2} />
+              Guardar existencias
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ paddingTop: 12 }}>
+        {!editMode && lowStockFilterActive && (
+          <div style={{ marginBottom: 10 }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 6, background: "var(--chip-bg)",
+              border: "1px solid var(--border-warn)", borderRadius: 999, padding: "5px 10px",
+              fontSize: 12.5, fontWeight: 600, color: "var(--orange-text)",
+            }}>
+              Filtrando: stock bajo
+              <button
+                onClick={onClearLowStockFilter}
+                aria-label="Quitar filtro de stock bajo"
+                style={{ display: "flex", background: "transparent", border: "none", padding: 0, cursor: "pointer", color: "var(--orange-text)" }}
+              >
+                <X size={12} strokeWidth={2.4} />
+              </button>
+            </span>
+          </div>
+        )}
+
+        {!editMode && (zeroStockCount > 0 || hideZeroStock) && (
+          <button
+            onClick={() => setHideZeroStock((s) => !s)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
+              color: "var(--text-muted)", fontSize: 12.5, padding: 0, marginBottom: 12, cursor: "pointer",
+            }}
+          >
+            {hideZeroStock ? <Eye size={14} strokeWidth={1.7} /> : <EyeOff size={14} strokeWidth={1.7} />}
+            {hideZeroStock ? `Mostrar productos en 0 (${zeroStockCount})` : `Ocultar productos en 0 (${zeroStockCount})`}
+          </button>
+        )}
+
+        {visibleProducts.length === 0 && activeProducts.length > 0 && (
+          <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
+            {lowStockFilterActive ? "Ningún producto en aviso de stock bajo." : "Todos los productos están en 0."}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: editMode ? 10 : 8 }}>
+          {displayedProducts.map((p) => {
+            const qty = stock[p.code] || 0;
+            const isLow = qty <= lowStockThresholdFor(p);
+            const lastMovement = movements.find((m) => m.code === p.code);
+            const isDragging = draggingCode === p.code;
+            const isExpanded = editMode && expandedEditCode === p.code;
+            const isVentaOpen = !editMode && manualSaleCode === p.code;
+
+            const handleDots = isDragging
+              ? { bg: "var(--ink)", dots: "var(--cream)", border: "var(--hairline)" }
+              : isLow
+                ? { bg: "var(--warn-tint)", dots: "var(--orange-2)", border: "var(--border-warn)" }
+                : { bg: "var(--surface-subtle)", dots: "var(--faintest)", border: "var(--hairline)" };
+
+            if (editMode && !isExpanded) {
+              // Fila compacta: swatch + nombre (input subrayado) + stock + agarradera.
+              return (
+                <div
+                  key={p.code}
+                  data-product-code={p.code}
+                  className="rowfade"
+                  onClick={() => setExpandedEditCode(p.code)}
+                  style={{
+                    background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12,
+                    padding: 12, display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
+                    opacity: isDragging ? 0.55 : 1, transform: isDragging ? "rotate(-0.6deg)" : "none",
+                  }}
+                >
+                  <div style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 10, background: editColorInputs[p.code] ?? p.color }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {editNameInputs[p.code] ?? p.name}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 2 }}>
+                      {p.code}{lastMovement ? ` · últ. mov. ${formatDate(lastMovement.date)}` : ""}
+                    </div>
+                  </div>
+                  <div style={{ flexShrink: 0, fontSize: 26, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.03em" }}>
+                    {editInputs[p.code]}
+                  </div>
+                  <button
+                    onPointerDown={(e) => { e.stopPropagation(); handleHandlePointerDown(e, p.code); }}
+                    onPointerMove={handleDragMove}
+                    onPointerUp={handleDragEnd}
+                    onPointerCancel={handleDragEnd}
+                    onLostPointerCapture={handleDragEnd}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Arrastrar para reordenar"
+                    aria-label="Arrastrar para reordenar"
+                    style={{
+                      flexShrink: 0, width: 36, height: 36, borderRadius: 9, background: "var(--surface-subtle)",
+                      border: "none", display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "grab", touchAction: "none",
+                    }}
+                  >
+                    <DragDots color="var(--muted)" size={18} />
+                  </button>
+                </div>
+              );
+            }
+
+            if (editMode && isExpanded) {
+              const usdMode = !!exchangeRate;
+              return (
+                <div
+                  key={p.code}
+                  data-product-code={p.code}
+                  className="rowfade"
+                  style={{
+                    background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12,
+                    padding: 12, display: "flex", flexDirection: "column", gap: 12,
+                  }}
+                >
+                  {/* a) Identidad */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ position: "relative", flexShrink: 0 }}>
+                      <input
+                        type="color"
+                        value={editColorInputs[p.code] ?? p.color}
+                        onChange={(e) => setEditColorInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        title="Color del producto"
+                        style={{
+                          width: 40, height: 40, borderRadius: 10, border: "1px solid var(--border-strong)",
+                          padding: 0, cursor: "pointer", background: editColorInputs[p.code] ?? p.color, appearance: "none",
+                        }}
+                      />
+                      <div style={{
+                        position: "absolute", right: -3, bottom: -3, width: 15, height: 15, borderRadius: "50%",
+                        background: "var(--surface)", border: "1px solid var(--border-strong)",
+                        display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none",
+                      }}>
+                        <ChevronDown size={8} strokeWidth={3} color="var(--text)" />
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <input
                         type="text"
                         value={editNameInputs[p.code] ?? p.name}
                         onChange={(e) => setEditNameInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                         style={{
-                          fontWeight: 700, fontSize: 15.5, border: "1px solid var(--border-strong)", borderRadius: 7,
-                          padding: "4px 8px", marginBottom: 2, width: "100%", boxSizing: "border-box",
+                          width: "100%", boxSizing: "border-box", fontSize: 16, fontWeight: 600, color: "var(--text)",
+                          background: "transparent", border: "none", borderBottom: "1.5px solid var(--border)",
+                          padding: "0 0 5px", borderRadius: 0,
                         }}
                       />
-                    ) : (
-                      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{p.name}</div>
-                    )}
-                    {editMode && (
-                      <>
-                        <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{p.short}{lastMovement ? ` · último movimiento ${formatDate(lastMovement.date)}` : ""}</div>
-                        {lastAdjustedAt[p.code] && (
-                          <div style={{ fontSize: 11, color: "var(--text-faint-2)" }}>ajustado {formatDateTime(lastAdjustedAt[p.code])}</div>
-                        )}
-                      </>
-                    )}
-                    {!editMode && showPrices && (
-                      prices[p.code] ? (
-                        exchangeRate ? (
-                          <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-green-text)" }}>
-                            {formatUSD(prices[p.code])}{" "}
-                            <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>· {formatCUP(priceToCUP(prices[p.code], exchangeRate))}</span>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-green-text)" }}>
-                            {formatCUP(prices[p.code])}
-                          </div>
-                        )
-                      ) : (
-                        <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-green-text)" }}>
-                          Precio no definido
-                        </div>
-                      )
-                    )}
-                    {!editMode && (reservedForTomorrow(allOrders, p.code) > 0 || (p.reserveQty || 0) > 0) && (
-                      <div style={{ fontSize: 10.5, color: "var(--accent-orange-soft-text)" }}>
-                        {reservedForTomorrow(allOrders, p.code) > 0 && `Reservado (mañana): ${reservedForTomorrow(allOrders, p.code)} · `}
-                        {(p.reserveQty || 0) > 0 && `En reserva: ${p.reserveQty} · `}
-                        Libre: {Math.max(0, qty - reservedForTomorrow(allOrders, p.code) - (p.reserveQty || 0))}
+                      <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 5 }}>
+                        {p.code}
+                        {lastMovement ? ` · últ. mov. ${formatDate(lastMovement.date)}` : ""}
+                        {lastAdjustedAt[p.code] ? ` · stock ajustado ${formatDate(lastAdjustedAt[p.code].slice(0, 10))}` : ""}
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {!editMode && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: isLow ? "var(--accent-orange-text)" : "var(--text)" }}>
-                      {qty} <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)" }}>uds</span>
                     </div>
                     <button
-                      onClick={() => { setManualSaleCode(manualSaleCode === p.code ? null : p.code); setManualSaleQty(""); }}
-                      title="Venta manual"
-                      aria-label="Venta manual"
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        width: 26, height: 26, borderRadius: 8, flexShrink: 0,
-                        background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", cursor: "pointer",
-                      }}
-                    >
-                      <ReceiptText size={13} />
-                    </button>
-                    <button
-                      onPointerDown={(e) => handleDragStart(e, p.code)}
+                      onPointerDown={(e) => handleHandlePointerDown(e, p.code)}
                       onPointerMove={handleDragMove}
                       onPointerUp={handleDragEnd}
                       onPointerCancel={handleDragEnd}
@@ -337,163 +538,131 @@ export default function ProductsView({
                       title="Arrastrar para reordenar"
                       aria-label="Arrastrar para reordenar"
                       style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        width: 26, height: 26, borderRadius: 8, flexShrink: 0, cursor: "grab", touchAction: "none",
-                        background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
+                        flexShrink: 0, width: 36, height: 36, borderRadius: 9, background: "var(--surface-subtle)", border: "none",
+                        display: "flex", alignItems: "center", justifyContent: "center", cursor: "grab", touchAction: "none",
                       }}
                     >
-                      <GripVertical size={14} />
+                      <DragDots color="var(--muted)" size={18} />
                     </button>
                   </div>
-                )}
 
-                {editMode && (
-                  <button
-                    onPointerDown={(e) => handleDragStart(e, p.code)}
-                    onPointerMove={handleDragMove}
-                    onPointerUp={handleDragEnd}
-                    onPointerCancel={handleDragEnd}
-                    title="Arrastrar para reordenar"
-                    aria-label="Arrastrar para reordenar"
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-                      background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
-                      cursor: "grab", touchAction: "none",
-                    }}
-                  >
-                    <GripVertical size={16} />
-                  </button>
-                )}
-              </div>
-
-              {!editMode && manualSaleCode === p.code && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 10 }}>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      autoFocus
-                      placeholder="Uds"
-                      value={manualSaleQty}
-                      onChange={(e) => setManualSaleQty(e.target.value)}
-                      style={{
-                        width: 70, textAlign: "right", border: "1px solid var(--border)", borderRadius: 7,
-                        padding: "7px 8px", fontSize: 14, fontVariantNumeric: "tabular-nums",
-                      }}
-                    />
-                    <button
-                      onClick={() => submitManualSale(p.code, 1)}
-                      title="Registrar venta (resta stock, suma a vendido hoy e ingreso)"
-                      style={{
-                        background: "var(--ink)", color: "var(--cream)", border: "none",
-                        borderRadius: 7, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >
-                      Vender
-                    </button>
-                    <button
-                      onClick={() => submitManualSale(p.code, -1)}
-                      title="Corregir (una venta contada de más: devuelve stock, resta ingreso)"
-                      style={{
-                        background: "transparent", color: "var(--warning-text)", border: "1px solid var(--border)",
-                        borderRadius: 7, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >
-                      Corregir
-                    </button>
-                    <button
-                      onClick={closeManualSale}
-                      title="Cancelar"
-                      aria-label="Cancelar"
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "transparent", color: "var(--text-muted)", border: "none",
-                        borderRadius: 7, width: 30, height: 30, cursor: "pointer", flexShrink: 0,
-                      }}
-                    >
-                      <X size={16} />
-                    </button>
-                </div>
-              )}
-
-              {editMode && (
-                <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-                  <div style={{ flex: "3 1 0", minWidth: 0 }}>
-                    <FieldLabel>STOCK ACTUAL</FieldLabel>
-                    <div style={{ display: "flex", gap: 3, minWidth: 0 }}>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={editInputs[p.code]}
-                        onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                        style={{
-                          flex: "1 1 0", minWidth: 0, boxSizing: "border-box", fontSize: 15, fontWeight: 700,
-                          border: "1px solid var(--border-strong)", borderRadius: 7, padding: "6px 8px",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      />
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={deltaInputs[p.code] ?? ""}
-                        onChange={(e) => setDeltaInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                        placeholder="cant."
-                        title="Cantidad a sumar o restar del stock de arriba"
-                        style={{
-                          width: 40, minWidth: 0, flexShrink: 0, boxSizing: "border-box", fontSize: 11, textAlign: "center",
-                          border: "1px solid var(--border)", borderRadius: 6, padding: "4px 2px",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => applyDelta(p.code, -1)}
-                        title="Restar del stock actual"
-                        aria-label="Restar del stock actual"
-                        style={{
-                          flexShrink: 0, width: 22, background: "transparent", border: "1px solid var(--border)",
-                          borderRadius: 6, color: "var(--text)", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                        }}
-                      >
-                        −
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyDelta(p.code, 1)}
-                        title="Sumar al stock actual"
-                        aria-label="Sumar al stock actual"
-                        style={{
-                          flexShrink: 0, width: 22, background: "transparent", border: "1px solid var(--border)",
-                          borderRadius: 6, color: "var(--text)", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                        }}
-                      >
-                        +
-                      </button>
+                  {/* b) Bloque STOCK ACTUAL */}
+                  <div style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>STOCK ACTUAL</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--faint)" }}>
+                        antes {originalEditSnapshotRef.current?.editInputs[p.code] ?? editInputs[p.code]}
+                      </span>
                     </div>
-                  </div>
-                  <div style={{ flex: "1 1 0", minWidth: 0 }}>
-                    {exchangeRate ? (
-                      <>
-                        <FieldLabel>PRECIO USD</FieldLabel>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginTop: 8 }}>
+                      <div style={{
+                        flexShrink: 0, display: "flex", alignItems: "baseline", gap: 4, background: "var(--surface)",
+                        border: "1.5px solid var(--text)", borderRadius: 9, padding: "6px 12px", boxSizing: "border-box",
+                      }}>
                         <input
                           type="number"
-                          inputMode="decimal"
-                          value={editPriceInputs[p.code] ?? ""}
-                          onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                          title="Precio en dólares -- fijo, no cambia solo al mover la tasa"
+                          inputMode="numeric"
+                          value={editInputs[p.code]}
+                          onChange={(e) => setEditInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                           style={{
-                            width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                            border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                            fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
+                            width: 64, border: "none", background: "transparent", color: "var(--text)",
+                            fontSize: 34, fontWeight: 700, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums",
+                            padding: 0, borderRadius: 0,
                           }}
                         />
-                        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 3 }}>
-                          {formatCUP(priceToCUP(parseFloat(editPriceInputs[p.code]) || 0, exchangeRate))}
+                        <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)" }}>uds</span>
+                      </div>
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, height: 50 }}>
+                        <button
+                          type="button"
+                          onPointerDown={() => startStepper(p.code, -1)}
+                          onPointerUp={stopStepper}
+                          onPointerLeave={stopStepper}
+                          onPointerCancel={stopStepper}
+                          title="Restar del stock actual"
+                          aria-label="Restar del stock actual"
+                          style={{
+                            flexShrink: 0, width: 42, height: 42, borderRadius: 9, border: "1px solid var(--border-strong)",
+                            background: "var(--surface)", color: "var(--text)", fontSize: 22, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          −
+                        </button>
+                        <div style={{
+                          flex: 1, minWidth: 0, height: 42, borderRadius: 9, border: "1px solid var(--border-strong)",
+                          background: "var(--surface)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                        }}>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={deltaInputs[p.code] ?? ""}
+                            onChange={(e) => setDeltaInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                            title="Cantidad a sumar o restar del stock de arriba"
+                            style={{
+                              width: "90%", textAlign: "center", border: "none", background: "transparent", color: "var(--text)",
+                              fontSize: 15, fontWeight: 600, fontVariantNumeric: "tabular-nums", padding: 0, borderRadius: 0,
+                            }}
+                          />
+                          <span style={{ fontSize: 9, fontWeight: 500, letterSpacing: "0.08em", color: "var(--faint)", marginTop: 2 }}>CANT.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onPointerDown={() => startStepper(p.code, 1)}
+                          onPointerUp={stopStepper}
+                          onPointerLeave={stopStepper}
+                          onPointerCancel={stopStepper}
+                          title="Sumar al stock actual"
+                          aria-label="Sumar al stock actual"
+                          style={{
+                            flexShrink: 0, width: 42, height: 42, borderRadius: 9, border: "1px solid var(--border-strong)",
+                            background: "var(--surface)", color: "var(--text)", fontSize: 22, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* c) Lista de ajustes */}
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {usdMode ? (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                            Precio <span style={{ color: "var(--faint)" }}>USD</span>
+                          </span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={editPriceInputs[p.code] ?? ""}
+                            onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                            title="Precio en dólares -- fijo, no cambia solo al mover la tasa"
+                            style={{
+                              flexShrink: 0, width: 92, height: 34, borderRadius: 7, background: "var(--surface-sunken)",
+                              border: "1px solid var(--border)", textAlign: "right", padding: "0 10px", boxSizing: "border-box",
+                              fontSize: 14, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums",
+                            }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                            Precio <span style={{ color: "var(--faint)" }}>CUP</span> <span style={{ fontSize: 11, color: "var(--faint)" }}>· calculado</span>
+                          </span>
+                          <span style={{
+                            flexShrink: 0, width: 92, height: 34, display: "flex", alignItems: "center", justifyContent: "flex-end",
+                            padding: "0 10px", boxSizing: "border-box", fontSize: 14, fontWeight: 600, color: "var(--green)",
+                            fontVariantNumeric: "tabular-nums",
+                          }}>
+                            {formatCUP(priceToCUP(parseFloat(editPriceInputs[p.code]) || 0, exchangeRate))}
+                          </span>
                         </div>
                       </>
                     ) : (
-                      <>
-                        <FieldLabel>PRECIO CUP</FieldLabel>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                          Precio <span style={{ color: "var(--faint)" }}>CUP</span>
+                        </span>
                         <input
                           type="number"
                           inputMode="decimal"
@@ -501,223 +670,370 @@ export default function ProductsView({
                           onChange={(e) => setEditPriceInputs((s) => ({ ...s, [p.code]: e.target.value }))}
                           title="Precio en CUP -- configurá la tasa de cambio arriba para cargarlo en USD"
                           style={{
-                            width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                            border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                            fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
+                            flexShrink: 0, width: 92, height: 34, borderRadius: 7, background: "var(--surface-sunken)",
+                            border: "1px solid var(--border)", textAlign: "right", padding: "0 10px", boxSizing: "border-box",
+                            fontSize: 14, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums",
                           }}
                         />
-                      </>
+                      </div>
                     )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>HL por unidad</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={editHlInputs[p.code] ?? ""}
+                        onChange={(e) => setEditHlInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        title="Hectolitros por unidad"
+                        style={{
+                          flexShrink: 0, width: 92, height: 34, borderRadius: 7, background: "var(--surface-sunken)",
+                          border: "1px solid var(--border)", textAlign: "right", padding: "0 10px", boxSizing: "border-box",
+                          fontSize: 14, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums",
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Aviso stock bajo</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={editLowStockInputs[p.code] ?? ""}
+                        onChange={(e) => setEditLowStockInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        title="Cantidad de stock a partir de la cual avisar"
+                        placeholder={String(defaultLowStockThreshold)}
+                        style={{
+                          flexShrink: 0, width: 92, height: 34, borderRadius: 7, background: "var(--surface-sunken)",
+                          border: "1px solid var(--border-warn)", textAlign: "right", padding: "0 10px", boxSizing: "border-box",
+                          fontSize: 14, fontWeight: 600, color: "var(--orange)", fontVariantNumeric: "tabular-nums",
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                        Reserva <span style={{ fontSize: 11, color: "var(--faint)" }}>· opcional</span>
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={editReserveInputs[p.code] ?? ""}
+                        onChange={(e) => setEditReserveInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        title="Unidades que se guardan aparte -- no se ofrecen en pedidos salvo que confirmes usar la reserva"
+                        placeholder="—"
+                        style={{
+                          flexShrink: 0, width: 92, height: 34, borderRadius: 7, background: "var(--surface-sunken)",
+                          border: "1px solid var(--border)", textAlign: "right", padding: "0 10px", boxSizing: "border-box",
+                          fontSize: 14, fontWeight: 500, color: "var(--text)", fontVariantNumeric: "tabular-nums",
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
 
-              {editMode && (
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "10px 12px", marginTop: 10 }}>
-                  <div>
-                    <FieldLabel>HL POR UNIDAD</FieldLabel>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={editHlInputs[p.code] ?? ""}
-                      onChange={(e) => setEditHlInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                      title="Hectolitros por unidad"
-                      style={{
-                        width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel>AVISO STOCK BAJO</FieldLabel>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={editLowStockInputs[p.code] ?? ""}
-                      onChange={(e) => setEditLowStockInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                      title="Cantidad de stock a partir de la cual avisar"
-                      placeholder={String(defaultLowStockThreshold)}
-                      style={{
-                        width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel>RESERVA (opcional)</FieldLabel>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={editReserveInputs[p.code] ?? ""}
-                      onChange={(e) => setEditReserveInputs((s) => ({ ...s, [p.code]: e.target.value }))}
-                      title="Unidades que se guardan aparte -- no se ofrecen en pedidos salvo que confirmes usar la reserva"
-                      placeholder="0"
-                      style={{
-                        width: "100%", boxSizing: "border-box", fontSize: 14, fontWeight: 600,
-                        border: "1px solid var(--border-strong)", borderRadius: 7, padding: "8px 10px",
-                        fontVariantNumeric: "tabular-nums", color: "var(--text)", background: "var(--surface)",
-                      }}
-                    />
-                  </div>
-                  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
+                  {/* d) Pie */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 10, borderTop: "1px solid var(--hairline)" }}>
                     <button
                       onClick={() => onArchiveProduct(p.code)}
                       title="Eliminar producto"
                       aria-label="Eliminar producto"
                       style={{
-                        display: "flex", alignItems: "center", gap: 6,
-                        background: "transparent", border: "1px solid var(--border)", color: "var(--warning-text)",
-                        borderRadius: 7, padding: "8px 10px", fontSize: 12, cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 7, height: 34, padding: "0 12px", borderRadius: 8,
+                        border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--red)",
+                        fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                       }}
                     >
-                      <Trash2 size={13} /> Eliminar
+                      <Trash2 size={13} strokeWidth={1.8} /> Eliminar
                     </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {editMode && (
-          <div
-            style={{
-              background: "var(--surface)", border: "1px dashed var(--border-strong)", borderRadius: 12,
-              padding: "14px 18px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
-            }}
-          >
-            <input
-              type="text"
-              placeholder="Nombre del producto nuevo"
-              value={newProductName}
-              onChange={(e) => setNewProductName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") onAddProduct(); }}
-              style={{
-                flex: "1 1 auto", minWidth: 160, border: "1px solid var(--border)", borderRadius: 7,
-                padding: "9px 12px", fontSize: 14,
-              }}
-            />
-            <input
-              type="number"
-              inputMode="decimal"
-              placeholder="HL/unidad"
-              value={newProductHl}
-              onChange={(e) => setNewProductHl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") onAddProduct(); }}
-              style={{
-                flex: "0 1 110px", minWidth: 90, border: "1px solid var(--border)", borderRadius: 7,
-                padding: "9px 12px", fontSize: 14,
-              }}
-            />
-            <button
-              onClick={onAddProduct}
-              style={{
-                flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
-                borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-              }}
-            >
-              + Agregar producto
-            </button>
-          </div>
-        )}
-      </div>
-
-      {editMode && archivedProducts.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <button
-            onClick={() => setShowArchived((s) => !s)}
-            style={{
-              display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
-              color: "var(--text-muted)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
-              padding: 0, marginBottom: showArchived ? 10 : 0,
-            }}
-          >
-            {showArchived ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            PRODUCTOS ELIMINADOS ({archivedProducts.length})
-          </button>
-
-          {showArchived && (
-            <Card>
-              {archivedProducts.map((p, i) => (
-                <div
-                  key={p.code}
-                  style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    gap: 8, padding: "10px 16px", fontSize: 13.5,
-                    borderTop: i === 0 ? "none" : "1px solid var(--divider)",
-                  }}
-                >
-                  <span>{p.name}</span>
-                  <button
-                    onClick={() => onRestoreProduct(p.code)}
-                    style={{
-                      background: "transparent", border: "1px solid var(--border)", color: "var(--accent-green-text)",
-                      borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer",
-                    }}
-                  >
-                    Restaurar
-                  </button>
-                </div>
-              ))}
-            </Card>
-          )}
-        </div>
-      )}
-
-      <div style={{ marginTop: 28 }}>
-        <button
-          onClick={() => setShowHistory((s) => !s)}
-          style={{
-            display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
-            color: "var(--text-muted)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
-            padding: 0, marginBottom: showHistory ? 10 : 0,
-          }}
-        >
-          {showHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          <History size={14} /> HISTORIAL DE MOVIMIENTOS ({movements.length})
-        </button>
-        {showHistory && (movements.length === 0 ? (
-          <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
-            Aún no hay movimientos registrados.
-          </div>
-        ) : (
-          <Card>
-            {movements.slice(0, 25).map((m, i) => {
-              const product = products.find((p) => p.code === m.code);
-              // Delta real de stock: una venta siempre resta (m.qty>0 normal,
-              // pero una corrección manual guarda qty<0 para devolver stock,
-              // por eso no se puede asumir el signo solo por el tipo).
-              const delta = m.type === "venta" ? -m.qty : m.qty;
-              const label = m.type === "venta"
-                ? (m.manual ? (m.qty >= 0 ? "venta manual" : "corrección manual") : "venta")
-                : "ajuste manual";
-              return (
-                <div
-                  key={m.id}
-                  style={{
-                    display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
-                    gap: 6, padding: "10px 16px", fontSize: 13.5,
-                    borderTop: i === 0 ? "none" : "1px solid var(--divider)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 5, height: 5, borderRadius: "50%", background: product?.color || "var(--text-faint)" }} />
-                    <span style={{ fontWeight: 600 }}>{product?.short || m.code}</span>
-                    <span style={{ color: "var(--text-faint)" }}>{label}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                    <span style={{ color: "var(--text-faint)", fontSize: 12 }}>{formatDate(m.date)}</span>
-                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: delta >= 0 ? "var(--accent-green-text)" : "var(--accent-orange-text)" }}>
-                      {delta >= 0 ? `+${delta}` : delta}
-                    </span>
+                    <span style={{ flex: 1 }} />
+                    <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--faint)" }}>Guarda todo con el botón de arriba</span>
                   </div>
                 </div>
               );
-            })}
-          </Card>
-        ))}
+            }
+
+            // Vista simple.
+            return (
+              <div
+                key={p.code}
+                data-product-code={p.code}
+                className="rowfade"
+                style={{
+                  display: "flex", alignItems: "stretch", background: "var(--surface)",
+                  border: `1px solid ${isDragging ? "var(--border-strong)" : isLow ? "var(--border-warn)" : "var(--border)"}`,
+                  borderRadius: 12, overflow: "hidden",
+                  opacity: isDragging ? 0.55 : 1, transform: isDragging ? "rotate(-0.6deg)" : "none",
+                  boxShadow: isVentaOpen ? "0 1px 0 var(--border)" : "none",
+                }}
+              >
+                <div style={{ width: 4, flexShrink: 0, background: p.color }} />
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: isVentaOpen ? "column" : "row" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0 10px 12px", minWidth: 0 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {p.name}
+                      </div>
+                      {showPrices && (
+                        prices[p.code] ? (
+                          exchangeRate ? (
+                            <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--green)", marginTop: 2, whiteSpace: "nowrap" }}>
+                              {formatUSD(prices[p.code])} <span style={{ color: "var(--faintest)" }}>·</span> {formatCUP(priceToCUP(prices[p.code], exchangeRate))}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--green)", marginTop: 2 }}>
+                              {formatCUP(prices[p.code])}
+                            </div>
+                          )
+                        ) : (
+                          <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--green)", marginTop: 2 }}>
+                            Precio no definido
+                          </div>
+                        )
+                      )}
+                      {(reservedForTomorrow(allOrders, p.code) > 0 || (p.reserveQty || 0) > 0) && (
+                        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--orange-2)", marginTop: 2, whiteSpace: "nowrap" }}>
+                          {reservedForTomorrow(allOrders, p.code) > 0 && `Reservado (mañana): ${reservedForTomorrow(allOrders, p.code)} · `}
+                          {(p.reserveQty || 0) > 0 && `En reserva: ${p.reserveQty} · `}
+                          Libre: {Math.max(0, qty - reservedForTomorrow(allOrders, p.code) - (p.reserveQty || 0))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flexShrink: 0, display: "flex", alignItems: "baseline", gap: 3 }}>
+                      <span style={{
+                        fontSize: 27, fontWeight: 700, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums",
+                        color: isLow ? "var(--orange)" : "var(--text)",
+                      }}>
+                        {qty}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 500, color: isLow ? "var(--orange-2)" : "var(--faint)" }}>uds</span>
+                    </div>
+                    <button
+                      onClick={() => { setManualSaleCode(manualSaleCode === p.code ? null : p.code); setManualSaleQty(""); }}
+                      title="Venta manual"
+                      aria-label="Venta manual"
+                      style={{
+                        flexShrink: 0, width: 34, height: 34, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer",
+                        background: isVentaOpen ? "var(--ink)" : isLow ? "var(--warn-tint)" : "var(--surface-subtle)",
+                        border: `1px solid ${isVentaOpen ? "var(--ink)" : isLow ? "var(--border-warn)" : "var(--border-strong)"}`,
+                        color: isVentaOpen ? "var(--cream)" : isLow ? "var(--warning-text)" : "var(--text)",
+                      }}
+                    >
+                      <ReceiptText size={16} strokeWidth={1.7} />
+                    </button>
+                  </div>
+
+                  {isVentaOpen && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 12px", borderTop: "1px dashed var(--border)", background: "var(--surface-subtle)" }}>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        autoFocus
+                        placeholder="Uds"
+                        value={manualSaleQty}
+                        onChange={(e) => setManualSaleQty(e.target.value)}
+                        style={{
+                          flexShrink: 0, width: 58, height: 36, textAlign: "center", border: "1px solid var(--border-strong)",
+                          borderRadius: 8, background: "var(--surface)", color: "var(--text)", fontSize: 16, fontWeight: 600,
+                          fontVariantNumeric: "tabular-nums", boxSizing: "border-box",
+                        }}
+                      />
+                      <button
+                        onClick={() => submitManualSale(p.code, 1)}
+                        title="Registrar venta (resta stock, suma a vendido hoy e ingreso)"
+                        style={{
+                          flexShrink: 0, height: 36, padding: "0 16px", borderRadius: 8, background: "var(--ink)",
+                          color: "var(--cream)", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >
+                        Vender
+                      </button>
+                      <button
+                        onClick={() => submitManualSale(p.code, -1)}
+                        title="Corregir (una venta contada de más: devuelve stock, resta ingreso)"
+                        style={{
+                          flexShrink: 0, height: 36, padding: "0 14px", borderRadius: 8, background: "var(--surface)",
+                          color: "var(--text)", border: "1px solid var(--border-strong)", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >
+                        Corregir
+                      </button>
+                      <span style={{ flex: 1 }} />
+                      <button
+                        onClick={closeManualSale}
+                        title="Cancelar"
+                        aria-label="Cancelar"
+                        style={{
+                          flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                          background: "transparent", color: "var(--muted)", border: "none",
+                          borderRadius: 8, width: 30, height: 30, cursor: "pointer",
+                        }}
+                      >
+                        <X size={14} strokeWidth={2} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onPointerDown={(e) => handleHandlePointerDown(e, p.code)}
+                  onPointerMove={handleDragMove}
+                  onPointerUp={handleDragEnd}
+                  onPointerCancel={handleDragEnd}
+                  onLostPointerCapture={handleDragEnd}
+                  title="Arrastrar para reordenar"
+                  aria-label="Arrastrar para reordenar"
+                  style={{
+                    flexShrink: 0, width: 28, border: "none", borderLeft: `1px solid ${handleDots.border}`,
+                    background: handleDots.bg, display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "grab", touchAction: "none", padding: 0,
+                  }}
+                >
+                  <DragDots color={handleDots.dots} size={16} />
+                </button>
+              </div>
+            );
+          })}
+          {editMode && (
+            <div
+              style={{
+                border: "1.5px dashed var(--border-edit)", borderRadius: 12, padding: 12,
+                display: "flex", flexDirection: "column", gap: 9, background: "var(--surface)",
+              }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>AGREGAR PRODUCTO</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="text"
+                  placeholder="Nombre"
+                  value={newProductName}
+                  onChange={(e) => setNewProductName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") onAddProduct(); }}
+                  style={{
+                    flex: 1, minWidth: 0, height: 36, boxSizing: "border-box", border: "1px solid var(--border)",
+                    borderRadius: 8, background: "var(--surface)", padding: "0 10px", fontSize: 13,
+                  }}
+                />
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="HL/ud"
+                  value={newProductHl}
+                  onChange={(e) => setNewProductHl(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") onAddProduct(); }}
+                  style={{
+                    flexShrink: 0, width: 74, height: 36, boxSizing: "border-box", border: "1px solid var(--border)",
+                    borderRadius: 8, background: "var(--surface)", padding: "0 10px", fontSize: 13,
+                  }}
+                />
+                <button
+                  onClick={onAddProduct}
+                  aria-label="Agregar producto"
+                  style={{
+                    flexShrink: 0, width: 40, height: 36, borderRadius: 8, background: "var(--ink)", border: "none",
+                    color: "var(--cream)", fontSize: 18, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {editMode && archivedProducts.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <button
+              onClick={() => setShowArchived((s) => !s)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, width: "100%", background: "var(--surface)",
+                border: "1px solid var(--border-edit)", borderRadius: 12, cursor: "pointer",
+                padding: "11px 12px", marginBottom: showArchived ? 10 : 0,
+              }}
+            >
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>
+                PRODUCTOS ELIMINADOS ({archivedProducts.length})
+              </span>
+              <span style={{ flex: 1 }} />
+              {showArchived ? <ChevronUp size={14} strokeWidth={2} color="var(--muted)" /> : <ChevronDown size={14} strokeWidth={2} color="var(--muted)" />}
+            </button>
+
+            {showArchived && (
+              <Card>
+                {archivedProducts.map((p, i) => (
+                  <div
+                    key={p.code}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      gap: 8, padding: "10px 16px", fontSize: 13.5,
+                      borderTop: i === 0 ? "none" : "1px solid var(--divider)",
+                    }}
+                  >
+                    <span>{p.name}</span>
+                    <button
+                      onClick={() => onRestoreProduct(p.code)}
+                      style={{
+                        height: 34, background: "var(--surface)", border: "1px solid var(--border-strong)", color: "var(--text)",
+                        borderRadius: 8, padding: "0 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      Restaurar
+                    </button>
+                  </div>
+                ))}
+              </Card>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop: 28 }}>
+          <button
+            onClick={() => setShowHistory((s) => !s)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
+              color: "var(--text-muted)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
+              padding: 0, marginBottom: showHistory ? 10 : 0,
+            }}
+          >
+            {showHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            <History size={14} /> HISTORIAL DE MOVIMIENTOS ({movements.length})
+          </button>
+          {showHistory && (movements.length === 0 ? (
+            <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
+              Aún no hay movimientos registrados.
+            </div>
+          ) : (
+            <Card>
+              {movements.slice(0, 25).map((m, i) => {
+                const product = products.find((p) => p.code === m.code);
+                // Delta real de stock: una venta siempre resta (m.qty>0 normal,
+                // pero una corrección manual guarda qty<0 para devolver stock,
+                // por eso no se puede asumir el signo solo por el tipo).
+                const delta = m.type === "venta" ? -m.qty : m.qty;
+                const label = m.type === "venta"
+                  ? (m.manual ? (m.qty >= 0 ? "venta manual" : "corrección manual") : "venta")
+                  : "ajuste manual";
+                return (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+                      borderTop: i === 0 ? "none" : "1px solid var(--hairline)", fontSize: 13.5,
+                    }}
+                  >
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: product?.color || "var(--text-faint)", flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {product?.short || m.code}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)" }}>{label} · {formatDate(m.date)}</div>
+                    </div>
+                    <span style={{ flexShrink: 0, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: delta >= 0 ? "var(--green)" : "var(--orange)" }}>
+                      {delta >= 0 ? `+${delta}` : delta}
+                    </span>
+                  </div>
+                );
+              })}
+            </Card>
+          ))}
+        </div>
       </div>
-    </>
+    </div>
   );
 }
