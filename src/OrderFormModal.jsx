@@ -95,8 +95,8 @@ export default function OrderFormModal({
         </div>
 
         {/* Cuerpo scrolleable */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", gap: 4, background: "var(--segment-track)", borderRadius: 9, padding: 3 }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "12px 16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ flexShrink: 0, display: "flex", gap: 4, background: "var(--segment-track)", borderRadius: 9, padding: 3 }}>
             <button
               onClick={() => onDraftBucketChange("hoy")}
               style={{
@@ -120,7 +120,7 @@ export default function OrderFormModal({
           </div>
 
           {/* Tarjeta CLIENTE */}
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ flexShrink: 0, background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>CLIENTE</span>
               <span style={{ flex: 1 }} />
@@ -290,7 +290,7 @@ export default function OrderFormModal({
 
           {/* EN EL PEDIDO */}
           {draftLines.length > 0 && (
-            <div style={{ background: "var(--surface)", border: "1px solid var(--ink)", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ flexShrink: 0, background: "var(--surface)", border: "1px solid var(--ink)", borderRadius: 12, overflow: "hidden" }}>
               <div style={{ background: "var(--ink)", padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--cream)" }}>EN EL PEDIDO</span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "var(--on-ink-subtitle)" }}>{draftLines.length}</span>
@@ -361,7 +361,7 @@ export default function OrderFormModal({
 
           {/* AGREGAR PRODUCTO / OTRO */}
           {availableProducts.length > 0 ? (
-            <div style={{ border: "1.5px dashed var(--border-edit)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 9, background: "var(--surface)" }}>
+            <div style={{ flexShrink: 0, border: "1.5px dashed var(--border-edit)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 9, background: "var(--surface)" }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>
                 {draftLines.length > 0 ? "AGREGAR OTRO" : "AGREGAR PRODUCTO"}
               </span>
@@ -442,7 +442,7 @@ export default function OrderFormModal({
               })()}
             </div>
           ) : (
-            <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--muted)" }}>No hay productos con stock disponible.</div>
+            <div style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 500, color: "var(--muted)" }}>No hay productos con stock disponible.</div>
           )}
         </div>
 
