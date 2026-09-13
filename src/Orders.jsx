@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, Pencil, ChevronDown, ChevronUp, Check, Search, X, Plus } from "lucide-react";
+import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus } from "lucide-react";
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
-import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
+import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import { productChipColors } from "./colorUtils";
-import Banner from "./Banner.jsx";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
 import CierreDeVentasBanner from "./CierreDeVentasBanner.jsx";
@@ -197,6 +196,12 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
   const [pendingPostpones, setPendingPostpones] = useState(() => new Map());
   const [pendingEditUndo, setPendingEditUndo] = useState(null); // { orderId, customerName, revertDraft, timeoutId } | null
+  // Solo oculta el toast del stack visual -- el timeout real que aplica la
+  // eliminación/pospuesta sigue corriendo igual, esto no cancela nada.
+  const [dismissedToastKeys, setDismissedToastKeys] = useState(() => new Set());
+  function dismissToast(key) {
+    setDismissedToastKeys((s) => new Set(s).add(key));
+  }
   const [hoyOrderSort, setHoyOrderSort] = useState(() => (loadSavedFilters().sort === "oldest" ? "oldest" : "recent"));
   const [mananaOrderSort, setMananaOrderSort] = useState(() => (loadSavedFilters().sortManana === "oldest" ? "oldest" : "recent"));
   const [orderSearch, setOrderSearch] = useState("");
@@ -377,7 +382,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   const customerNamesList = getCustomerNames(movements);
   const suggestions = showSuggestions
-    ? matchCustomerNames(customerNamesList, customerName)
+    ? matchCustomerNames(customerNamesList, customerName).map((name) => ({ name, count: getCustomerOrders(movements, name).length }))
     : [];
   // Aviso de "cliente parecido" -- ej. typo de mayúsculas o espacio de más
   // -- para no terminar con dos clientes que en realidad son la misma
@@ -896,7 +901,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     return (
       <div>
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>{title}</div>
+          <div style={{ fontSize: 12, letterSpacing: "0.07em", color: "var(--muted)", fontWeight: 800, textTransform: "uppercase" }}>{title}</div>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
             <input
               type="checkbox"
@@ -949,15 +954,26 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     );
   }
 
+  const toasts = [
+    ...Array.from(pendingDeletes.entries()).map(([orderId, { customerName: n }]) => ({
+      key: `del-${orderId}`, message: `Pedido de ${n} eliminado.`, onUndo: () => undoDelete(orderId),
+    })),
+    ...Array.from(pendingPostpones.entries()).map(([orderId, { customerName: n }]) => ({
+      key: `post-${orderId}`, message: `Pedido de ${n} programado para mañana.`, onUndo: () => undoPostpone(orderId),
+    })),
+    ...(pendingEditUndo ? [{ key: `edit-${pendingEditUndo.orderId}`, message: `Pedido de ${pendingEditUndo.customerName} editado.`, onUndo: undoEdit }] : []),
+  ].filter((t) => !dismissedToastKeys.has(t.key));
+
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <div style={{ background: "var(--segment-track)", borderRadius: 12, padding: 3, display: "flex", gap: 2, marginBottom: 16 }}>
         <button
           onClick={() => setActiveSection("hoy")}
           style={{
-            flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+            flex: 1, padding: "9px 0", borderRadius: 9, border: "none", fontWeight: 600, fontSize: 14, cursor: "pointer",
             background: activeSection === "hoy" ? "var(--ink)" : "transparent",
-            color: activeSection === "hoy" ? "var(--cream)" : "var(--text)",
+            color: activeSection === "hoy" ? "var(--cream)" : "var(--muted)",
+            boxShadow: activeSection === "hoy" ? "0 1px 2px rgba(30,27,22,.06)" : "none",
           }}
         >
           Hoy
@@ -965,23 +981,23 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         <button
           onClick={() => setActiveSection("manana")}
           style={{
-            flex: 1, padding: "9px", borderRadius: 7, border: "1px solid var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+            flex: 1, padding: "9px 0", borderRadius: 9, border: "none", fontWeight: 600, fontSize: 14, cursor: "pointer",
             background: activeSection === "manana" ? "var(--ink)" : "transparent",
-            color: activeSection === "manana" ? "var(--cream)" : "var(--text)",
+            color: activeSection === "manana" ? "var(--cream)" : "var(--muted)",
+            boxShadow: activeSection === "manana" ? "0 1px 2px rgba(30,27,22,.06)" : "none",
           }}
         >
           Para mañana
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+      <div style={{ background: "var(--surface-subtle)", border: "1px solid var(--border)", borderRadius: 12, display: "flex", alignItems: "stretch", marginBottom: 10 }}>
         <select
           value={filterProductCode}
           onChange={(e) => setFilterProductCode(e.target.value)}
           style={{
-            flex: 1, minWidth: 0, boxSizing: "border-box", borderRadius: 7,
-            border: filterProductCode ? "1px solid var(--border-warn)" : "1px solid var(--border)",
-            padding: "9px 12px", fontSize: 14, background: "var(--surface)", color: "var(--text)",
+            flex: 1, minWidth: 0, boxSizing: "border-box", border: "none", background: "transparent",
+            padding: "0 8px 0 12px", height: 44, fontSize: 14, fontWeight: 600, color: "var(--text)",
           }}
         >
           <option value="">Todos los productos</option>
@@ -989,153 +1005,119 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             <option key={p.code} value={p.code}>{p.name}</option>
           ))}
         </select>
+        <div style={{ width: 1, background: "var(--border)", margin: "8px 0" }} />
         <button
           onClick={() => setSearchOpen(true)}
           title="Buscar cliente"
           aria-label="Buscar cliente"
           style={{
-            flex: "0 0 auto", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 7, border: "1px solid var(--border)", cursor: "pointer",
+            flexShrink: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
+            border: "none", cursor: "pointer",
             background: orderSearch ? "var(--ink)" : "transparent",
-            color: orderSearch ? "var(--cream)" : "var(--text)",
+            color: orderSearch ? "var(--cream)" : "var(--muted)",
           }}
         >
           <Search size={16} />
         </button>
-        {orderSearch && (
-          <button
-            onClick={() => setOrderSearch("")}
-            title="Limpiar búsqueda"
-            aria-label="Limpiar búsqueda"
-            style={{
-              flex: "0 0 auto", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center",
-              borderRadius: 7, border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)", cursor: "pointer",
-            }}
-          >
-            <X size={16} />
-          </button>
-        )}
+        <div style={{ width: 1, background: "var(--border)", margin: "8px 0" }} />
+        <button
+          onClick={clearAllFilters}
+          style={{
+            flexShrink: 0, padding: "0 14px", height: 44, background: "transparent", border: "none",
+            color: "var(--faint)", fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          Limpiar
+        </button>
       </div>
 
       {searchOpen && (
         <div
           onClick={() => setSearchOpen(false)}
           style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50,
-            display: "flex", justifyContent: "center", padding: "80px 16px 0",
+            position: "fixed", inset: 0, background: "rgba(20,17,12,0.45)", zIndex: 50,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: "100%", maxWidth: 420, height: "fit-content",
-              background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10,
-              padding: 10, display: "flex", gap: 8, alignItems: "center",
+              width: "100%", maxWidth: 300, background: "var(--surface)", borderRadius: 16,
+              padding: 18, boxShadow: "0 12px 30px rgba(0,0,0,0.3)",
             }}
           >
-            <Search size={16} style={{ flexShrink: 0, color: "var(--text-muted)" }} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Buscar cliente</span>
+              <button
+                onClick={() => setSearchOpen(false)}
+                title="Cerrar"
+                aria-label="Cerrar búsqueda"
+                style={{
+                  width: 26, height: 26, border: "none", background: "var(--surface-subtle)", borderRadius: 8,
+                  color: "var(--faint)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
             <input
               autoFocus
               type="text"
-              placeholder="Buscar cliente en pedidos"
+              placeholder="Nombre del cliente"
               value={orderSearch}
               onChange={(e) => setOrderSearch(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Escape") setSearchOpen(false); }}
               style={{
-                flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
-                fontSize: 14, color: "var(--text)",
+                width: "100%", boxSizing: "border-box", height: 40, border: "1px solid var(--border)", borderRadius: 8,
+                padding: "0 12px", fontSize: 14, fontFamily: "inherit", color: "var(--text)", background: "var(--surface-subtle)",
+                marginBottom: 10,
               }}
             />
-            <button
-              onClick={() => setSearchOpen(false)}
-              title="Cerrar"
-              aria-label="Cerrar búsqueda"
-              style={{
-                flex: "0 0 auto", background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}
-            >
-              <X size={18} />
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 240, overflowY: "auto" }}>
+              {matchCustomerNames(customerNamesList, orderSearch).slice(0, 8).map((name) => (
+                <button
+                  key={name}
+                  onClick={() => { setOrderSearch(name); setSearchOpen(false); }}
+                  style={{
+                    padding: "10px 8px", fontSize: 13, color: "var(--text)", borderRadius: 8,
+                    background: "none", border: "none", textAlign: "left", cursor: "pointer",
+                  }}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 14 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={filterUnsent}
-            onChange={(e) => setFilterUnsent(e.target.checked)}
-          />
-          No facturados ({filterCounts.unsent})
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={filterUnconfirmed}
-            onChange={(e) => setFilterUnconfirmed(e.target.checked)}
-          />
-          No confirmados ({filterCounts.unconfirmed})
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={filterDelivery}
-            onChange={(e) => setFilterDelivery(e.target.checked)}
-          />
-          Domicilio ({filterCounts.delivery})
-        </label>
-      </div>
-
-      {pendingDeletes.size > 0 && (
-        <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-          {Array.from(pendingDeletes.entries()).map(([orderId, { customerName: deletedName }]) => (
-            <Banner
-              key={orderId}
-              variant="dark"
-              layout="row"
-              style={{ fontSize: 13 }}
-              actions={[{ label: "Deshacer", kind: "secondary", onClick: () => undoDelete(orderId) }]}
-            >
-              Pedido de {deletedName} eliminado.
-            </Banner>
-          ))}
-        </div>
-      )}
-
-      {pendingPostpones.size > 0 && (
-        <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-          {Array.from(pendingPostpones.entries()).map(([orderId, { customerName: postponedName }]) => (
-            <Banner
-              key={orderId}
-              variant="dark"
-              layout="row"
-              style={{ fontSize: 13 }}
-              actions={[{ label: "Deshacer", kind: "secondary", onClick: () => undoPostpone(orderId) }]}
-            >
-              Pedido de {postponedName} programado para mañana.
-            </Banner>
-          ))}
-        </div>
-      )}
-
-      {pendingEditUndo && (
-        <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-          <Banner
-            variant="dark"
-            layout="row"
-            style={{ fontSize: 13 }}
-            actions={[{ label: "Deshacer", kind: "secondary", onClick: undoEdit }]}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        {[
+          { key: "unsent", label: "No facturados", active: filterUnsent, onClick: () => setFilterUnsent((v) => !v), count: filterCounts.unsent },
+          { key: "unconfirmed", label: "No confirmados", active: filterUnconfirmed, onClick: () => setFilterUnconfirmed((v) => !v), count: filterCounts.unconfirmed },
+          { key: "delivery", label: "Domicilio", active: filterDelivery, onClick: () => setFilterDelivery((v) => !v), count: filterCounts.delivery },
+        ].map((chip) => (
+          <button
+            key={chip.key}
+            onClick={chip.onClick}
+            aria-pressed={chip.active}
+            style={{
+              display: "flex", alignItems: "center", gap: 6, minHeight: 44, padding: "10px 14px", borderRadius: 999,
+              fontSize: 13, fontWeight: 600, cursor: "pointer", color: "var(--text)",
+              border: `1px solid ${chip.active ? "var(--orange)" : "var(--border)"}`,
+              background: chip.active ? "var(--banner-bg)" : "var(--surface)",
+            }}
           >
-            Pedido de {pendingEditUndo.customerName} editado.
-          </Banner>
-        </div>
-      )}
+            {chip.label}
+            <span style={{ color: "var(--faint)", fontWeight: 700 }}>{chip.count}</span>
+          </button>
+        ))}
+      </div>
 
       {activeSection === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
         <CierreDeVentasBanner
           unconfirmedTodayOrders={unconfirmedTodayOrders}
+          cierreVentasHour={cierreVentasHour}
           confirmingPostponeId={confirmingPostponeId}
           confirmingDeleteId={confirmingDeleteId}
           onPostponeClick={handlePostponeClick}
@@ -1208,23 +1190,22 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       )}
 
       {activeSection === "manana" && reservablePanelRows.length > 0 && (
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
-          <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 8 }}>
-            DISPONIBLE PARA RESERVAR
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>Disponible para reservar</div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Stock libre después de reservas manuales</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px 4px", fontSize: 11, fontWeight: 700, color: "var(--faint)", textTransform: "uppercase", letterSpacing: "0.04em", paddingBottom: 6, borderBottom: "1px solid var(--hairline)" }}>
+            <div>Producto</div>
+            <div style={{ textAlign: "right" }}>Reserv.</div>
+            <div style={{ textAlign: "right" }}>Libres</div>
           </div>
-          {reservablePanelRows.map(({ product: p, reserved, libre }, i) => (
+          {reservablePanelRows.map(({ product: p, reserved, libre }) => (
             <div
               key={p.code}
-              style={{
-                display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0",
-                borderTop: i === 0 ? "none" : "1px solid var(--divider)",
-              }}
+              style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px 4px", padding: "10px 0", borderBottom: "1px solid var(--hairline)", alignItems: "center" }}
             >
-              <span>{p.name}</span>
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {reserved > 0 && <span style={{ color: "var(--accent-orange-soft-text)", marginRight: 8 }}>Reservado: {reserved}</span>}
-                <b>{libre} libres</b>
-              </span>
+              <span style={{ fontSize: 13, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+              <span style={{ fontSize: 13, color: "var(--muted)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{reserved}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, textAlign: "right", fontVariantNumeric: "tabular-nums", color: libre > 0 ? "var(--green)" : "var(--red)" }}>{libre}</span>
             </div>
           ))}
         </div>
@@ -1235,23 +1216,56 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           <button
             onClick={() => setShowPast((s) => !s)}
             style={{
-              display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none",
-              color: "var(--text-muted)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 600, cursor: "pointer",
-              padding: 0, marginBottom: showPast ? 10 : 0,
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+              background: "transparent", border: "none", cursor: "pointer", padding: 0,
+              marginBottom: showPast ? 10 : 0,
             }}
           >
-            {showPast ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            PEDIDOS ANTERIORES ({pastOrdersCount})
+            <span style={{ fontSize: 12, letterSpacing: "0.07em", color: "var(--muted)", fontWeight: 800, textTransform: "uppercase" }}>
+              PEDIDOS ANTERIORES ({pastOrdersCount})
+            </span>
+            <ChevronDown size={16} color="var(--muted)" style={{ transition: "transform .2s", transform: `rotate(${showPast ? 180 : 0}deg)` }} />
           </button>
 
           {showPast && pastDatesDesc.map((date) => (
             <div key={date} style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--faint)", textTransform: "uppercase", marginBottom: 6 }}>
                 {formatDate(date)}
               </div>
-              <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "grid", gap: 10, opacity: 0.85 }}>
                 {pastOrdersByDate.get(date).map((order, i) => renderOrderRow(order, i, {}))}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {toasts.length > 0 && (
+        <div style={{ position: "fixed", left: 16, right: 16, bottom: 92, zIndex: 40, display: "flex", flexDirection: "column", gap: 8 }}>
+          {toasts.map((t) => (
+            <div
+              key={t.key}
+              style={{
+                background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.18)", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10,
+                animation: "toastIn 0.2s ease-out",
+              }}
+            >
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{t.message}</span>
+              <button
+                onClick={t.onUndo}
+                style={{ flexShrink: 0, background: "none", border: "none", color: "var(--ink)", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: "4px 6px" }}
+              >
+                Deshacer
+              </button>
+              <button
+                onClick={() => dismissToast(t.key)}
+                title="Cerrar"
+                aria-label="Cerrar"
+                style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 6, border: "none", background: "none", color: "var(--faint)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+              >
+                <X size={14} />
+              </button>
             </div>
           ))}
         </div>
@@ -1268,7 +1282,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           boxShadow: "0 4px 14px rgba(0,0,0,0.35)", zIndex: 40,
         }}
       >
-        <Plus size={26} />
+        <Plus size={24} strokeWidth={2.4} />
       </button>
 
       <OrderFormModal

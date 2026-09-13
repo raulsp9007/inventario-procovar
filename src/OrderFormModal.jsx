@@ -157,13 +157,35 @@ export default function OrderFormModal({
               {suggestions.length > 0 && (
                 <div style={{
                   position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, marginTop: 4,
-                  background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 9, overflow: "hidden",
+                  background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden",
+                  boxShadow: "0 8px 20px rgba(0,0,0,0.15)",
                 }}>
-                  {suggestions.map((name) => (
-                    <div key={name} onClick={() => onPickSuggestion(name)} style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer" }}>
-                      {name}
-                    </div>
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={s.name}
+                      type="button"
+                      onClick={() => onPickSuggestion(s.name)}
+                      style={{
+                        width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "11px 12px", border: "none", background: "none", cursor: "pointer",
+                        borderTop: i === 0 ? "none" : "1px solid var(--hairline)",
+                        fontSize: 13, color: "var(--text)", textAlign: "left",
+                      }}
+                    >
+                      <span>{s.name}</span>
+                      <span style={{ fontSize: 11, color: "var(--faint)" }}>{s.count} pedido{s.count === 1 ? "" : "s"}</span>
+                    </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => onShowSuggestions(false)}
+                    style={{
+                      width: "100%", textAlign: "center", padding: 9, border: "none",
+                      background: "var(--surface-subtle)", fontSize: 12, color: "var(--faint)", cursor: "pointer",
+                    }}
+                  >
+                    Cerrar
+                  </button>
                 </div>
               )}
             </div>
@@ -425,37 +447,7 @@ export default function OrderFormModal({
         </div>
 
         {/* Pie fijo */}
-        {pendingReserveConfirm ? (
-          <div style={{ flexShrink: 0, borderTop: "1px solid var(--border-warn)", background: "var(--banner-bg)", padding: "12px 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <AlertTriangle size={15} strokeWidth={2} color="var(--orange)" style={{ flexShrink: 0, marginTop: 1 }} />
-              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 500, color: "var(--orange-text)" }}>
-                Este pedido usa la reserva de mañana: <strong>{pendingReserveConfirm.reserveDips.map((d) => `${d.fromReserve}x ${d.name}`).join(", ")}</strong>.
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={onCancelReserveConfirm}
-                style={{
-                  flexShrink: 0, width: 104, height: 48, borderRadius: 10, border: "1px solid var(--border-warn)",
-                  background: "transparent", color: "var(--orange-text)", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={onConfirmUseReserve}
-                style={{
-                  flex: 1, height: 48, borderRadius: 10, border: "none",
-                  background: "var(--orange-text)", color: "var(--banner-bg)", fontSize: 14.5, fontWeight: 700, cursor: "pointer",
-                }}
-              >
-                Usar reserva y guardar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ flexShrink: 0, borderTop: "1px solid var(--border-strong)", background: "var(--bg-edit)", padding: "12px 16px 16px" }}>
+        <div style={{ flexShrink: 0, borderTop: "1px solid var(--border-strong)", background: "var(--bg-edit)", padding: "12px 16px 16px" }}>
             <button
               onClick={onConfirmOrder}
               disabled={!canConfirm}
@@ -474,9 +466,62 @@ export default function OrderFormModal({
                 </span>
               )}
             </button>
-          </div>
-        )}
+        </div>
       </div>
+
+      {pendingReserveConfirm && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(20,17,12,.5)", zIndex: 70,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: 310, background: "var(--surface)", borderRadius: 16, padding: 20, boxShadow: "0 12px 30px rgba(0,0,0,.3)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <AlertTriangle size={18} strokeWidth={2} color="var(--orange)" />
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Este pedido usará reserva</span>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.4 }}>
+              El stock normal no alcanza. Se tomará de la reserva manual de estos productos:
+            </div>
+            <div style={{ border: "1px solid var(--border-warn)", background: "var(--banner-bg)", borderRadius: 10, padding: "4px 12px", marginBottom: 16 }}>
+              {pendingReserveConfirm.reserveDips.map((d, i) => (
+                <div
+                  key={d.code}
+                  style={{
+                    display: "flex", justifyContent: "space-between", padding: "9px 0",
+                    borderTop: i === 0 ? "none" : "1px solid var(--border-warn)",
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>{d.name}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{d.fromReserve} uds</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={onCancelReserveConfirm}
+                style={{
+                  flex: 1, height: 44, borderRadius: 10, border: "1px solid var(--border-strong)",
+                  background: "var(--surface)", color: "var(--text)", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={onConfirmUseReserve}
+                style={{
+                  flex: 1, height: 44, borderRadius: 10, border: "none",
+                  background: "var(--ink)", color: "var(--cream)", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

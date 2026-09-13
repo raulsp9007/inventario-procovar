@@ -61,6 +61,7 @@ export default function InventoryApp() {
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .rowfade { animation: fadeIn 0.25s ease; }
+        @keyframes toastIn { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
 
       <RadialNav view={view} setView={setView} />
