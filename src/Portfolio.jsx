@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { ChevronDown } from "lucide-react";
 import { formatCUP, getProductSalesTotals } from "./money";
 import { getCustomerSalesTotals } from "./customerHelpers";
 import { todayStr, getWeekStartStr, getMonthStartStr } from "./dateUtils";
@@ -24,7 +25,9 @@ function polarPoint(cx, cy, r, angleDeg) {
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
-function PieChart({ slices, size = 150 }) {
+// Donut (no pie sólido): hueco central relleno con --surface para que
+// respire dentro de la tarjeta, en vez de un disco macizo.
+function PieChart({ slices, size = 96 }) {
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   if (total <= 0) return null;
   const r = size / 2;
@@ -51,23 +54,26 @@ function PieChart({ slices, size = 150 }) {
           <path key={p.key} d={p.d} fill={p.color} />
         )
       )}
+      <circle cx={r} cy={r} r={r * 0.55} fill="var(--surface)" />
     </svg>
   );
 }
 
-function Legend({ slices, valueFormatter }) {
+// Leyenda: solo nombre + porcentaje (el monto/cantidad ya se ve en las
+// tarjetas de abajo -- barras de producto y lista de top clientes -- así
+// que repetirlo acá era ruido, no información nueva).
+function Legend({ slices }) {
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   return (
-    <div style={{ display: "grid", gap: 6, flex: 1, minWidth: 150 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 9, flex: 1, minWidth: 0 }}>
       {slices.map((s) => (
-        <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-          <div style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
-          <span style={{ color: "var(--text-muted)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-            {total > 0 ? Math.round((s.value / total) * 100) : 0}%
+        <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {s.label}
           </span>
-          <span style={{ fontWeight: 600, flexShrink: 0, fontVariantNumeric: "tabular-nums", minWidth: 54, textAlign: "right" }}>
-            {valueFormatter(s.value)}
+          <span style={{ fontSize: 11.5, color: "var(--faint)", flexShrink: 0 }}>
+            {total > 0 ? Math.round((s.value / total) * 100) : 0}%
           </span>
         </div>
       ))}
@@ -75,11 +81,27 @@ function Legend({ slices, valueFormatter }) {
   );
 }
 
-const OTHERS_COLOR = "#8A8574";
+const CUSTOMER_COLORS = ["#C9752A", "#4E7A7F", "#8A6D3B", "#946B8A", "#2F6B4F"];
+
+function EmptyState({ children }) {
+  return <div style={{ textAlign: "center", padding: "36px 12px", color: "var(--faint)", fontSize: 13, fontWeight: 600 }}>{children}</div>;
+}
+
+function Card({ title, rangeLabel, children }) {
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 14 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>{title}</div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>{rangeLabel}</div>
+      {children}
+    </div>
+  );
+}
 
 export default function Portfolio({ products, movements, showPrices }) {
   const [range, setRange] = useState("historico");
+  const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const { start, end } = rangeFor(range);
+  const rangeLabel = RANGES.find((r) => r.value === range).label;
 
   const productRows = useMemo(
     () => getProductSalesTotals(movements, products, { start, end }).sort((a, b) => b.qty - a.qty),
@@ -101,62 +123,86 @@ export default function Portfolio({ products, movements, showPrices }) {
   }));
 
   const topCustomers = customerRows.slice(0, 5);
-  const othersRevenue = customerRows.slice(5).reduce((sum, r) => sum + (showPrices ? r.revenue : r.qty), 0);
+  const othersValue = customerRows.slice(5).reduce((sum, r) => sum + (showPrices ? r.revenue : r.qty), 0);
   const customerSlices = topCustomers.map((r, i) => ({
     label: r.customerName,
     value: showPrices ? r.revenue : r.qty,
     color: CUSTOMER_COLORS[i % CUSTOMER_COLORS.length],
   }));
-  if (othersRevenue > 0) customerSlices.push({ label: "Otros clientes", value: othersRevenue, color: OTHERS_COLOR });
+  if (othersValue > 0) customerSlices.push({ label: "Otros clientes", value: othersValue, color: "var(--faintest)" });
 
   const valueFormatter = (v) => (showPrices ? formatCUP(v) : `${v} uds`);
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>PORTAFOLIO</div>
-        <select
-          value={range}
-          onChange={(e) => setRange(e.target.value)}
-          style={{
-            border: "1px solid var(--border)", borderRadius: 7, padding: "7px 10px", fontSize: 12.5,
-            background: "var(--surface)", color: "var(--text)",
-          }}
-        >
-          {RANGES.map((r) => (
-            <option key={r.value} value={r.value}>{r.label}</option>
-          ))}
-        </select>
+      <div style={{ fontSize: 12, letterSpacing: "0.07em", color: "var(--muted)", fontWeight: 800, textTransform: "uppercase", marginBottom: 16 }}>
+        PORTAFOLIO
       </div>
 
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 12 }}>VENTAS POR PRODUCTO</div>
-        {productSlices.length === 0 ? (
-          <div style={{ fontSize: 13.5, color: "var(--text-faint)" }}>Sin ventas en este rango.</div>
-        ) : (
-          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-            <PieChart slices={productSlices} />
-            <Legend slices={productSlices} valueFormatter={valueFormatter} />
-          </div>
+      <div style={{ position: "relative", marginBottom: 16, width: "fit-content" }}>
+        <button
+          onClick={() => setRangeMenuOpen((v) => !v)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6, background: "var(--surface-subtle)", border: "1px solid var(--border)",
+            borderRadius: 10, color: "var(--text)", fontSize: 13, fontWeight: 600, fontFamily: "inherit", padding: "0 12px", height: 40, cursor: "pointer",
+          }}
+        >
+          {rangeLabel}
+          <ChevronDown size={12} color="var(--faint)" />
+        </button>
+        {rangeMenuOpen && (
+          <>
+            <div onClick={() => setRangeMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 20 }} />
+            <div style={{
+              position: "absolute", top: 46, left: 0, background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: 10, boxShadow: "0 8px 20px rgba(0,0,0,0.15)", overflow: "hidden", zIndex: 30, minWidth: 160,
+            }}>
+              {RANGES.map((r, i) => (
+                <button
+                  key={r.value}
+                  onClick={() => { setRange(r.value); setRangeMenuOpen(false); }}
+                  style={{
+                    width: "100%", textAlign: "left", padding: "10px 12px", border: "none",
+                    borderTop: i === 0 ? "none" : "1px solid var(--hairline)", background: "none", fontFamily: "inherit",
+                    fontSize: 13, cursor: "pointer",
+                    color: "var(--text)",
+                    fontWeight: r.value === range ? 700 : 400,
+                  }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 12 }}>TOTAL VENDIDO POR PRODUCTO</div>
-        {productRows.length === 0 ? (
-          <div style={{ fontSize: 13.5, color: "var(--text-faint)" }}>Sin ventas en este rango.</div>
+      <Card title="Ventas por producto" rangeLabel={rangeLabel}>
+        {productSlices.length === 0 ? (
+          <EmptyState>Sin ventas en este rango</EmptyState>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+            <PieChart slices={productSlices} />
+            <Legend slices={productSlices} />
+          </div>
+        )}
+      </Card>
+
+      <Card title="Total vendido por producto" rangeLabel={rangeLabel}>
+        {productRows.length === 0 ? (
+          <EmptyState>Sin ventas en este rango</EmptyState>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {productRows.map((row) => (
               <div key={row.product.code}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 3 }}>
-                  <span>{row.product.name}</span>
-                  <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{row.qty}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{row.product.name}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{row.qty}</span>
                 </div>
-                <div style={{ height: 6, background: "var(--border)", borderRadius: 3 }}>
+                <div style={{ height: 8, borderRadius: 999, background: "var(--surface-subtle)", overflow: "hidden" }}>
                   <div
                     style={{
-                      height: "100%", borderRadius: 3, background: row.product.color || "#8A8574",
+                      height: "100%", borderRadius: 999, background: row.product.color || "#8A8574",
                       width: `${Math.max(4, Math.round((row.qty / productRows[0].qty) * 100))}%`,
                     }}
                   />
@@ -165,46 +211,49 @@ export default function Portfolio({ products, movements, showPrices }) {
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 12 }}>CLIENTES MÁS CONSUMIDORES</div>
+      <Card title="Clientes más consumidores" rangeLabel={rangeLabel}>
         {customerSlices.length === 0 ? (
-          <div style={{ fontSize: 13.5, color: "var(--text-faint)" }}>Sin pedidos con cliente en este rango.</div>
+          <EmptyState>Sin datos en este rango</EmptyState>
         ) : (
-          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <PieChart slices={customerSlices} />
-            <Legend slices={customerSlices} valueFormatter={valueFormatter} />
+            <Legend slices={customerSlices} />
           </div>
         )}
-      </div>
+      </Card>
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 600, padding: "12px 16px 0" }}>TOP CLIENTES POR PRODUCTO FAVORITO</div>
+        <div style={{ padding: "14px 14px 10px", borderBottom: "1px solid var(--divider)" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>Top clientes por producto favorito</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>{rangeLabel}</div>
+        </div>
         {customerRows.length === 0 ? (
-          <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 16px 16px" }}>Sin datos en este rango.</div>
+          <EmptyState>Sin datos en este rango</EmptyState>
         ) : (
-          customerRows.slice(0, 10).map((row, i) => {
+          customerRows.slice(0, 10).map((row, i, arr) => {
             const product = products.find((p) => p.code === row.favoriteProductCode);
             return (
               <div
                 key={row.customerName}
                 style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
-                  padding: "10px 16px", fontSize: 13.5, borderTop: i === 0 ? "none" : "1px solid var(--divider)",
-                  marginTop: i === 0 ? 10 : 0,
+                  display: "flex", alignItems: "center", gap: 10, padding: "12px 14px",
+                  borderBottom: i === arr.length - 1 ? "none" : "1px solid var(--hairline)",
                 }}
               >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.customerName}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {row.customerName}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                     Favorito: {product ? product.short : "—"}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                  <div style={{ fontWeight: 600 }}>{valueFormatter(showPrices ? row.revenue : row.qty)}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>{valueFormatter(showPrices ? row.revenue : row.qty)}</div>
                   {showPrices && (
-                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{row.qty} uds</div>
+                    <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{row.qty} uds</div>
                   )}
                 </div>
               </div>
@@ -215,5 +264,3 @@ export default function Portfolio({ products, movements, showPrices }) {
     </div>
   );
 }
-
-const CUSTOMER_COLORS = ["#C77A2E", "#274E37", "#7F77DD", "#D4537E", "#378ADD"];
