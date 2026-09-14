@@ -31,7 +31,12 @@ export default function Today({
       pendingToday: todaysPendingSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
       stockLeft: stock[p.code] || 0,
     }))
-    .map((row) => ({ ...row, disponibleLibre: row.stockLeft - row.pendingToday }))
+    // disponibleLibre = stockLeft, no stockLeft - pendingToday: un pedido de
+    // hoy sin enviar YA está comprometido (confirmOrder resta stock al
+    // crearlo, sin importar si se envió) -- restar pendingToday de nuevo acá
+    // descontaba las mismas unidades dos veces, dando negativos absurdos.
+    // Stock ya es lo libre real hasta que se cargue un pedido nuevo hoy.
+    .map((row) => ({ ...row, disponibleLibre: row.stockLeft }))
     .sort((a, b) => b.soldToday - a.soldToday);
   // En Hoy se muestra siempre todo lo activo, aunque la venta del día haya
   // dejado el stock en 0 -- es justamente el resumen de lo vendido hoy, no
