@@ -861,7 +861,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                   }}
                 >
                   <Receipt size={15} strokeWidth={1.7} />
-                  <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: "0.06em", color: "var(--muted)" }}>NEG.</span>
+                  <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: "0.06em", color: "var(--muted)" }}>FACT.</span>
                 </button>
                 <button
                   onClick={() => startEdit(order)}
