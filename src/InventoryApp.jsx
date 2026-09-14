@@ -37,7 +37,7 @@ export default function InventoryApp() {
     currentPersistedState, persist,
     handleImportFileChange, confirmImport,
     todaysMovements, mananaMovements,
-    activeProducts, archivedProducts, totalStock, lowStockCount, todaysUnitsSold, pendingTodayFor,
+    activeProducts, archivedProducts, totalStock, todaysUnitsSold,
     movementsNearCap,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
