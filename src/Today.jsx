@@ -38,12 +38,10 @@ export default function Today({
     // Stock ya es lo libre real hasta que se cargue un pedido nuevo hoy.
     .map((row) => ({ ...row, disponibleLibre: row.stockLeft }))
     .sort((a, b) => b.soldToday - a.soldToday);
-  // En Hoy se muestra siempre todo lo activo, aunque la venta del día haya
-  // dejado el stock en 0 -- es justamente el resumen de lo vendido hoy, no
-  // tendría sentido que un producto agotado desapareciera de esa lista.
-  // En Mañana (pendingMode) un producto en 0 sigue oculto salvo que todavía
-  // tenga algo reservado sin consolidar en esta vista.
-  const rows = pendingMode ? allRows.filter((row) => row.stockLeft > 0 || row.soldToday > 0) : allRows;
+  // Solo se muestran productos con alguna actividad hoy (vendido o
+  // pendiente sin enviar) -- uno sin movimientos no aporta nada al resumen,
+  // solo ruido en la lista.
+  const rows = allRows.filter((row) => row.soldToday > 0 || row.pendingToday > 0);
 
   return (
     <div>
@@ -89,7 +87,7 @@ export default function Today({
       </div>
       {rows.length === 0 ? (
         <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
-          {activeProducts.length === 0 ? "Sin productos activos." : "Todo el stock activo está en cero."}
+          {activeProducts.length === 0 ? "Sin productos activos." : pendingMode ? "Sin pendientes hoy." : "Aún no hay ventas hoy."}
         </div>
       ) : (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
