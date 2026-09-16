@@ -22,6 +22,10 @@ export default defineConfig(({ mode, isPreview }) => {
       VitePWA({
         registerType: "autoUpdate",
         includeAssets: ["icon-192.png", "icon-512.png"],
+        workbox: {
+          navigateFallback: `${base}index.html`,
+          globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        },
         manifest: {
           name: "Inventario Procovar",
           short_name: "Procovar",
