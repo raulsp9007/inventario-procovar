@@ -31,6 +31,7 @@ export default function OrderFormModal({
   businessName, onBusinessNameChange,
   customerPhone, onCustomerPhoneChange,
   showSuggestions, onShowSuggestions, suggestions, onPickSuggestion,
+  showBusinessSuggestions, onShowBusinessSuggestions, businessSuggestions, onPickBusinessSuggestion,
   nearDuplicateName, onUseNearDuplicateName,
   isDelivery, onIsDeliveryChange,
   note, onNoteChange,
@@ -232,16 +233,56 @@ export default function OrderFormModal({
               </div>
             )}
 
-            <input
-              type="text"
-              placeholder="Negocio · opcional"
-              value={businessName}
-              onChange={(e) => onBusinessNameChange(e.target.value)}
-              style={{
-                width: "100%", boxSizing: "border-box", height: 40, border: "1px solid var(--border)", borderRadius: 9,
-                padding: "0 12px", fontSize: 14, fontWeight: 500, color: "var(--text)", background: "var(--surface-sunken)",
-              }}
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                placeholder="Negocio · opcional"
+                value={businessName}
+                onChange={(e) => onBusinessNameChange(e.target.value)}
+                onFocus={() => onShowBusinessSuggestions(true)}
+                onBlur={() => setTimeout(() => onShowBusinessSuggestions(false), 150)}
+                style={{
+                  width: "100%", boxSizing: "border-box", height: 40, border: "1px solid var(--border)", borderRadius: 9,
+                  padding: "0 12px", fontSize: 14, fontWeight: 500, color: "var(--text)", background: "var(--surface-sunken)",
+                }}
+              />
+              {businessSuggestions.length > 0 && (
+                <div style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, marginTop: 4,
+                  background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden",
+                  boxShadow: "0 8px 20px rgba(0,0,0,0.15)",
+                }}>
+                  {businessSuggestions.map((s, i) => (
+                    <button
+                      key={s.name}
+                      type="button"
+                      onClick={() => onPickBusinessSuggestion(s.name)}
+                      style={{
+                        width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "11px 12px", border: "none", background: "none", cursor: "pointer",
+                        borderTop: i === 0 ? "none" : "1px solid var(--hairline)",
+                        fontSize: 13, color: "var(--text)", textAlign: "left",
+                      }}
+                    >
+                      <span>{s.name}</span>
+                      {s.customerName && (
+                        <span style={{ fontSize: 11, color: "var(--faint)" }}>{s.customerName}</span>
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onShowBusinessSuggestions(false)}
+                    style={{
+                      width: "100%", textAlign: "center", padding: 9, border: "none",
+                      background: "var(--surface-subtle)", fontSize: 12, color: "var(--faint)", cursor: "pointer",
+                    }}
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div style={{ display: "flex", gap: 8 }}>
               <div style={{ flex: 1, minWidth: 0, height: 40, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface-sunken)", display: "flex", alignItems: "center", overflow: "hidden" }}>

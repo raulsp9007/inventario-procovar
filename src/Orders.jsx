@@ -3,7 +3,7 @@ import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus } from "lu
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
-import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
+import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart, getBusinessNames, getCustomerNameForBusiness } from "./customerHelpers";
 import { productChipColors } from "./colorUtils";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
@@ -19,6 +19,14 @@ function loadSavedFilters() {
   } catch {
     return {};
   }
+}
+
+// Nombre de producto alfabéticamente más chico entre las líneas de un
+// pedido -- decide dónde cae ese pedido en el orden "Alfabético por
+// producto" cuando tiene varios productos distintos.
+function orderFirstProductName(order, products) {
+  const names = order.lines.map((l) => products.find((p) => p.code === l.code)?.name || l.code);
+  return names.sort((a, b) => a.localeCompare(b))[0] || "";
 }
 
 // Ícono de WhatsApp (no viene en lucide-react, que es solo outline
@@ -172,6 +180,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showBusinessSuggestions, setShowBusinessSuggestions] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [editingOrderSeq, setEditingOrderSeq] = useState(null);
   const [showPast, setShowPast] = useState(false);
@@ -300,15 +309,22 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const matchesDelivery = (order) => !filterDelivery || order.isDelivery;
     const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order) && matchesProduct(order) && matchesDelivery(order);
 
+    // "product": agrupa por el producto alfabéticamente primero de cada
+    // pedido; dentro del mismo producto, más reciente primero (mismo criterio
+    // que el sort "recent" para no introducir un tercer orden distinto ahí).
+    const orderSortComparator = (sortMode) => (a, b) => {
+      if (sortMode === "product") {
+        const cmp = orderFirstProductName(a, products).localeCompare(orderFirstProductName(b, products));
+        return cmp !== 0 ? cmp : b.timestamp.localeCompare(a.timestamp);
+      }
+      return sortMode === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp);
+    };
+
     const allOrders = groupAllOrders(movements).filter((o) => !pendingDeletes.has(o.orderId) && !pendingPostpones.has(o.orderId));
     const todaysOrders = allOrders.filter((o) => belongsToToday(o) && matchesFilters(o));
-    const sortedTodaysOrders = [...todaysOrders].sort((a, b) =>
-      hoyOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
-    );
+    const sortedTodaysOrders = [...todaysOrders].sort(orderSortComparator(hoyOrderSort));
     const upcomingOrders = allOrders.filter((o) => isUpcoming(o) && matchesFilters(o));
-    const sortedUpcomingOrders = [...upcomingOrders].sort((a, b) =>
-      mananaOrderSort === "recent" ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)
-    );
+    const sortedUpcomingOrders = [...upcomingOrders].sort(orderSortComparator(mananaOrderSort));
     const pastOrdersByDate = new Map();
     allOrders
       .filter((o) => o.date < today && o.date >= pastCutoff && matchesFilters(o))
@@ -346,7 +362,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       totalTodayCount, totalUpcomingCount, filterCounts,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, pendingPostpones, activeSection]);
+  }, [movements, products, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, pendingPostpones, activeSection]);
 
   // Solo entra al panel si queda algo libre para prometer, o si ya tiene
   // reservas encima (aunque esté en 0 libre) -- un producto sin nada de
@@ -399,6 +415,24 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     // algún pedido anterior (si nunca se cargaron, quedan vacíos).
     setBusinessName(getCustomerBusinessName(movements, name));
     setCustomerPhone(cubanPhoneLocalPart(getCustomerPhone(movements, name)));
+  }
+
+  const businessNamesList = getBusinessNames(movements);
+  const businessSuggestions = showBusinessSuggestions
+    ? matchCustomerNames(businessNamesList, businessName).map((name) => ({ name, customerName: getCustomerNameForBusiness(movements, name) }))
+    : [];
+
+  // Camino inverso a pickSuggestion -- útil cuando te acordás del negocio
+  // pero no de a nombre de quién está el pedido. Autocompleta cliente y
+  // teléfono igual que si lo hubieras elegido por nombre.
+  function pickBusinessSuggestion(name) {
+    setBusinessName(name);
+    setShowBusinessSuggestions(false);
+    const customer = getCustomerNameForBusiness(movements, name);
+    if (customer) {
+      setCustomerName(customer);
+      setCustomerPhone(cubanPhoneLocalPart(getCustomerPhone(movements, customer)));
+    }
   }
 
   function resetForm() {
@@ -763,7 +797,13 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            {order.lines.map((line) => {
+            {[...order.lines]
+              .sort((a, b) => {
+                const nameA = products.find((p) => p.code === a.code)?.name || a.code;
+                const nameB = products.find((p) => p.code === b.code)?.name || b.code;
+                return nameA.localeCompare(nameB);
+              })
+              .map((line) => {
               const product = products.find((p) => p.code === line.code);
               const colors = productChipColors(product?.color);
               return (
@@ -927,6 +967,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             >
               <option value="recent">Más recientes primero</option>
               <option value="oldest">Más antiguos primero</option>
+              <option value="product">Alfabético por producto</option>
             </select>
           </div>
         )}
@@ -1304,6 +1345,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         onCustomerNameChange={setCustomerName}
         businessName={businessName}
         onBusinessNameChange={setBusinessName}
+        showBusinessSuggestions={showBusinessSuggestions}
+        onShowBusinessSuggestions={setShowBusinessSuggestions}
+        businessSuggestions={businessSuggestions}
+        onPickBusinessSuggestion={pickBusinessSuggestion}
         customerPhone={customerPhone}
         onCustomerPhoneChange={setCustomerPhone}
         showSuggestions={showSuggestions}

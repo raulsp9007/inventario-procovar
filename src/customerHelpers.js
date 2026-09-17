@@ -123,6 +123,30 @@ export function getCustomerBusinessName(movements, customerName) {
   return businessName;
 }
 
+export function getBusinessNames(movements) {
+  const names = new Set();
+  movements.forEach((m) => {
+    if (m.businessName) names.add(m.businessName);
+  });
+  return Array.from(names);
+}
+
+// Cliente asociado a ese negocio (el más reciente) -- inverso de
+// getCustomerBusinessName, para autocompletar cliente y teléfono al elegir
+// el negocio en vez de escribir primero el nombre del cliente.
+export function getCustomerNameForBusiness(movements, businessName) {
+  let customerName = "";
+  let latestTimestamp = "";
+  movements.forEach((m) => {
+    if (m.businessName !== businessName || !m.customerName) return;
+    if (m.timestamp > latestTimestamp) {
+      customerName = m.customerName;
+      latestTimestamp = m.timestamp;
+    }
+  });
+  return customerName;
+}
+
 // Teléfono guardado para ese cliente (el más reciente entre todos sus
 // pedidos) -- usado para autocompletar al armar un pedido nuevo, igual que
 // getCustomerBusinessName.
