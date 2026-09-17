@@ -32,6 +32,9 @@ export default function WeeklySummary({
   const hlSold = cumulativeHl || 0;
   const hlPct = hlGoal != null && hlGoal > 0 ? Math.round((hlSold / hlGoal) * 100) : null;
   const activeProducts = products.filter((p) => !p.archived);
+  // Con datos de ventas ya calculados abajo por producto, se filtran los
+  // que no tuvieron actividad ni esta semana ni la anterior -- mismo criterio
+  // que Today.jsx: cero movimiento no aporta al resumen, solo ruido.
 
   // isCommittedMovement filtra igual que revenueInRange (money.js) -- sin
   // esto, una reserva para mañana sin enviar todavía sumaba a "uds" acá
@@ -41,6 +44,10 @@ export default function WeeklySummary({
     movements
       .filter((m) => m.code === code && m.type === "venta" && isCommittedMovement(m) && m.date >= start && m.date <= end)
       .reduce((sum, m) => sum + m.qty, 0);
+
+  const productRows = activeProducts
+    .map((p) => ({ product: p, current: soldInRange(p.code, weekStart, today), previous: soldInRange(p.code, prevStart, prevEnd) }))
+    .filter((row) => row.current > 0 || row.previous > 0);
 
   // Top clientes de la semana -- mismo helper que ya usa Clientes para el
   // total histórico, acá acotado al rango de la semana actual. El nombre
@@ -59,10 +66,13 @@ export default function WeeklySummary({
       <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
         RESUMEN SEMANAL · {formatDate(weekStart)} – {formatDate(today)}
       </div>
+      {productRows.length === 0 ? (
+        <div style={{ fontSize: 13.5, color: "var(--text-faint)", padding: "10px 2px" }}>
+          Sin ventas esta semana ni la anterior.
+        </div>
+      ) : (
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-        {activeProducts.map((p, i) => {
-          const current = soldInRange(p.code, weekStart, today);
-          const previous = soldInRange(p.code, prevStart, prevEnd);
+        {productRows.map(({ product: p, current, previous }, i) => {
           const hasComparison = previous > 0;
           const pctChange = hasComparison ? Math.round(((current - previous) / previous) * 100) : null;
           const revenue = revenueInRange(movements, p.code, weekStart, today);
@@ -102,6 +112,7 @@ export default function WeeklySummary({
           );
         })}
       </div>
+      )}
       <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--text-faint)", marginTop: 8 }}>
         <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--text-faint)", marginRight: 4 }} />esta semana (color del producto)</span>
         <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--border-strong)", marginRight: 4 }} />semana anterior</span>

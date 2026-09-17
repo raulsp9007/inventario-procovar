@@ -466,21 +466,22 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   }
 
   // Disponible NORMAL para una línea del pedido en edición/creación (no
-  // toca la reserva manual del producto):
-  // - Si es para Hoy: stock actual (+ lo que este mismo pedido ya tenía
-  //   comprometido, si se está editando uno que ya estaba comprometido).
-  // - Si es para Mañana: lo mismo, menos lo que ya reservaron OTROS pedidos
-  //   de mañana sin enviar (no se puede prometer más de lo que hay físico).
+  // toca la reserva manual del producto): stock actual (+ lo que este mismo
+  // pedido ya tenía comprometido, si se está editando uno que ya estaba
+  // comprometido) MENOS lo ya reservado por otros pedidos de mañana sin
+  // enviar -- sea el draft de Hoy o de Mañana, esas unidades ya están
+  // prometidas a otro cliente y no se pueden volver a ofrecer.
   // Con includeReserve=true da el TECHO real (cuánto hay contando la
-  // reserva) -- se usa para saber si vale la pena avisar "¿usar la
-  // reserva?" en vez de bloquear directo por falta de stock.
+  // reserva manual) -- se usa para saber si vale la pena avisar "¿usar la
+  // reserva?" en vez de bloquear directo por falta de stock. La reserva de
+  // mañana (reservedForTomorrow), a diferencia de la manual, nunca se puede
+  // "pisar" con solo confirmar -- es un compromiso real con un cliente.
   function computeAvailable(code, { includeReserve = false } = {}) {
     const editingOrder = editingOrderId ? allOrders.find((o) => o.orderId === editingOrderId) : null;
     const creditBack = editingOrder && isCommittedOrder(editingOrder)
       ? (editingOrder.lines.find((l) => l.code === code)?.qty || 0)
       : 0;
-    let base = (stock[code] || 0) + creditBack;
-    if (draftBucket === "manana") base -= reservedForTomorrow(allOrders, code, editingOrderId);
+    let base = (stock[code] || 0) + creditBack - reservedForTomorrow(allOrders, code, editingOrderId);
     if (!includeReserve) {
       const product = products.find((p) => p.code === code);
       base -= product?.reserveQty || 0;
@@ -510,7 +511,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       const hardAvailable = computeAvailable(line.code, { includeReserve: true });
       if (line.qty > hardAvailable) {
         const product = products.find((p) => p.code === line.code);
-        const motivo = draftBucket === "manana" ? ` para el ${formatDate(draftDate)} (ya reservado por otros pedidos)` : "";
+        const motivo = draftBucket === "manana"
+          ? ` para el ${formatDate(draftDate)} (ya reservado por otros pedidos)`
+          : reservedForTomorrow(allOrders, line.code, editingOrderId) > 0 ? " (parte ya está reservada para mañana)" : "";
         onError(`No hay suficiente stock de ${product ? product.name : line.code}${motivo}.`);
         return;
       }
