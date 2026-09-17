@@ -158,7 +158,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour }) {
+export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -1147,6 +1147,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             showPrices={showPrices}
             exchangeRate={exchangeRate}
             title="RESUMEN DE HOY"
+            dailyHlGoal={dailyHlGoal}
             onProductClick={handleSummaryProductClick}
           />
         </div>
@@ -1322,6 +1323,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         prices={prices}
         exchangeRate={exchangeRate}
         products={products}
+        movements={movements}
         availableProducts={availableProducts}
         effectiveSelectedProductCode={effectiveSelectedProductCode}
         onSelectedProductCodeChange={setSelectedProductCode}

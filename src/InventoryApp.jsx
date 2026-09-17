@@ -18,7 +18,7 @@ export default function InventoryApp() {
   const {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
-    showPrices, setShowPrices, hlGoal, setHlGoal,
+    showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
@@ -176,6 +176,11 @@ export default function InventoryApp() {
             onRegisterManualSale={registerManualSale}
             lowStockFilterActive={lowStockFilterActive}
             onClearLowStockFilter={() => setLowStockFilterActive(false)}
+            dailyHlGoal={dailyHlGoal}
+            onDailyHlGoalChange={(next) => {
+              setDailyHlGoal(next);
+              persist({ ...currentPersistedState, dailyHlGoal: next });
+            }}
           />
         )}
 
@@ -228,6 +233,7 @@ export default function InventoryApp() {
               setTimeout(() => setError(""), 2500);
             }}
             cierreVentasHour={cierreVentasHour}
+            dailyHlGoal={dailyHlGoal}
           />
         )}
 

@@ -49,6 +49,7 @@ export function useInventoryStore() {
   const [commissionPercent, setCommissionPercent] = useState(0);
   const [showPrices, setShowPrices] = useState(true);
   const [hlGoal, setHlGoal] = useState(null);
+  const [dailyHlGoal, setDailyHlGoal] = useState(null);
   const [whatsappPhone, setWhatsappPhone] = useState("");
   const [whatsappContactName, setWhatsappContactName] = useState("");
   const [cierreVentasHour, setCierreVentasHour] = useState(null); // 0-23, o null = desactivado
@@ -111,7 +112,7 @@ export function useInventoryStore() {
   }
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
-    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, whatsappPhone,
+    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, whatsappPhone,
     whatsappContactName, cierreVentasHour,
     senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
   };
@@ -152,6 +153,7 @@ export function useInventoryStore() {
     const nextCommissionPercent = parsed.commissionPercent || 0;
     const nextShowPrices = parsed.showPrices ?? true;
     const nextHlGoal = parsed.hlGoal ?? null;
+    const nextDailyHlGoal = parsed.dailyHlGoal ?? null;
     const nextWhatsappPhone = parsed.whatsappPhone || "";
     const nextWhatsappContactName = parsed.whatsappContactName || "";
     const nextCierreVentasHour = parsed.cierreVentasHour ?? null;
@@ -176,6 +178,7 @@ export function useInventoryStore() {
     setCommissionPercent(nextCommissionPercent);
     setShowPrices(nextShowPrices);
     setHlGoal(nextHlGoal);
+    setDailyHlGoal(nextDailyHlGoal);
     setWhatsappPhone(nextWhatsappPhone);
     setWhatsappContactName(nextWhatsappContactName);
     setCierreVentasHour(nextCierreVentasHour);
@@ -190,6 +193,7 @@ export function useInventoryStore() {
         prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
         cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
+        dailyHlGoal: nextDailyHlGoal,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
         lastBackupAt: nextLastBackupAt,
@@ -815,7 +819,7 @@ export function useInventoryStore() {
   return {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
-    showPrices, setShowPrices, hlGoal, setHlGoal,
+    showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,

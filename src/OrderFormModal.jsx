@@ -1,22 +1,16 @@
 import { useState } from "react";
-import { X, Check, Info, AlertTriangle, ChevronDown } from "lucide-react";
-import { tomorrowStr, formatDateShort } from "./dateUtils";
+import { X, Check, Info, AlertTriangle, ChevronDown, History, Contact } from "lucide-react";
+import { tomorrowStr, formatDateShort, formatDate } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
 import { productChipColors } from "./colorUtils";
+import { getCustomerProductHistory } from "./customerHelpers";
 
-// Ícono de moto (domicilio) -- no viene en lucide-react. Repetido acá en vez
-// de importado de Orders.jsx para no crear una dependencia cruzada entre
-// dos componentes de presentación; es un ícono chico, no vale la pena.
-function MotoIcon({ size = 16, color = "currentColor", strokeWidth = 1.7 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="6" cy="17.5" r="2.8" />
-      <circle cx="18" cy="17.5" r="2.8" />
-      <path d="M8.8 17.5h6.4M6 14.7V9h5l3.2 4.4 3.8 1.2v2.9" />
-      <path d="M11 9V6h2.6" />
-    </svg>
-  );
-}
+// El picker de contactos del navegador (Contact Picker API) solo existe en
+// Chrome/Android por ahora -- repetido acá en vez de importado de
+// Settings.jsx para no crear una dependencia cruzada entre dos componentes
+// de presentación.
+const CONTACT_PICKER_SUPPORTED =
+  typeof navigator !== "undefined" && "contacts" in navigator && typeof window !== "undefined" && "ContactsManager" in window;
 
 function draftTotal(draftLines, prices, exchangeRate) {
   return draftLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * priceToCUP(prices[l.code], exchangeRate), 0);
@@ -41,7 +35,7 @@ export default function OrderFormModal({
   isDelivery, onIsDeliveryChange,
   note, onNoteChange,
   draftLines, onUpdateDraftLineQty, onRemoveDraftLine,
-  showPrices, prices, exchangeRate, products,
+  showPrices, prices, exchangeRate, products, movements,
   availableProducts, effectiveSelectedProductCode, onSelectedProductCodeChange,
   computeAvailable,
   pendingQty, onPendingQtyChange, onAddDraftLine,
@@ -49,10 +43,37 @@ export default function OrderFormModal({
   pendingReserveConfirm, onConfirmUseReserve, onCancelReserveConfirm,
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
+  const [phonePickerError, setPhonePickerError] = useState("");
   if (!open) return null;
+
+  // Autocompletar el teléfono del cliente eligiendo un contacto del
+  // dispositivo -- toma los últimos 8 dígitos (número local cubano), igual
+  // que hace onCustomerPhoneChange al tipear a mano.
+  async function pickPhoneContact() {
+    setPhonePickerError("");
+    try {
+      const contacts = await navigator.contacts.select(["tel"], { multiple: false });
+      const contact = contacts && contacts[0];
+      const digits = (contact?.tel?.[0] || "").replace(/\D/g, "");
+      if (!digits) {
+        setPhonePickerError("Ese contacto no tiene número de teléfono.");
+        return;
+      }
+      onCustomerPhoneChange(digits.slice(-8));
+    } catch {
+      // Usuario canceló el picker -- no es un error real, no hace falta avisar.
+    }
+  }
 
   const total = draftTotal(draftLines, prices, exchangeRate);
   const canConfirm = customerName.trim().length > 0 && draftLines.length > 0;
+
+  // Aviso "ya le compró esto antes" al elegir producto -- ayuda a notar en
+  // el momento si el cliente repite (o no) lo de siempre, sin tener que
+  // salirse del modal a revisar su historial en la pestaña Clientes.
+  const selectedProductHistory = customerName.trim() && effectiveSelectedProductCode
+    ? getCustomerProductHistory(movements, customerName.trim()).find((h) => h.code === effectiveSelectedProductCode)
+    : null;
 
   return (
     <div
@@ -236,6 +257,21 @@ export default function OrderFormModal({
                   style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: "0 10px", fontSize: 14, fontWeight: 500, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}
                 />
               </div>
+              {CONTACT_PICKER_SUPPORTED && (
+                <button
+                  type="button"
+                  onClick={pickPhoneContact}
+                  title="Elegir contacto"
+                  aria-label="Elegir contacto"
+                  style={{
+                    flexShrink: 0, width: 40, height: 40, borderRadius: 9, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: "var(--surface-sunken)", border: "1px solid var(--border)", color: "var(--muted)",
+                  }}
+                >
+                  <Contact size={16} strokeWidth={1.8} />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onIsDeliveryChange(!isDelivery)}
@@ -257,9 +293,13 @@ export default function OrderFormModal({
                 }}>
                   {isDelivery && <Check size={11} strokeWidth={3.4} color="var(--ink)" />}
                 </span>
-                <MotoIcon size={16} color={isDelivery ? "var(--cream)" : "var(--muted)"} />
+                <span style={{ fontSize: 15, lineHeight: 1 }}>🛺</span>
               </button>
             </div>
+
+            {phonePickerError && (
+              <div style={{ fontSize: 12, color: "var(--error-text)" }}>{phonePickerError}</div>
+            )}
 
             {noteOpen ? (
               <textarea
@@ -381,6 +421,15 @@ export default function OrderFormModal({
                 </select>
                 <ChevronDown size={14} strokeWidth={2} color="var(--muted)" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
               </div>
+
+              {selectedProductHistory && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <History size={12} strokeWidth={2.2} color="var(--muted)" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--muted)" }}>
+                    Ya le vendiste esto antes: {selectedProductHistory.qty} uds · última vez {formatDate(selectedProductHistory.lastDate)}
+                  </span>
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 8 }}>
                 <button

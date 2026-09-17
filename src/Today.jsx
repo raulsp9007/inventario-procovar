@@ -13,6 +13,7 @@ export default function Today({
   products, movements, stock, allOrders = [], showPrices, exchangeRate,
   title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
   pendingMode = false,
+  dailyHlGoal = null,
   onProductClick = null,
 }) {
   const todaysSales = movements.filter((m) => m.type === "venta");
@@ -22,6 +23,9 @@ export default function Today({
   const dayRevenue = todaysSentSales.reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
   const dayRevenueUSD = convertToUSD(dayRevenue, exchangeRate);
   const hlSoldToday = totalHlSold(todaysSentSales, products);
+  // % contra la meta diaria (Productos) -- solo tiene sentido con lo
+  // realmente vendido/comprometido, no con lo pendiente sin enviar todavía.
+  const dailyHlPct = !pendingMode && dailyHlGoal ? Math.round((hlSoldToday / dailyHlGoal) * 100) : null;
   const ordersToday = new Set(todaysSentSales.filter((m) => m.orderId).map((m) => m.orderId)).size;
 
   const activeProducts = products.filter((p) => !p.archived);
@@ -82,6 +86,9 @@ export default function Today({
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>HL {pendingMode ? "PENDIENTES" : "VENDIDOS"}</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{hlSoldToday.toFixed(2)}</div>
+          {dailyHlPct !== null && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{dailyHlPct}% de la meta diaria</div>
+          )}
         </div>
       </div>
 

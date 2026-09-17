@@ -69,11 +69,14 @@ export default function ProductsView({
   onRegisterManualSale,
   lowStockFilterActive,
   onClearLowStockFilter,
+  dailyHlGoal,
+  onDailyHlGoalChange,
 }) {
   const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
   const [manualSaleCode, setManualSaleCode] = useState(null);
   const [manualSaleQty, setManualSaleQty] = useState("");
   const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
+  const [dailyHlGoalInput, setDailyHlGoalInput] = useState(() => (dailyHlGoal != null ? String(dailyHlGoal) : ""));
   // Ajustador rápido de existencias (modo edición): un número que se suma o
   // resta al stock que ya está en editInputs, en vez de tener que calcular
   // a mano el nuevo total y tipearlo entero. No toca nada hasta "Guardar
@@ -379,6 +382,35 @@ export default function ProductsView({
       </div>
 
       <div style={{ paddingTop: 12 }}>
+        {!editMode && (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Venta HL diaria</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+              Referencia de HL vendidos por día -- en Pedidos se muestra el % del día respecto a este valor.
+            </div>
+            <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+              Meta diaria
+              <input
+                type="number"
+                inputMode="decimal"
+                value={dailyHlGoalInput}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setDailyHlGoalInput(raw);
+                  const val = parseFloat(raw);
+                  onDailyHlGoalChange(isNaN(val) || val <= 0 ? null : val);
+                }}
+                placeholder="hL"
+                style={{
+                  width: 90, border: "1px solid var(--border)", borderRadius: 7,
+                  padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums",
+                }}
+              />
+              hL
+            </label>
+          </div>
+        )}
+
         {!editMode && lowStockFilterActive && (
           <div style={{ marginBottom: 10 }}>
             <span style={{
