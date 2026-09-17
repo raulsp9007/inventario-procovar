@@ -1143,6 +1143,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             products={products}
             movements={todaysMovements}
             stock={stock}
+            allOrders={allOrders}
             showPrices={showPrices}
             exchangeRate={exchangeRate}
             title="RESUMEN DE HOY"
@@ -1181,6 +1182,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
             products={products}
             movements={mananaMovements}
             stock={stock}
+            allOrders={allOrders}
             showPrices={showPrices}
             exchangeRate={exchangeRate}
             title="RESUMEN PENDIENTE"

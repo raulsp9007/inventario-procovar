@@ -1,4 +1,5 @@
 import { formatCUP, formatUSD, convertToUSD, totalHlSold } from "./money";
+import { reservedForTomorrow } from "./orderHelpers.js";
 import Banner from "./Banner.jsx";
 
 // `movements` ya viene filtrado por el llamador (InventoryApp.jsx) según qué
@@ -9,7 +10,7 @@ import Banner from "./Banner.jsx";
 // esperan a enviarse para tocar stock/ingreso). Se cuenta todo junto como
 // "pendiente de envío", sin separar enviado/pendiente (acá no hay "enviado").
 export default function Today({
-  products, movements, stock, showPrices, exchangeRate,
+  products, movements, stock, allOrders = [], showPrices, exchangeRate,
   title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
   pendingMode = false,
   onProductClick = null,
@@ -31,12 +32,14 @@ export default function Today({
       pendingToday: todaysPendingSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
       stockLeft: stock[p.code] || 0,
     }))
-    // disponibleLibre = stockLeft, no stockLeft - pendingToday: un pedido de
-    // hoy sin enviar YA está comprometido (confirmOrder resta stock al
-    // crearlo, sin importar si se envió) -- restar pendingToday de nuevo acá
-    // descontaba las mismas unidades dos veces, dando negativos absurdos.
-    // Stock ya es lo libre real hasta que se cargue un pedido nuevo hoy.
-    .map((row) => ({ ...row, disponibleLibre: row.stockLeft }))
+    // disponibleLibre = stockLeft menos lo reservado en pedidos de mañana
+    // sin enviar -- no stockLeft - pendingToday: un pedido de hoy sin enviar
+    // YA está comprometido (confirmOrder resta stock al crearlo, sin
+    // importar si se envió), así que restar pendingToday de nuevo acá
+    // descontaba las mismas unidades dos veces. Pero sí hay que restar lo
+    // reservado para mañana -- ese stock físico sigue ahí pero ya está
+    // prometido a otro cliente, no es libre de verdad.
+    .map((row) => ({ ...row, disponibleLibre: Math.max(0, row.stockLeft - reservedForTomorrow(allOrders, row.product.code)) }))
     .sort((a, b) => b.soldToday - a.soldToday);
   // Solo se muestran productos con alguna actividad hoy (vendido o
   // pendiente sin enviar) -- uno sin movimientos no aporta nada al resumen,
