@@ -123,7 +123,7 @@ export default function Settings({
       </div>
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px" }}>
-        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Teléfono de WhatsApp</div>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Facturador(a)</div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
           Código de país + número, sin espacios ni "+". Ej: 5359XXXXXXX. Al enviar un pedido, se abre el chat directo con este número.
         </div>
