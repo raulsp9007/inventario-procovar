@@ -216,6 +216,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   const [orderSearch, setOrderSearch] = useState("");
   const [filterUnsent, setFilterUnsent] = useState(() => !!loadSavedFilters().filterUnsent);
   const [filterUnconfirmed, setFilterUnconfirmed] = useState(() => !!loadSavedFilters().filterUnconfirmed);
+  const [filterUnsentToCustomer, setFilterUnsentToCustomer] = useState(() => !!loadSavedFilters().filterUnsentToCustomer);
   const [filterDelivery, setFilterDelivery] = useState(() => !!loadSavedFilters().filterDelivery);
   const [filterProductCode, setFilterProductCode] = useState(() => loadSavedFilters().filterProductCode || "");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -242,9 +243,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
 
   useEffect(() => {
     try {
-      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: hoyOrderSort, sortManana: mananaOrderSort, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode }));
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ sort: hoyOrderSort, sortManana: mananaOrderSort, filterUnsent, filterUnconfirmed, filterUnsentToCustomer, filterDelivery, filterProductCode }));
     } catch {}
-  }, [hoyOrderSort, mananaOrderSort, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode]);
+  }, [hoyOrderSort, mananaOrderSort, filterUnsent, filterUnconfirmed, filterUnsentToCustomer, filterDelivery, filterProductCode]);
 
   useEffect(() => {
     submittingRef.current = false;
@@ -264,6 +265,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   }
   if (filterUnsent) activeFilterLabels.push("no facturados");
   if (filterUnconfirmed) activeFilterLabels.push("no confirmados");
+  if (filterUnsentToCustomer) activeFilterLabels.push("no enviados");
   if (filterDelivery) activeFilterLabels.push("domicilio");
   const hasActiveFilters = activeFilterLabels.length > 0;
 
@@ -272,6 +274,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setFilterProductCode("");
     setFilterUnsent(false);
     setFilterUnconfirmed(false);
+    setFilterUnsentToCustomer(false);
     setFilterDelivery(false);
   }
 
@@ -303,9 +306,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   } = useMemo(() => {
     const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
     const matchesStatusFilter = (order) =>
-      (!filterUnsent && !filterUnconfirmed) ||
+      (!filterUnsent && !filterUnconfirmed && !filterUnsentToCustomer) ||
       (filterUnsent && !order.sent) ||
-      (filterUnconfirmed && !order.confirmed);
+      (filterUnconfirmed && !order.confirmed) ||
+      (filterUnsentToCustomer && !order.sentToCustomer);
     const matchesProduct = (order) => !filterProductCode || order.lines.some((l) => l.code === filterProductCode);
     const matchesDelivery = (order) => !filterDelivery || order.isDelivery;
     const matchesFilters = (order) => matchesSearch(order) && matchesStatusFilter(order) && matchesProduct(order) && matchesDelivery(order);
@@ -350,6 +354,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     const filterCounts = {
       unsent: sectionBase.filter((o) => !o.sent).length,
       unconfirmed: sectionBase.filter((o) => !o.confirmed).length,
+      unsentToCustomer: sectionBase.filter((o) => !o.sentToCustomer).length,
       delivery: sectionBase.filter((o) => o.isDelivery).length,
     };
 
@@ -363,7 +368,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       totalTodayCount, totalUpcomingCount, filterCounts,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movements, products, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, pendingPostpones, activeSection]);
+  }, [movements, products, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterUnsentToCustomer, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, pendingPostpones, activeSection]);
 
   // Solo entra al panel si queda algo libre para prometer, o si ya tiene
   // reservas encima (aunque esté en 0 libre) -- un producto sin nada de
@@ -1168,25 +1173,32 @@ export default function Orders({ products, movements, stock, prices, showPrices,
         </div>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+      {/* 4 chips en una sola fila (también a 375px): cada uno ocupa 1/4 del
+          ancho, con el conteo arriba y la etiqueta debajo (puede partirse en
+          2 líneas) -- así no se parten en dos filas ni hace falta scroll
+          horizontal. */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {[
           { key: "unsent", label: "No facturados", active: filterUnsent, onClick: () => setFilterUnsent((v) => !v), count: filterCounts.unsent },
           { key: "unconfirmed", label: "No confirmados", active: filterUnconfirmed, onClick: () => setFilterUnconfirmed((v) => !v), count: filterCounts.unconfirmed },
+          { key: "unsentToCustomer", label: "No enviados", active: filterUnsentToCustomer, onClick: () => setFilterUnsentToCustomer((v) => !v), count: filterCounts.unsentToCustomer },
           { key: "delivery", label: "Domicilio", active: filterDelivery, onClick: () => setFilterDelivery((v) => !v), count: filterCounts.delivery },
         ].map((chip) => (
           <button
             key={chip.key}
             onClick={chip.onClick}
             aria-pressed={chip.active}
+            aria-label={`${chip.label}: ${chip.count}`}
             style={{
-              display: "flex", alignItems: "center", gap: 6, minHeight: 44, padding: "10px 14px", borderRadius: 999,
-              fontSize: 13, fontWeight: 600, cursor: "pointer", color: "var(--text)",
+              flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start",
+              gap: 1, minHeight: 44, padding: "5px 2px", borderRadius: 14, textAlign: "center",
+              fontSize: 11, fontWeight: 600, lineHeight: 1.15, cursor: "pointer", color: "var(--text)",
               border: `1px solid ${chip.active ? "var(--orange)" : "var(--border)"}`,
               background: chip.active ? "var(--banner-bg)" : "var(--surface)",
             }}
           >
-            {chip.label}
-            <span style={{ color: "var(--faint)", fontWeight: 700 }}>{chip.count}</span>
+            <span style={{ color: "var(--faint)", fontSize: 15, fontWeight: 700 }}>{chip.count}</span>
+            <span>{chip.label}</span>
           </button>
         ))}
       </div>
