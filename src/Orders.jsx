@@ -1179,9 +1179,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
           horizontal. */}
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {[
+          { key: "unsentToCustomer", label: "No enviados", active: filterUnsentToCustomer, onClick: () => setFilterUnsentToCustomer((v) => !v), count: filterCounts.unsentToCustomer },
           { key: "unsent", label: "No facturados", active: filterUnsent, onClick: () => setFilterUnsent((v) => !v), count: filterCounts.unsent },
           { key: "unconfirmed", label: "No confirmados", active: filterUnconfirmed, onClick: () => setFilterUnconfirmed((v) => !v), count: filterCounts.unconfirmed },
-          { key: "unsentToCustomer", label: "No enviados", active: filterUnsentToCustomer, onClick: () => setFilterUnsentToCustomer((v) => !v), count: filterCounts.unsentToCustomer },
           { key: "delivery", label: "Domicilio", active: filterDelivery, onClick: () => setFilterDelivery((v) => !v), count: filterCounts.delivery },
         ].map((chip) => (
           <button
