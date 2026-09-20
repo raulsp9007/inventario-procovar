@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus } from "lucide-react";
+import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus, Phone } from "lucide-react";
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
@@ -890,7 +890,21 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                 onToggleExpanded={() => toggleTrackerExpanded(order.orderId)}
               />
               <div style={{ flexShrink: 0, width: 1, height: 34, background: "var(--hairline)" }} />
-              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}>
+                {order.customerPhone && (
+                  <a
+                    href={`tel:+${toCubanPhone(order.customerPhone)}`}
+                    title={`Llamar a ${order.customerName}`}
+                    aria-label={`Llamar a ${order.customerName}`}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "var(--surface-subtle)", border: "1px solid var(--border-strong)", borderRadius: "50%", color: "var(--text)",
+                      width: 36, height: 36, flexShrink: 0, boxSizing: "border-box", textDecoration: "none",
+                    }}
+                  >
+                    <Phone size={16} strokeWidth={1.8} />
+                  </a>
+                )}
                 {order.customerPhone && (
                   <button
                     onClick={() => {
@@ -931,7 +945,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                   aria-label="Editar pedido"
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 32, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
+                    width: 30, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
                   }}
                 >
                   <Pencil size={16} strokeWidth={1.8} />
@@ -942,7 +956,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
                   aria-label="Eliminar pedido"
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 32, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
+                    width: 30, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
                   }}
                 >
                   <Trash2 size={16} strokeWidth={1.8} />
