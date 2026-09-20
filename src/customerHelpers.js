@@ -71,6 +71,28 @@ export function getCustomerProductHistory(movements, customerName) {
     .sort((a, b) => b.lastDate.localeCompare(a.lastDate));
 }
 
+// Inverso de getCustomerProductHistory: para UN producto, qué clientes lo
+// pidieron (unidades netas, en cuántos pedidos distintos y fecha del último).
+// Se descartan los que quedan en 0 o menos (ej. venta corregida).
+export function getProductBuyers(movements, productCode) {
+  const byCustomer = new Map();
+  movements.forEach((m) => {
+    if (m.code !== productCode || !m.customerName || !m.orderId) return;
+    if (!byCustomer.has(m.customerName)) {
+      byCustomer.set(m.customerName, { qty: 0, orderIds: new Set(), lastDate: m.date });
+    }
+    const entry = byCustomer.get(m.customerName);
+    entry.qty += m.qty;
+    entry.orderIds.add(m.orderId);
+    if (m.date > entry.lastDate) entry.lastDate = m.date;
+  });
+  const buyers = new Map();
+  byCustomer.forEach((entry, customerName) => {
+    if (entry.qty > 0) buyers.set(customerName, { qty: entry.qty, times: entry.orderIds.size, lastDate: entry.lastDate });
+  });
+  return buyers;
+}
+
 export function getCustomerStats(movements, products) {
   const byCustomer = new Map();
 

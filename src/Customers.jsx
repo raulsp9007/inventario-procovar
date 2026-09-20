@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search } from "lucide-react";
 import { formatDate, todayStr } from "./dateUtils";
 import { formatCUP } from "./money";
-import { getCustomerStats, getCustomerOrders, getCustomerProductHistory, getCustomerNames, findNearDuplicateCustomerName } from "./customerHelpers";
+import { getCustomerStats, getCustomerOrders, getCustomerProductHistory, getCustomerNames, findNearDuplicateCustomerName, getProductBuyers } from "./customerHelpers";
 
 // Ícono de moto (domicilio) -- repetido a mano (no importado de Orders.jsx)
 // por la misma razón que en OrderFormModal.jsx: es un ícono chico, no vale
@@ -38,9 +38,11 @@ function relativeDate(dateStr) {
   return `Hace ${weeks} semana${weeks === 1 ? "" : "s"}`;
 }
 
-function sortStats(stats, sortBy) {
+function sortStats(stats, sortBy, buyers) {
   const sorted = [...stats];
-  if (sortBy === "name") {
+  if (sortBy === "qty" && buyers) {
+    sorted.sort((a, b) => (buyers.get(b.customerName)?.qty || 0) - (buyers.get(a.customerName)?.qty || 0));
+  } else if (sortBy === "name") {
     sorted.sort((a, b) => a.customerName.localeCompare(b.customerName, "es"));
   } else if (sortBy === "oldest") {
     sorted.sort((a, b) => a.lastPurchaseDate.localeCompare(b.lastPurchaseDate));
@@ -50,10 +52,11 @@ function sortStats(stats, sortBy) {
   return sorted;
 }
 
-const SORT_LABELS = { recent: "Reciente", oldest: "Antiguo", name: "Nombre A-Z" };
+const SORT_LABELS = { recent: "Reciente", oldest: "Antiguo", name: "Nombre A-Z", qty: "Más unidades" };
 
 export default function Customers({ products, movements, showPrices, onUpdateCustomer, onRestoreMovements }) {
   const [search, setSearch] = useState("");
+  const [productFilter, setProductFilter] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [expandedCustomer, setExpandedCustomer] = useState(null);
@@ -107,13 +110,25 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
   const nearDuplicateName = editingCustomer
     ? findNearDuplicateCustomerName(otherCustomerNames, nameInput)
     : null;
-  const filtered = search.trim()
+  // Filtro por producto: solo clientes que lo pidieron alguna vez (todo el
+  // historial, sin límite de días), con sus unidades y última fecha de ESE
+  // producto -- lo que el chip de producto favorito no dice.
+  const buyers = productFilter ? getProductBuyers(movements, productFilter) : null;
+  const filterProduct = productFilter ? products.find((p) => p.code === productFilter) : null;
+  const searched = search.trim()
     ? allStats.filter((c) => {
         const q = search.trim().toLowerCase();
         return c.customerName.toLowerCase().includes(q) || (c.businessName || "").toLowerCase().includes(q);
       })
     : allStats;
-  const stats = sortStats(filtered, sortBy);
+  const filtered = buyers ? searched.filter((c) => buyers.has(c.customerName)) : searched;
+  const stats = sortStats(filtered, sortBy, buyers);
+  const filteredUnits = buyers ? stats.reduce((sum, c) => sum + buyers.get(c.customerName).qty, 0) : 0;
+
+  function changeProductFilter(code) {
+    setProductFilter(code);
+    setSortBy(code ? "qty" : (sortBy === "qty" ? "recent" : sortBy));
+  }
 
   return (
     <div>
@@ -155,7 +170,7 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                   position: "absolute", top: 48, right: 0, background: "var(--surface)", border: "1px solid var(--border)",
                   borderRadius: 10, boxShadow: "0 8px 20px rgba(0,0,0,0.15)", overflow: "hidden", zIndex: 30, minWidth: 140,
                 }}>
-                  {["recent", "oldest", "name"].map((key, i) => (
+                  {[...(productFilter ? ["qty"] : []), "recent", "oldest", "name"].map((key, i) => (
                     <button
                       key={key}
                       onClick={() => { setSortBy(key); setSortMenuOpen(false); }}
@@ -175,6 +190,35 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
         </div>
       )}
 
+      {allStats.length > 0 && (
+        <div style={{ marginBottom: 16, marginTop: -6 }}>
+          <div style={{ position: "relative" }}>
+            <select
+              value={productFilter}
+              onChange={(e) => changeProductFilter(e.target.value)}
+              aria-label="Filtrar clientes por producto"
+              style={{
+                width: "100%", boxSizing: "border-box", height: 40, border: "1px solid var(--border)", borderRadius: 10,
+                padding: "0 34px 0 12px", fontSize: 13.5, fontWeight: 500, fontFamily: "inherit",
+                background: "var(--surface-subtle)", color: productFilter ? "var(--text)" : "var(--muted)",
+                appearance: "none", WebkitAppearance: "none",
+              }}
+            >
+              <option value="">Todos los productos</option>
+              {products.map((p) => (
+                <option key={p.code} value={p.code}>{p.name}{p.archived ? " (archivado)" : ""}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} color="var(--faint)" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+          </div>
+          {buyers && stats.length > 0 && (
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
+              {`${stats.length} cliente${stats.length === 1 ? "" : "s"} · ${filteredUnits} uds de ${filterProduct ? filterProduct.name : "este producto"}`}
+            </div>
+          )}
+        </div>
+      )}
+
       {allStats.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 20px" }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: "var(--muted)", marginBottom: 4 }}>Aún no hay clientes registrados</div>
@@ -182,18 +226,21 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
         </div>
       ) : stats.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--muted)", marginBottom: 6 }}>Ningún cliente coincide con "{search}"</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--muted)", marginBottom: 6 }}>
+            {search.trim() ? `Ningún cliente coincide con "${search}"` : "Ningún cliente coincide con el filtro"}
+          </div>
           <button
-            onClick={() => setSearch("")}
-            style={{ fontSize: 13, color: "var(--ink)", fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 4 }}
+            onClick={() => { setSearch(""); changeProductFilter(""); }}
+            style={{ fontSize: 13, color: "var(--text)", fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 4 }}
           >
-            Limpiar búsqueda
+            Limpiar filtros
           </button>
         </div>
       ) : (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
           {stats.map((c, i) => {
-            const product = products.find((p) => p.code === c.favoriteProductCode);
+            const buyer = buyers ? buyers.get(c.customerName) : null;
+            const product = products.find((p) => p.code === (buyer ? productFilter : c.favoriteProductCode));
             const isExpanded = expandedCustomer === c.customerName;
             const mode = modes[c.customerName] || "pedido";
             const orders = isExpanded && mode === "pedido" ? getCustomerOrders(movements, c.customerName) : [];
@@ -295,7 +342,11 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                           {c.businessName}
                         </div>
                       )}
-                      <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>{relativeDate(c.lastPurchaseDate)}</div>
+                      <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>
+                        {buyer
+                          ? `${relativeDate(buyer.lastDate)} · ${buyer.times} pedido${buyer.times === 1 ? "" : "s"}`
+                          : relativeDate(c.lastPurchaseDate)}
+                      </div>
                     </div>
                     {product && (
                       <div style={{
@@ -303,8 +354,8 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                         padding: "5px 8px 5px 6px", flexShrink: 0, maxWidth: 96,
                       }}>
                         <span style={{ width: 6, height: 6, borderRadius: "50%", background: product.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {product.short}
+                        <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontVariantNumeric: "tabular-nums" }}>
+                          {buyer ? `${product.short} x${buyer.qty}` : product.short}
                         </span>
                       </div>
                     )}
