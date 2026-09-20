@@ -166,7 +166,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal }) {
+export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -238,6 +238,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   // inmediato y solo se libera cuando el re-render con el formulario ya
   // vacío efectivamente ocurre (ver useEffect debajo).
   const submittingRef = useRef(false);
+  const waitlistEntryIdRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -446,10 +447,28 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     setEditingOrderId(null);
     setEditingOrderSeq(null);
     setPendingReserveConfirm(null);
+    waitlistEntryIdRef.current = null;
     // No se resetea draftBucket: si confirmaste un pedido Programado,
     // te quedás en "Programar" para seguir cargando pedidos del mismo tipo.
     setDraftDate(tomorrowStr());
   }
+
+  // Pedido armado desde la lista de espera (banner al reponer stock): abre
+  // Nuevo pedido ya con cliente, producto y cantidad. Al confirmarlo (y solo
+  // entonces) ese cliente sale de la lista -- si cierras el modal, sigue ahí.
+  useEffect(() => {
+    if (!prefill) return;
+    resetForm();
+    setDraftBucket("hoy");
+    setCustomerName(prefill.customerName);
+    setBusinessName(getCustomerBusinessName(movements, prefill.customerName));
+    setCustomerPhone(cubanPhoneLocalPart(getCustomerPhone(movements, prefill.customerName)));
+    setDraftLines([{ code: prefill.code, qty: String(prefill.qty) }]);
+    waitlistEntryIdRef.current = prefill.waitId;
+    setModalOpen(true);
+    onPrefillConsumed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill]);
 
   function startEdit(order) {
     setCustomerName(order.customerName);
@@ -587,7 +606,7 @@ export default function Orders({ products, movements, stock, prices, showPrices,
       onEditOrder(editingOrderId, draft);
       if (previousOrder) stageEditUndo(previousOrder);
     } else {
-      onConfirmOrder(draft);
+      onConfirmOrder({ ...draft, waitlistEntryId: waitlistEntryIdRef.current || undefined });
     }
     // La lista sigue al pedido recién guardado -- si lo mandaste a
     // Programar, pasás a ver la lista de Programar, no la de Hoy.

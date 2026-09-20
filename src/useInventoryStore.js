@@ -50,6 +50,13 @@ export function useInventoryStore() {
   const [showPrices, setShowPrices] = useState(true);
   const [hlGoal, setHlGoal] = useState(null);
   const [dailyHlGoal, setDailyHlGoal] = useState(null);
+  // Lista de espera: clientes que quieren X unidades de un producto cuando
+  // llegue la próxima entrada. Independiente del stock y de los pedidos --
+  // no aparta unidades. [{ id, code, customerName, qty, createdAt }]
+  const [waitlist, setWaitlist] = useState([]);
+  // Avisos "repusiste un producto con clientes esperando" -- solo de la
+  // sesión actual, no se guardan (la lista de espera en sí sí).
+  const [restockAlerts, setRestockAlerts] = useState([]); // [{ code }]
   const [whatsappPhone, setWhatsappPhone] = useState("");
   const [whatsappContactName, setWhatsappContactName] = useState("");
   const [cierreVentasHour, setCierreVentasHour] = useState(null); // 0-23, o null = desactivado
@@ -112,7 +119,7 @@ export function useInventoryStore() {
   }
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
-    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, whatsappPhone,
+    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, waitlist, whatsappPhone,
     whatsappContactName, cierreVentasHour,
     senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
   };
@@ -154,6 +161,7 @@ export function useInventoryStore() {
     const nextShowPrices = parsed.showPrices ?? true;
     const nextHlGoal = parsed.hlGoal ?? null;
     const nextDailyHlGoal = parsed.dailyHlGoal ?? null;
+    const nextWaitlist = Array.isArray(parsed.waitlist) ? parsed.waitlist : [];
     const nextWhatsappPhone = parsed.whatsappPhone || "";
     const nextWhatsappContactName = parsed.whatsappContactName || "";
     const nextCierreVentasHour = parsed.cierreVentasHour ?? null;
@@ -179,6 +187,7 @@ export function useInventoryStore() {
     setShowPrices(nextShowPrices);
     setHlGoal(nextHlGoal);
     setDailyHlGoal(nextDailyHlGoal);
+    setWaitlist(nextWaitlist);
     setWhatsappPhone(nextWhatsappPhone);
     setWhatsappContactName(nextWhatsappContactName);
     setCierreVentasHour(nextCierreVentasHour);
@@ -193,7 +202,7 @@ export function useInventoryStore() {
         prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
         cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
-        dailyHlGoal: nextDailyHlGoal,
+        dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
         lastBackupAt: nextLastBackupAt,
@@ -429,6 +438,13 @@ export function useInventoryStore() {
       return nextP;
     });
     const nextMovements = [...adjustments, ...movements].slice(0, MOVEMENTS_CAP);
+    // Cada vez que un producto sale de 0 y tiene clientes en espera, avisa.
+    const restocked = activeProducts
+      .filter((p) => (stock[p.code] || 0) <= 0 && (nextStock[p.code] || 0) > 0 && waitlist.some((w) => w.code === p.code))
+      .map((p) => ({ code: p.code }));
+    if (restocked.length > 0) {
+      setRestockAlerts((prev) => [...prev.filter((a) => !restocked.some((r) => r.code === a.code)), ...restocked]);
+    }
     setStock(nextStock);
     setPrices(nextPrices);
     setMovements(nextMovements);
@@ -443,6 +459,26 @@ export function useInventoryStore() {
       prices: nextPrices,
       products: nextProducts,
     });
+  }
+
+  function addWaitlistEntry({ code, customerName, qty }) {
+    const entry = {
+      id: `wait-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      code, customerName: customerName.trim(), qty, createdAt: new Date().toISOString(),
+    };
+    const next = [...waitlist, entry];
+    setWaitlist(next);
+    persist({ ...currentPersistedState, waitlist: next });
+  }
+
+  function removeWaitlistEntry(id) {
+    const next = waitlist.filter((w) => w.id !== id);
+    setWaitlist(next);
+    persist({ ...currentPersistedState, waitlist: next });
+  }
+
+  function dismissRestockAlert(code) {
+    setRestockAlerts((prev) => prev.filter((a) => a.code !== code));
   }
 
   function archiveProduct(code) {
@@ -514,7 +550,11 @@ export function useInventoryStore() {
     });
   }
 
-  function confirmOrder({ customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate }) {
+  // waitlistEntryId: pedido armado desde la lista de espera -- ese cliente
+  // sale de la lista en el MISMO guardado que el pedido. Hacerlo aparte
+  // (otro persist con el estado de este render) pisaría el pedido recién
+  // creado con datos viejos.
+  function confirmOrder({ customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate, waitlistEntryId }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     // Numero consecutivo solo para ubicar el pedido en la app (no se manda
     // por WhatsApp) -- se deriva del maximo ya usado en vez de guardar un
@@ -540,16 +580,19 @@ export function useInventoryStore() {
     const nextMovements = [...newMovements, ...movements].slice(0, MOVEMENTS_CAP);
     const nextCumulativeRevenue = cumulativeRevenue + addedRevenue;
     const nextCumulativeHl = cumulativeHl + addedHl;
+    const nextWaitlist = waitlistEntryId ? waitlist.filter((w) => w.id !== waitlistEntryId) : waitlist;
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
     setCumulativeHl(nextCumulativeHl);
+    if (nextWaitlist !== waitlist) setWaitlist(nextWaitlist);
     persist({
       ...currentPersistedState,
       stock: nextStock,
       movements: nextMovements,
       cumulativeRevenue: nextCumulativeRevenue,
       cumulativeHl: nextCumulativeHl,
+      waitlist: nextWaitlist,
     });
   }
 
@@ -820,6 +863,7 @@ export function useInventoryStore() {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
+    waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,

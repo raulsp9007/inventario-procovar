@@ -5,6 +5,7 @@ import { formatDate } from "./dateUtils.js";
 import RadialNav, { VIEW_LABELS } from "./RadialNav.jsx";
 import Banner from "./Banner.jsx";
 import LowStockBanner from "./LowStockBanner.jsx";
+import WaitlistRestockBanner from "./WaitlistRestockBanner.jsx";
 import ProductsView from "./ProductsView.jsx";
 import WeeklySummary from "./WeeklySummary";
 import Orders from "./Orders.jsx";
@@ -15,10 +16,14 @@ import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, lowStockThreshol
 
 export default function InventoryApp() {
   const [lowStockFilterActive, setLowStockFilterActive] = useState(false);
+  // Cliente de la lista de espera al que se le va a hacer el pedido: Orders
+  // lo consume al montarse (abre Nuevo pedido ya cargado) y lo limpia.
+  const [orderPrefill, setOrderPrefill] = useState(null);
   const {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
+    waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
@@ -106,6 +111,19 @@ export default function InventoryApp() {
           onViewAll={() => { setView("stock"); setLowStockFilterActive(true); }}
         />
 
+        <WaitlistRestockBanner
+          alerts={restockAlerts}
+          waitlist={waitlist}
+          products={products}
+          stock={stock}
+          onMakeOrder={(entry) => {
+            setOrderPrefill({ waitId: entry.id, customerName: entry.customerName, code: entry.code, qty: entry.qty });
+            setView("pedidos");
+          }}
+          onRemove={removeWaitlistEntry}
+          onDismiss={dismissRestockAlert}
+        />
+
         {movementsNearCap && (
           <Banner
             variant="warning"
@@ -176,6 +194,9 @@ export default function InventoryApp() {
             onRegisterManualSale={registerManualSale}
             lowStockFilterActive={lowStockFilterActive}
             onClearLowStockFilter={() => setLowStockFilterActive(false)}
+            waitlist={waitlist}
+            onAddWaitlistEntry={addWaitlistEntry}
+            onRemoveWaitlistEntry={removeWaitlistEntry}
             dailyHlGoal={dailyHlGoal}
             onDailyHlGoalChange={(next) => {
               setDailyHlGoal(next);
@@ -234,6 +255,8 @@ export default function InventoryApp() {
             }}
             cierreVentasHour={cierreVentasHour}
             dailyHlGoal={dailyHlGoal}
+            prefill={orderPrefill}
+            onPrefillConsumed={() => setOrderPrefill(null)}
           />
         )}
 

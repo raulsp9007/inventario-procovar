@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Check, Pencil, Trash2, History, ChevronDown, ChevronUp, GripVertical, ReceiptText, X, EyeOff, Eye } from "lucide-react";
+import { Check, Pencil, Trash2, History, ChevronDown, ChevronUp, GripVertical, ReceiptText, X, EyeOff, Eye, Hourglass } from "lucide-react";
 import { formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, priceToCUP } from "./money";
 import Card from "./Card.jsx";
 import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
+import { getCustomerNames } from "./customerHelpers";
 
 // Franja/agarradera de puntos (6, en 2 columnas x 3 filas) -- reemplaza el
 // ícono GripVertical de lucide para calzar con el diseño exacto del
@@ -71,12 +72,19 @@ export default function ProductsView({
   onClearLowStockFilter,
   dailyHlGoal,
   onDailyHlGoalChange,
+  waitlist = [],
+  onAddWaitlistEntry,
+  onRemoveWaitlistEntry,
 }) {
   const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
   const [manualSaleCode, setManualSaleCode] = useState(null);
   const [manualSaleQty, setManualSaleQty] = useState("");
   const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
   const [dailyHlGoalInput, setDailyHlGoalInput] = useState(() => (dailyHlGoal != null ? String(dailyHlGoal) : ""));
+  const [waitPanelCode, setWaitPanelCode] = useState(null);
+  const [waitName, setWaitName] = useState("");
+  const [waitQty, setWaitQty] = useState("");
+  const [waitError, setWaitError] = useState("");
   // Ajustador rápido de existencias (modo edición): un número que se suma o
   // resta al stock que ya está en editInputs, en vez de tener que calcular
   // a mano el nuevo total y tipearlo entero. No toca nada hasta "Guardar
@@ -236,8 +244,11 @@ export default function ProductsView({
   const lowStockFiltered = lowStockFilterActive
     ? activeProducts.filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p))
     : activeProducts;
+  // Un producto en 0 con clientes en espera no se oculta: es justo donde
+  // se necesita ver y manejar esa lista.
+  const hasWaiters = (code) => waitlist.some((w) => w.code === code);
   const visibleProducts = !editMode && hideZeroStock
-    ? lowStockFiltered.filter((p) => (stock[p.code] || 0) > 0)
+    ? lowStockFiltered.filter((p) => (stock[p.code] || 0) > 0 || hasWaiters(p.code))
     : lowStockFiltered;
   // El arrastre también vale en la vista simple, no solo en modo edición --
   // dragOrder siempre es una permutación de TODOS los activos (hacen falta
@@ -247,7 +258,7 @@ export default function ProductsView({
   const displayedProducts = dragOrder
     ? dragOrder
         .map((code) => activeProducts.find((p) => p.code === code))
-        .filter((p) => p && (editMode || !hideZeroStock || (stock[p.code] || 0) > 0))
+        .filter((p) => p && (editMode || !hideZeroStock || (stock[p.code] || 0) > 0 || hasWaiters(p.code)))
         .filter((p) => !lowStockFilterActive || (stock[p.code] || 0) <= lowStockThresholdFor(p))
     : visibleProducts;
 
@@ -301,6 +312,23 @@ export default function ProductsView({
     setManualSaleQty("");
   }
 
+  function toggleWaitPanel(code) {
+    setWaitPanelCode(waitPanelCode === code ? null : code);
+    setWaitName("");
+    setWaitQty("");
+    setWaitError("");
+  }
+
+  function submitWaitEntry(code) {
+    const qty = parseInt(waitQty, 10);
+    if (!waitName.trim()) { setWaitError("Escribe el nombre del cliente."); return; }
+    if (!waitQty || isNaN(qty) || qty <= 0) { setWaitError("Escribe la cantidad que quiere."); return; }
+    onAddWaitlistEntry({ code, customerName: waitName, qty });
+    setWaitName("");
+    setWaitQty("");
+    setWaitError("");
+  }
+
   function submitManualSale(code, sign) {
     const qty = parseInt(manualSaleQty, 10);
     if (!manualSaleQty || isNaN(qty) || qty <= 0) return;
@@ -309,6 +337,7 @@ export default function ProductsView({
   }
 
   const screenBg = editMode ? "var(--bg-edit)" : "transparent";
+  const customerNamesList = getCustomerNames(movements);
 
   return (
     <div style={{ background: screenBg, margin: "-20px -16px 0", padding: "0 16px 16px", transition: "background 180ms ease-out", fontFamily: "'Archivo', system-ui, sans-serif" }}>
@@ -382,6 +411,9 @@ export default function ProductsView({
       </div>
 
       <div style={{ paddingTop: 12 }}>
+        <datalist id="waitlist-customers">
+          {customerNamesList.map((name) => <option key={name} value={name} />)}
+        </datalist>
         {!editMode && (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Venta HL diaria</div>
@@ -457,6 +489,11 @@ export default function ProductsView({
             const isDragging = draggingCode === p.code;
             const isExpanded = editMode && expandedEditCode === p.code;
             const isVentaOpen = !editMode && manualSaleCode === p.code;
+            const isWaitOpen = !editMode && waitPanelCode === p.code;
+            const waiters = waitlist
+              .filter((w) => w.code === p.code)
+              .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+            const waitersQty = waiters.reduce((sum, w) => sum + w.qty, 0);
 
             const handleDots = isDragging
               ? { bg: "var(--ink)", dots: "var(--cream)", border: "var(--hairline)" }
@@ -792,11 +829,11 @@ export default function ProductsView({
                   border: `1px solid ${isDragging ? "var(--border-strong)" : isLow ? "var(--border-warn)" : "var(--border)"}`,
                   borderRadius: 12, overflow: "hidden",
                   opacity: isDragging ? 0.55 : 1, transform: isDragging ? "rotate(-0.6deg)" : "none",
-                  boxShadow: isVentaOpen ? "0 1px 0 var(--border)" : "none",
+                  boxShadow: isVentaOpen || isWaitOpen ? "0 1px 0 var(--border)" : "none",
                 }}
               >
                 <div style={{ width: 4, flexShrink: 0, background: p.color }} />
-                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: isVentaOpen ? "column" : "row" }}>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: isVentaOpen || isWaitOpen ? "column" : "row" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0 10px 12px", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -826,6 +863,23 @@ export default function ProductsView({
                           Libre: {Math.max(0, qty - reservedForTomorrow(allOrders, p.code) - (p.reserveQty || 0))}
                         </div>
                       )}
+                      {(qty === 0 || isLow || waiters.length > 0) && (
+                        <button
+                          onClick={() => { setManualSaleCode(null); toggleWaitPanel(p.code); }}
+                          aria-label="Lista de espera"
+                          aria-expanded={isWaitOpen}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 4, marginTop: 1, padding: "4px 0",
+                            background: "transparent", border: "none", cursor: "pointer", whiteSpace: "nowrap",
+                            fontSize: 11.5, fontWeight: 600, color: waiters.length > 0 ? "var(--orange-2)" : "var(--muted)",
+                          }}
+                        >
+                          <Hourglass size={12} strokeWidth={2} />
+                          {waiters.length > 0
+                            ? `En espera: ${waiters.length} cliente${waiters.length === 1 ? "" : "s"} · ${waitersQty} uds`
+                            : "Anotar en espera"}
+                        </button>
+                      )}
                     </div>
                     <div style={{ flexShrink: 0, minWidth: 76, display: "flex", alignItems: "baseline", gap: 3 }}>
                       <span style={{
@@ -837,7 +891,7 @@ export default function ProductsView({
                       <span style={{ fontSize: 10, fontWeight: 500, color: isLow ? "var(--orange-2)" : "var(--faint)" }}>uds</span>
                     </div>
                     <button
-                      onClick={() => { setManualSaleCode(manualSaleCode === p.code ? null : p.code); setManualSaleQty(""); }}
+                      onClick={() => { setWaitPanelCode(null); setManualSaleCode(manualSaleCode === p.code ? null : p.code); setManualSaleQty(""); }}
                       title="Venta manual"
                       aria-label="Venta manual"
                       style={{
@@ -900,6 +954,81 @@ export default function ProductsView({
                       >
                         <X size={14} strokeWidth={2} />
                       </button>
+                    </div>
+                  )}
+
+                  {isWaitOpen && (
+                    <div style={{ padding: "10px 12px 12px", borderTop: "1px dashed var(--border)", background: "var(--surface-subtle)" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>
+                        LISTA DE ESPERA
+                      </div>
+                      {waiters.length === 0 ? (
+                        <div style={{ fontSize: 12.5, color: "var(--faint)", marginBottom: 8 }}>
+                          Nadie en espera de este producto todavía.
+                        </div>
+                      ) : (
+                        <div style={{ marginBottom: 8 }}>
+                          {waiters.map((w, wi) => (
+                            <div
+                              key={w.id}
+                              style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: wi === 0 ? "none" : "1px solid var(--hairline)" }}
+                            >
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {w.customerName}
+                              </span>
+                              <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>x{w.qty}</span>
+                              <span style={{ flexShrink: 0, fontSize: 11, color: "var(--faint)" }}>{formatDate(w.createdAt.slice(0, 10))}</span>
+                              <button
+                                onClick={() => onRemoveWaitlistEntry(w.id)}
+                                title="Quitar de la lista"
+                                aria-label={`Quitar a ${w.customerName} de la lista`}
+                                style={{ flexShrink: 0, display: "flex", background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", padding: 4 }}
+                              >
+                                <X size={14} strokeWidth={2} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input
+                          type="text"
+                          list="waitlist-customers"
+                          placeholder="Cliente"
+                          value={waitName}
+                          onChange={(e) => { setWaitName(e.target.value); setWaitError(""); }}
+                          onKeyDown={(e) => { if (e.key === "Enter") submitWaitEntry(p.code); }}
+                          style={{
+                            flex: 1, minWidth: 0, height: 36, border: "1px solid var(--border-strong)", borderRadius: 8,
+                            background: "var(--surface)", color: "var(--text)", fontSize: 14, padding: "0 10px", boxSizing: "border-box",
+                          }}
+                        />
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          placeholder="Uds"
+                          value={waitQty}
+                          onChange={(e) => { setWaitQty(e.target.value); setWaitError(""); }}
+                          onKeyDown={(e) => { if (e.key === "Enter") submitWaitEntry(p.code); }}
+                          style={{
+                            flexShrink: 0, width: 58, height: 36, textAlign: "center", border: "1px solid var(--border-strong)",
+                            borderRadius: 8, background: "var(--surface)", color: "var(--text)", fontSize: 16, fontWeight: 600,
+                            fontVariantNumeric: "tabular-nums", boxSizing: "border-box",
+                          }}
+                        />
+                        <button
+                          onClick={() => submitWaitEntry(p.code)}
+                          style={{
+                            flexShrink: 0, height: 36, padding: "0 14px", borderRadius: 8, background: "var(--ink)",
+                            color: "var(--cream)", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          Anotar
+                        </button>
+                      </div>
+                      {waitError && (
+                        <div style={{ fontSize: 12, color: "var(--error-text)", marginTop: 6 }}>{waitError}</div>
+                      )}
                     </div>
                   )}
                 </div>
