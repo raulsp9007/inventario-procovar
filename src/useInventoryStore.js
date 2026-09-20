@@ -74,6 +74,7 @@ export function useInventoryStore() {
   const [editHlInputs, setEditHlInputs] = useState({});
   const [editLowStockInputs, setEditLowStockInputs] = useState({});
   const [editReserveInputs, setEditReserveInputs] = useState({});
+  const [editFormatInputs, setEditFormatInputs] = useState({});
   const [editColorInputs, setEditColorInputs] = useState({});
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
@@ -351,6 +352,7 @@ export function useInventoryStore() {
     const hlInputs = {};
     const lowStockInputs = {};
     const reserveInputs = {};
+    const formatInputs = {};
     const colorInputs = {};
     activeProducts.forEach((p) => {
       inputs[p.code] = String(stock[p.code] || 0);
@@ -359,6 +361,7 @@ export function useInventoryStore() {
       hlInputs[p.code] = p.hl != null ? String(p.hl) : "";
       lowStockInputs[p.code] = p.lowStockThreshold != null ? String(p.lowStockThreshold) : "";
       reserveInputs[p.code] = p.reserveQty != null ? String(p.reserveQty) : "";
+      formatInputs[p.code] = p.format || "";
       colorInputs[p.code] = p.color || "#8A8574";
     });
     setEditInputs(inputs);
@@ -367,6 +370,7 @@ export function useInventoryStore() {
     setEditHlInputs(hlInputs);
     setEditLowStockInputs(lowStockInputs);
     setEditReserveInputs(reserveInputs);
+    setEditFormatInputs(formatInputs);
     setEditColorInputs(colorInputs);
     setEditMode(true);
   }
@@ -434,6 +438,8 @@ export function useInventoryStore() {
       const reserveVal = parseInt(editReserveInputs[p.code], 10);
       if (Number.isFinite(reserveVal) && reserveVal > 0) nextP.reserveQty = reserveVal;
       else delete nextP.reserveQty;
+      if (editFormatInputs[p.code]) nextP.format = editFormatInputs[p.code];
+      else delete nextP.format;
       if (editColorInputs[p.code]) nextP.color = editColorInputs[p.code];
       return nextP;
     });
@@ -874,6 +880,7 @@ export function useInventoryStore() {
     editNameInputs, setEditNameInputs, editHlInputs, setEditHlInputs,
     editLowStockInputs, setEditLowStockInputs,
     editReserveInputs, setEditReserveInputs,
+    editFormatInputs, setEditFormatInputs,
     editColorInputs, setEditColorInputs,
     newProductName, setNewProductName, newProductHl, setNewProductHl,
     showArchived, setShowArchived,

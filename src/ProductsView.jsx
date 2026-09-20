@@ -5,6 +5,7 @@ import { formatCUP, formatUSD, priceToCUP } from "./money";
 import Card from "./Card.jsx";
 import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
 import { getCustomerNames } from "./customerHelpers";
+import { FORMAT_OPTIONS, unitPrice } from "./productFormats";
 
 // Franja/agarradera de puntos (6, en 2 columnas x 3 filas) -- reemplaza el
 // ícono GripVertical de lucide para calzar con el diseño exacto del
@@ -55,6 +56,8 @@ export default function ProductsView({
   setEditLowStockInputs,
   editReserveInputs,
   setEditReserveInputs,
+  editFormatInputs,
+  setEditFormatInputs,
   editColorInputs,
   setEditColorInputs,
   newProductName,
@@ -138,6 +141,7 @@ export default function ProductsView({
         editHlInputs: { ...editHlInputs },
         editLowStockInputs: { ...editLowStockInputs },
         editReserveInputs: { ...editReserveInputs },
+        editFormatInputs: { ...editFormatInputs },
         editColorInputs: { ...editColorInputs },
       };
     } else {
@@ -159,6 +163,7 @@ export default function ProductsView({
       (editHlInputs[code] ?? "") !== (orig.editHlInputs[code] ?? "") ||
       (editLowStockInputs[code] ?? "") !== (orig.editLowStockInputs[code] ?? "") ||
       (editReserveInputs[code] ?? "") !== (orig.editReserveInputs[code] ?? "") ||
+      (editFormatInputs[code] ?? "") !== (orig.editFormatInputs[code] ?? "") ||
       (editColorInputs[code] ?? "") !== (orig.editColorInputs[code] ?? "")
     );
   }
@@ -747,6 +752,33 @@ export default function ProductsView({
                       </div>
                     )}
                     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Formato</span>
+                      <select
+                        value={editFormatInputs[p.code] ?? ""}
+                        onChange={(e) => setEditFormatInputs((s) => ({ ...s, [p.code]: e.target.value }))}
+                        title="Cómo viene empacado -- el precio de arriba es el del formato completo"
+                        style={{
+                          flexShrink: 0, width: 136, height: 34, borderRadius: 7, background: "var(--surface-sunken)",
+                          border: "1px solid var(--border)", padding: "0 8px", boxSizing: "border-box",
+                          fontSize: 13.5, fontWeight: 500, fontFamily: "inherit",
+                          color: editFormatInputs[p.code] ? "var(--text)" : "var(--faint)",
+                        }}
+                      >
+                        <option value="">Sin formato</option>
+                        {FORMAT_OPTIONS.map((f) => (
+                          <option key={f.code} value={f.code}>{f.code} ({f.units})</option>
+                        ))}
+                      </select>
+                    </div>
+                    {showPrices && editFormatInputs[p.code] && (() => {
+                      const u = unitPrice(parseFloat(editPriceInputs[p.code]) || 0, editFormatInputs[p.code], exchangeRate);
+                      return u ? (
+                        <div style={{ fontSize: 11.5, color: "var(--green)", textAlign: "right", paddingBottom: 6 }}>
+                          Unidad: {u.usd != null ? `${formatUSD(u.usd)} · ` : ""}{formatCUP(u.cup)}
+                        </div>
+                      ) : null;
+                    })()}
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
                       <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>HL por unidad</span>
                       <input
                         type="number"
@@ -842,12 +874,14 @@ export default function ProductsView({
                       {showPrices && (
                         prices[p.code] ? (
                           exchangeRate ? (
-                            <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--green)", marginTop: 2, whiteSpace: "nowrap" }}>
-                              {formatUSD(prices[p.code])} <span style={{ color: "var(--faintest)" }}>·</span> {formatCUP(priceToCUP(prices[p.code], exchangeRate))}
+                            <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--green)", marginTop: 2, whiteSpace: p.format ? "normal" : "nowrap" }}>
+                              <span style={{ whiteSpace: "nowrap" }}>{formatUSD(prices[p.code])}</span> <span style={{ color: "var(--faintest)" }}>·</span> <span style={{ whiteSpace: "nowrap" }}>{formatCUP(priceToCUP(prices[p.code], exchangeRate))}</span>
+                              {p.format && <span style={{ color: "var(--faint)" }}> · {p.format}</span>}
                             </div>
                           ) : (
                             <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--green)", marginTop: 2 }}>
                               {formatCUP(prices[p.code])}
+                              {p.format && <span style={{ color: "var(--faint)" }}> · {p.format}</span>}
                             </div>
                           )
                         ) : (
@@ -856,6 +890,16 @@ export default function ProductsView({
                           </div>
                         )
                       )}
+                      {showPrices && p.format && (() => {
+                        const u = unitPrice(prices[p.code], p.format, exchangeRate);
+                        return u ? (
+                          <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--green)", marginTop: 1 }}>
+                            Unidad:{" "}
+                            {u.usd != null && <><span style={{ whiteSpace: "nowrap" }}>{formatUSD(u.usd)}</span> · </>}
+                            <span style={{ whiteSpace: "nowrap" }}>{formatCUP(u.cup)}</span>
+                          </div>
+                        ) : null;
+                      })()}
                       {(reservedForTomorrow(allOrders, p.code) > 0 || (p.reserveQty || 0) > 0) && (
                         <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--orange-2)", marginTop: 2, whiteSpace: "nowrap" }}>
                           {reservedForTomorrow(allOrders, p.code) > 0 && `Reservado (mañana): ${reservedForTomorrow(allOrders, p.code)} · `}
