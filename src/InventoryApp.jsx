@@ -24,6 +24,7 @@ export default function InventoryApp() {
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
+    applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
@@ -197,6 +198,7 @@ export default function InventoryApp() {
             onRegisterManualSale={registerManualSale}
             lowStockFilterActive={lowStockFilterActive}
             onClearLowStockFilter={() => setLowStockFilterActive(false)}
+            onApplyHlBackfill={applyHlBackfill}
             waitlist={waitlist}
             onAddWaitlistEntry={addWaitlistEntry}
             onRemoveWaitlistEntry={removeWaitlistEntry}

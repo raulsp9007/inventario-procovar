@@ -6,6 +6,7 @@ import { toCubanPhone } from "./customerHelpers";
 import { totalHlSold, priceToCUP } from "./money";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
+import { getHlBackfill, isHlBackfillable } from "./hlBackfill";
 
 const DEFAULT_PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
@@ -467,6 +468,19 @@ export function useInventoryStore() {
     });
   }
 
+  // Rellena el HL de las ventas anteriores de un producto que en su momento
+  // no tenía HL por unidad (ver hlBackfill.js), con el valor guardado hoy, y
+  // ajusta el acumulado por la diferencia. Solo toca ventas con unitHl en 0.
+  function applyHlBackfill(code) {
+    const info = getHlBackfill(movements, products, code);
+    if (!info) return;
+    const nextMovements = movements.map((m) => (isHlBackfillable(m, code) ? { ...m, unitHl: info.hl } : m));
+    const nextCumulativeHl = cumulativeHl + info.hlAdded;
+    setMovements(nextMovements);
+    setCumulativeHl(nextCumulativeHl);
+    persist({ ...currentPersistedState, movements: nextMovements, cumulativeHl: nextCumulativeHl });
+  }
+
   function addWaitlistEntry({ code, customerName, qty }) {
     const entry = {
       id: `wait-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -870,6 +884,7 @@ export function useInventoryStore() {
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
+    applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,

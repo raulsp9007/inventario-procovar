@@ -6,6 +6,7 @@ import Card from "./Card.jsx";
 import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
 import { getCustomerNames } from "./customerHelpers";
 import { FORMAT_OPTIONS, unitPrice } from "./productFormats";
+import { getHlBackfill } from "./hlBackfill";
 
 // Franja/agarradera de puntos (6, en 2 columnas x 3 filas) -- reemplaza el
 // ícono GripVertical de lucide para calzar con el diseño exacto del
@@ -78,6 +79,7 @@ export default function ProductsView({
   waitlist = [],
   onAddWaitlistEntry,
   onRemoveWaitlistEntry,
+  onApplyHlBackfill,
 }) {
   const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
   const [manualSaleCode, setManualSaleCode] = useState(null);
@@ -88,6 +90,7 @@ export default function ProductsView({
   const [waitName, setWaitName] = useState("");
   const [waitQty, setWaitQty] = useState("");
   const [waitError, setWaitError] = useState("");
+  const [hlBackfillCode, setHlBackfillCode] = useState(null);
   // Ajustador rápido de existencias (modo edición): un número que se suma o
   // resta al stock que ya está en editInputs, en vez de tener que calcular
   // a mano el nuevo total y tipearlo entero. No toca nada hasta "Guardar
@@ -793,6 +796,60 @@ export default function ProductsView({
                         }}
                       />
                     </div>
+                    {(() => {
+                      const info = getHlBackfill(movements, products, p.code);
+                      const typedHl = parseFloat(editHlInputs[p.code]);
+                      const unsavedHl = Number.isFinite(typedHl) && typedHl > 0 && typedHl !== p.hl;
+                      if (!info) {
+                        return unsavedHl ? (
+                          <div style={{ fontSize: 11.5, color: "var(--faint)", textAlign: "right", paddingBottom: 6 }}>
+                            Guarda para poder recalcular las ventas anteriores.
+                          </div>
+                        ) : null;
+                      }
+                      const open = hlBackfillCode === p.code;
+                      return (
+                        <div style={{ padding: "2px 0 8px" }}>
+                          {open ? (
+                            <div style={{ background: "var(--surface-subtle)", border: "1px solid var(--border-strong)", borderRadius: 9, padding: "9px 10px" }}>
+                              <div style={{ fontSize: 12.5, color: "var(--text)", marginBottom: 8 }}>
+                                {info.count} venta{info.count === 1 ? "" : "s"} sin HL · {info.units} uds · <b>+{info.hlAdded} hL</b> a {info.hl} hL por unidad. ¿Aplicar?
+                              </div>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                  onClick={() => { onApplyHlBackfill(p.code); setHlBackfillCode(null); }}
+                                  style={{ flex: 1, height: 34, borderRadius: 8, border: "none", background: "var(--ink)", color: "var(--cream)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                                >
+                                  Aplicar
+                                </button>
+                                <button
+                                  onClick={() => setHlBackfillCode(null)}
+                                  style={{ flex: 1, height: 34, borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setHlBackfillCode(p.code)}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", padding: "4px 0",
+                                fontSize: 12.5, fontWeight: 600, color: "var(--orange-2)", cursor: "pointer",
+                              }}
+                            >
+                              <History size={13} strokeWidth={2} />
+                              Recalcular HL de {info.count} venta{info.count === 1 ? "" : "s"} anterior{info.count === 1 ? "" : "es"}
+                            </button>
+                          )}
+                          {unsavedHl && (
+                            <div style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 4 }}>
+                              Usa el HL guardado ({p.hl}); guarda para usar el nuevo.
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid var(--hairline)" }}>
                       <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Aviso stock bajo</span>
                       <input
