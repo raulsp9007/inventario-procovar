@@ -3,6 +3,9 @@ import ReactDOM from "react-dom/client";
 import "./theme.css";
 import InventoryApp from "./InventoryApp.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
+import { COPYRIGHT_NOTICE, LICENSE_SUMMARY } from "./legal.js";
+
+console.info(`Inventario Procovar\n${COPYRIGHT_NOTICE}\n${LICENSE_SUMMARY}`);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

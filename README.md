@@ -37,3 +37,7 @@ npm run preview
 ## Deploy
 
 Automático: cada push a `main` dispara `.github/workflows/deploy.yml`, que hace `npm run build` y publica `dist/` en GitHub Pages.
+
+## Licencia
+
+Copyright (c) 2026 Raul (raulsp9007). Todos los derechos reservados. Software propietario de uso autorizado, no de código abierto: ver [LICENSE](LICENSE). Prohibido copiar, modificar, redistribuir o instalar en nombre de terceros sin autorización del autor.

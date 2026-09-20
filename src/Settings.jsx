@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Sun, Moon, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { COPYRIGHT_NOTICE, LICENSE_SUMMARY } from "./legal.js";
 
 function formatHour(h) {
   const period = h < 12 ? "AM" : "PM";
@@ -263,6 +264,12 @@ export default function Settings({
           <RefreshCw size={16} />
           {clearingCache ? "Borrando caché…" : "Borrar caché y recargar"}
         </button>
+      </div>
+
+      <div style={{ marginTop: 14, padding: "4px 6px 8px", textAlign: "center" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Inventario Procovar</div>
+        <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>{COPYRIGHT_NOTICE}</div>
+        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2, lineHeight: 1.4 }}>{LICENSE_SUMMARY}</div>
       </div>
     </div>
   );
