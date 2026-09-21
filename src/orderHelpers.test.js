@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders } from "./orderHelpers";
 
 function makeMovement(overrides = {}) {
   return {
@@ -170,6 +170,94 @@ describe("computeScheduledTransition", () => {
   it("trata bucket sin definir como 'hoy' (dato viejo) y no lo transiciona", () => {
     const movements = [makeMovement({ bucket: undefined, date: "2026-08-01", sent: false })];
     expect(computeScheduledTransition(movements, TODAY)).toBeNull();
+  });
+
+  it("al transicionar, el pedido toma el siguiente número del día nuevo", () => {
+    const movements = [
+      makeMovement({ orderId: "hoy1", bucket: "hoy", date: TODAY, sent: true, orderSeq: 1 }),
+      makeMovement({ orderId: "hoy2", bucket: "hoy", date: TODAY, sent: true, orderSeq: 2 }),
+      makeMovement({ orderId: "prog", bucket: "manana", date: TODAY, sent: false, orderSeq: 1 }),
+    ];
+    const result = computeScheduledTransition(movements, TODAY);
+    expect(result.nextMovements.find((m) => m.orderId === "prog").orderSeq).toBe(3);
+    expect(result.nextMovements.find((m) => m.orderId === "hoy2").orderSeq).toBe(2);
+  });
+
+  it("varios programados que transicionan conservan su orden relativo (fecha, luego número)", () => {
+    const movements = [
+      makeMovement({ orderId: "b", bucket: "manana", date: TODAY, sent: false, orderSeq: 2 }),
+      makeMovement({ orderId: "a", bucket: "manana", date: TODAY, sent: false, orderSeq: 1 }),
+      makeMovement({ orderId: "viejo", bucket: "manana", date: "2026-08-25", sent: false, orderSeq: 7 }),
+    ];
+    const result = computeScheduledTransition(movements, TODAY);
+    const seqOf = (id) => result.nextMovements.find((m) => m.orderId === id).orderSeq;
+    expect(seqOf("viejo")).toBe(1);
+    expect(seqOf("a")).toBe(2);
+    expect(seqOf("b")).toBe(3);
+  });
+});
+
+describe("nextOrderSeq", () => {
+  it("empieza en 1 si ese día no tiene pedidos numerados", () => {
+    expect(nextOrderSeq([], "2026-08-27")).toBe(1);
+    expect(nextOrderSeq([makeMovement({ date: "2026-08-26", orderSeq: 9 })], "2026-08-27")).toBe(1);
+  });
+
+  it("es el más alto de esa fecha más uno, sin mirar otras fechas", () => {
+    const movements = [
+      makeMovement({ date: "2026-08-27", orderSeq: 1 }),
+      makeMovement({ date: "2026-08-27", orderSeq: 4 }),
+      makeMovement({ date: "2026-08-28", orderSeq: 20 }),
+    ];
+    expect(nextOrderSeq(movements, "2026-08-27")).toBe(5);
+    expect(nextOrderSeq(movements, "2026-08-28")).toBe(21);
+  });
+
+  it("puede excluir el propio pedido (al editarlo)", () => {
+    const movements = [makeMovement({ orderId: "o1", date: "2026-08-27", orderSeq: 3 }), makeMovement({ orderId: "o2", date: "2026-08-27", orderSeq: 2 })];
+    expect(nextOrderSeq(movements, "2026-08-27", "o1")).toBe(3);
+  });
+
+  it("ignora movimientos sin número (ajustes, datos viejos)", () => {
+    expect(nextOrderSeq([makeMovement({ date: "2026-08-27", orderSeq: undefined })], "2026-08-27")).toBe(1);
+  });
+});
+
+describe("renumberOpenOrders", () => {
+  const TODAY = "2026-08-27";
+
+  it("renumera hoy y los días futuros desde 1, por hora de creación", () => {
+    const movements = [
+      makeMovement({ orderId: "b", date: TODAY, orderSeq: 41, timestamp: "2026-08-27T12:00:00.000Z" }),
+      makeMovement({ orderId: "a", date: TODAY, orderSeq: 42, timestamp: "2026-08-27T09:00:00.000Z" }),
+      makeMovement({ orderId: "m", date: "2026-08-28", orderSeq: 43, timestamp: "2026-08-26T18:00:00.000Z" }),
+      makeMovement({ orderId: "f", date: "2026-08-30", orderSeq: 44, timestamp: "2026-08-26T19:00:00.000Z" }),
+    ];
+    const next = renumberOpenOrders(movements, TODAY);
+    const seqOf = (id) => next.find((m) => m.orderId === id).orderSeq;
+    expect(seqOf("a")).toBe(1);
+    expect(seqOf("b")).toBe(2);
+    expect(seqOf("m")).toBe(1);
+    expect(seqOf("f")).toBe(1);
+  });
+
+  it("no toca pedidos anteriores a hoy", () => {
+    const movements = [makeMovement({ orderId: "old", date: "2026-08-20", orderSeq: 30 })];
+    expect(renumberOpenOrders(movements, TODAY)[0].orderSeq).toBe(30);
+  });
+
+  it("un pedido con varias líneas recibe el mismo número en todas", () => {
+    const movements = [
+      makeMovement({ orderId: "x", date: TODAY, orderSeq: 9, code: "P1500", timestamp: "2026-08-27T09:00:00.000Z" }),
+      makeMovement({ orderId: "x", date: TODAY, orderSeq: 9, code: "P500", timestamp: "2026-08-27T09:00:00.000Z" }),
+    ];
+    const next = renumberOpenOrders(movements, TODAY);
+    expect(next.map((m) => m.orderSeq)).toEqual([1, 1]);
+  });
+
+  it("deja intactos los movimientos sin pedido (ajustes de stock)", () => {
+    const adjustment = { id: "adj", type: "ajuste", code: "P1500", qty: 5, date: TODAY, timestamp: "2026-08-27T08:00:00.000Z" };
+    expect(renumberOpenOrders([adjustment], TODAY)[0]).toBe(adjustment);
   });
 });
 

@@ -29,6 +29,48 @@ export function groupAllOrders(movements) {
   return Array.from(byId.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
+// El número de pedido (#N) se reinicia cada día: es el más alto de esa
+// fecha + 1. Hoy, mañana y cada día programado arrancan en #1. Al borrar un
+// pedido los demás no se renumeran (un número no cambia de dueño), y un
+// pedido que cambia de día toma el siguiente número del día nuevo.
+export function nextOrderSeq(movements, date, excludeOrderId = null) {
+  let max = 0;
+  movements.forEach((m) => {
+    if (m.date !== date || !m.orderSeq || m.orderId === excludeOrderId) return;
+    if (m.orderSeq > max) max = m.orderSeq;
+  });
+  return max + 1;
+}
+
+// Migración única del esquema global (#1, #2, ... sin fin) al reinicio
+// diario: renumera desde 1 los pedidos de hoy y de los días futuros, en
+// orden de creación. Los anteriores a hoy conservan su número.
+export function renumberOpenOrders(movements, todayCal) {
+  const meta = new Map();
+  movements.forEach((m) => {
+    if (!m.orderId || !m.date || m.date < todayCal) return;
+    const ts = m.timestamp || "";
+    const current = meta.get(m.orderId);
+    if (!current) {
+      meta.set(m.orderId, { date: m.date, ts, seq: m.orderSeq || 0 });
+    } else if (ts < current.ts) {
+      current.ts = ts;
+    }
+  });
+  const newSeq = new Map();
+  const byDate = new Map();
+  meta.forEach((info, orderId) => {
+    if (!byDate.has(info.date)) byDate.set(info.date, []);
+    byDate.get(info.date).push([orderId, info]);
+  });
+  byDate.forEach((entries) => {
+    entries
+      .sort((a, b) => a[1].ts.localeCompare(b[1].ts) || a[1].seq - b[1].seq || a[0].localeCompare(b[0]))
+      .forEach(([orderId], i) => newSeq.set(orderId, i + 1));
+  });
+  return movements.map((m) => (newSeq.has(m.orderId) ? { ...m, orderSeq: newSeq.get(m.orderId) } : m));
+}
+
 export function groupOrders(movements, dateStr) {
   return groupAllOrders(movements).filter((order) => order.date === dateStr);
 }
@@ -95,6 +137,20 @@ export function computeScheduledTransition(movements, todayCal) {
   );
   if (orderIdsToTransition.size === 0) return null;
 
+  // Cambian de día, así que toman los siguientes números de hoy -- los que
+  // vienen de un día más viejo primero, y dentro del mismo día por su número.
+  const meta = new Map();
+  movements.forEach((m) => {
+    if (!orderIdsToTransition.has(m.orderId) || meta.has(m.orderId)) return;
+    meta.set(m.orderId, { date: m.date, seq: m.orderSeq || 0, ts: m.timestamp || "" });
+  });
+  const firstSeq = nextOrderSeq(movements.filter((m) => !orderIdsToTransition.has(m.orderId)), todayCal);
+  const newSeq = new Map(
+    Array.from(meta.entries())
+      .sort((a, b) => a[1].date.localeCompare(b[1].date) || a[1].seq - b[1].seq || a[1].ts.localeCompare(b[1].ts))
+      .map(([orderId], i) => [orderId, firstSeq + i])
+  );
+
   const stockDeltas = {};
   let addedRevenue = 0;
   let addedHl = 0;
@@ -103,7 +159,7 @@ export function computeScheduledTransition(movements, todayCal) {
     stockDeltas[m.code] = (stockDeltas[m.code] || 0) + m.qty;
     addedRevenue += m.qty * (m.unitPrice || 0);
     addedHl += m.qty * (m.unitHl || 0);
-    return { ...m, bucket: "hoy", date: todayCal };
+    return { ...m, bucket: "hoy", date: todayCal, orderSeq: newSeq.get(m.orderId) };
   });
 
   return { orderIdsToTransition, nextMovements, stockDeltas, addedRevenue, addedHl };

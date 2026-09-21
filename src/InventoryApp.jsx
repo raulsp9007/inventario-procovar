@@ -295,7 +295,6 @@ export default function InventoryApp() {
             senderName={senderName}
             sendSenderName={sendSenderName}
             sendBusinessName={sendBusinessName}
-            onToggleSendBusinessName={() => setSendBusinessNameSetting(!sendBusinessName)}
             onConfirmOrder={confirmOrder}
             onEditOrder={editOrder}
             onDeleteOrder={deleteOrder}
@@ -326,6 +325,8 @@ export default function InventoryApp() {
             customers={customers}
             waitlist={waitlist}
             showPrices={showPrices}
+            sendBusinessName={sendBusinessName}
+            onToggleSendBusinessName={() => setSendBusinessNameSetting(!sendBusinessName)}
             onUpdateCustomer={updateCustomer}
             onDeleteCustomer={deleteCustomer}
             onRestoreCustomerData={restoreCustomerData}

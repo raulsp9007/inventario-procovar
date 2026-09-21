@@ -243,7 +243,7 @@ export default function Settings({
             <span style={{ fontWeight: 600 }}>{hlGoal != null ? `${hlGoal} hL` : "sin definir"}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ color: "var(--text-muted)" }}>Mostrar negocio en pedidos (en Pedidos)</span>
+            <span style={{ color: "var(--text-muted)" }}>Mostrar negocio en pedidos (en Clientes)</span>
             <span style={{ fontWeight: 600 }}>{sendBusinessName ? "Sí" : "No"}</span>
           </div>
         </div>

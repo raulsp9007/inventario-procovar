@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus, Phone } from "lucide-react";
+import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus } from "lucide-react";
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
@@ -28,6 +28,16 @@ function loadSavedFilters() {
 function orderFirstProductName(order, products) {
   const names = order.lines.map((l) => products.find((p) => p.code === l.code)?.name || l.code);
   return names.sort((a, b) => a.localeCompare(b))[0] || "";
+}
+
+// Auricular relleno de Android (Material "call") -- el de lucide es de
+// contorno y no se parece al que se ve en el marcador del teléfono.
+function CallIcon({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+    </svg>
+  );
 }
 
 // Ícono de WhatsApp (no viene en lucide-react, que es solo outline
@@ -167,7 +177,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed }) {
+export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -910,11 +920,11 @@ export default function Orders({ products, movements, customers, stock, prices, 
                     aria-label={`Llamar a ${order.customerName}`}
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      background: "var(--surface-subtle)", border: "1px solid var(--border-strong)", borderRadius: "50%", color: "var(--text)",
+                      background: "var(--surface-subtle)", border: "1px solid var(--border-strong)", borderRadius: "50%", color: "var(--call-blue)",
                       width: 36, height: 36, flexShrink: 0, boxSizing: "border-box", textDecoration: "none",
                     }}
                   >
-                    <Phone size={16} strokeWidth={1.8} />
+                    <CallIcon size={17} />
                   </a>
                 )}
                 {order.customerPhone && (
@@ -981,25 +991,13 @@ export default function Orders({ products, movements, customers, stock, prices, 
     );
   }
 
-  // Misma estructura para PEDIDOS DE HOY y PEDIDOS DE MAÑANA: título +
-  // orden + lista (o mensaje vacío). Cada pedido tiene su propio botón de
-  // envío por WhatsApp en la fila -- no hace falta un modo de selección
-  // masiva acá.
-  function renderOrdersSection({ title, sorted, emptyText, sortValue, onSortChange, showDate }) {
+  // Misma estructura para los pedidos de Hoy y de Para mañana: orden +
+  // lista (o mensaje vacío). El contador vive en las pestañas. Cada pedido
+  // tiene su propio botón de envío por WhatsApp en la fila -- no hace falta
+  // un modo de selección masiva acá.
+  function renderOrdersSection({ sorted, emptyText, sortValue, onSortChange, showDate }) {
     return (
       <div>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 12, letterSpacing: "0.07em", color: "var(--muted)", fontWeight: 800, textTransform: "uppercase" }}>{title}</div>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={sendBusinessName}
-              onChange={(e) => onToggleSendBusinessName(e.target.checked)}
-            />
-            Mostrar negocio en todos los pedidos
-          </label>
-        </div>
-
         {sorted.length > 0 && (
           <div style={{ marginBottom: 10 }}>
             <select
@@ -1056,28 +1054,40 @@ export default function Orders({ products, movements, customers, stock, prices, 
   return (
     <div>
       <div style={{ background: "var(--segment-track)", borderRadius: 12, padding: 3, display: "flex", gap: 2, marginBottom: 16 }}>
-        <button
-          onClick={() => setActiveSection("hoy")}
-          style={{
-            flex: 1, padding: "9px 0", borderRadius: 9, border: "none", fontWeight: 600, fontSize: 14, cursor: "pointer",
-            background: activeSection === "hoy" ? "var(--ink)" : "transparent",
-            color: activeSection === "hoy" ? "var(--cream)" : "var(--muted)",
-            boxShadow: activeSection === "hoy" ? "0 1px 2px rgba(30,27,22,.06)" : "none",
-          }}
-        >
-          Hoy
-        </button>
-        <button
-          onClick={() => setActiveSection("manana")}
-          style={{
-            flex: 1, padding: "9px 0", borderRadius: 9, border: "none", fontWeight: 600, fontSize: 14, cursor: "pointer",
-            background: activeSection === "manana" ? "var(--ink)" : "transparent",
-            color: activeSection === "manana" ? "var(--cream)" : "var(--muted)",
-            boxShadow: activeSection === "manana" ? "0 1px 2px rgba(30,27,22,.06)" : "none",
-          }}
-        >
-          Para mañana
-        </button>
+        {[
+          { key: "hoy", label: "Hoy", count: totalTodayCount },
+          { key: "manana", label: "Para mañana", count: totalUpcomingCount },
+        ].map((tab) => {
+          const active = activeSection === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveSection(tab.key)}
+              style={{
+                flex: 1, padding: "9px 0", borderRadius: 9, border: "none", fontWeight: 600, fontSize: 14, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                background: active ? "var(--ink)" : "transparent",
+                color: active ? "var(--cream)" : "var(--muted)",
+                boxShadow: active ? "0 1px 2px rgba(30,27,22,.06)" : "none",
+              }}
+            >
+              {tab.label}
+              {/* Cuántos pedidos hay en el día, sin filtrar. */}
+              <span
+                aria-label={`${tab.count} pedido${tab.count === 1 ? "" : "s"}`}
+                style={{
+                  minWidth: 20, height: 20, padding: "0 6px", borderRadius: 999, boxSizing: "border-box",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+                  background: active ? "var(--on-ink-accent)" : "var(--border)",
+                  color: active ? "var(--ink)" : "var(--muted)",
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <div style={{ background: "var(--surface-subtle)", border: "1px solid var(--border)", borderRadius: 12, display: "flex", alignItems: "stretch", marginBottom: 10 }}>
@@ -1223,7 +1233,6 @@ export default function Orders({ products, movements, customers, stock, prices, 
       )}
 
       {activeSection === "hoy" && renderOrdersSection({
-        title: `PEDIDOS DE HOY (${totalTodayCount})`,
         sorted: sortedTodaysOrders,
         emptyText: "Aún no hay pedidos hoy.",
         sortValue: hoyOrderSort,
@@ -1262,7 +1271,6 @@ export default function Orders({ products, movements, customers, stock, prices, 
       )}
 
       {activeSection === "manana" && renderOrdersSection({
-        title: `PRÓXIMOS PEDIDOS (${totalUpcomingCount})`,
         sorted: sortedUpcomingOrders,
         emptyText: "Aún no hay pedidos programados.",
         sortValue: mananaOrderSort,

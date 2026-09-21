@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getData, setData } from "./storage";
 import { todayStr, tomorrowStr, daysSince } from "./dateUtils";
-import { isCommittedMovement, computeScheduledTransition } from "./orderHelpers";
+import { isCommittedMovement, computeScheduledTransition, nextOrderSeq, renumberOpenOrders } from "./orderHelpers";
 import { toCubanPhone } from "./customerHelpers";
 import { totalHlSold, priceToCUP } from "./money";
 import { parseBackupFile } from "./backup";
@@ -180,6 +180,8 @@ export function useInventoryStore() {
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, waitlist, customers, whatsappPhone,
     whatsappContactName, cierreVentasHour,
     senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
+    // Marca de que la numeración de pedidos ya es por día (ver applyPersistedData).
+    orderSeqPerDay: true,
   };
 
   const persist = useCallback(async (nextState) => {
@@ -215,7 +217,12 @@ export function useInventoryStore() {
   // Así datos guardados en una versión anterior (o un backup importado viejo) nunca rompen ni se borran.
   // Se usa tanto para la carga inicial como para aplicar un backup importado.
   function applyPersistedData(parsed, { alwaysPersist = false } = {}) {
-    const loadedMovements = parsed.movements || [];
+    // Migración única: la numeración de pedidos era global (#1, #2, ... sin
+    // fin) y ahora se reinicia cada día -- se renumeran los de hoy y futuros.
+    const migratedOrderSeq = !parsed.orderSeqPerDay;
+    const loadedMovements = migratedOrderSeq
+      ? renumberOpenOrders(parsed.movements || [], todayStr())
+      : (parsed.movements || []);
     const loadedProducts = parsed.products || DEFAULT_PRODUCTS;
     const nextStock = parsed.stock || {};
     const nextLastAdjustedAt = parsed.lastAdjustedAt || {};
@@ -278,13 +285,13 @@ export function useInventoryStore() {
     setSendBusinessName(nextSendBusinessName);
     setLastBackupAt(nextLastBackupAt);
 
-    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers) {
+    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq) {
       persist({
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
         cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
-        dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist, customers: nextCustomers,
+        dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist, customers: nextCustomers, orderSeqPerDay: true,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
         lastBackupAt: nextLastBackupAt,
@@ -685,7 +692,7 @@ export function useInventoryStore() {
     const product = products.find((p) => p.code === code);
     const unitHl = product?.hl || 0;
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const orderSeq = movements.reduce((max, m) => (m.orderSeq && m.orderSeq > max ? m.orderSeq : max), 0) + 1;
+    const orderSeq = nextOrderSeq(movements, todayStr());
     const movement = makeMovement(code, "venta", qty, {
       unitPrice, unitHl, exchangeRate, bucket: "hoy", date: todayStr(), sent: true, confirmed: true, manual: true,
       orderId, orderSeq, customerName: "Venta manual", isDelivery: false, note: "",
@@ -713,12 +720,12 @@ export function useInventoryStore() {
   // creado con datos viejos.
   function confirmOrder({ customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate, waitlistEntryId }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    // Numero consecutivo solo para ubicar el pedido en la app (no se manda
-    // por WhatsApp) -- se deriva del maximo ya usado en vez de guardar un
-    // contador aparte, asi no hace falta migrar datos viejos.
-    const orderSeq = movements.reduce((max, m) => (m.orderSeq && m.orderSeq > max ? m.orderSeq : max), 0) + 1;
     const committed = bucket === "hoy";
     const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
+    // Numero solo para ubicar el pedido en la app (no se manda por WhatsApp).
+    // Se reinicia cada dia -- se deriva del maximo de esa fecha en vez de
+    // guardar un contador aparte.
+    const orderSeq = nextOrderSeq(movements, date);
     const nextStock = { ...stock };
     const newMovements = [];
     let addedRevenue = 0;
@@ -815,7 +822,11 @@ export function useInventoryStore() {
     const nextSent = forceSent !== undefined ? forceSent : wasSent;
     const willBeCommitted = bucket === "hoy" || (bucket === "manana" && nextSent);
     const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
-    const orderSeq = originalMovements[0].orderSeq;
+    // Si el pedido cambia de día (pospuesto, o editado a otra fecha) toma el
+    // siguiente número del día nuevo; si no, conserva el suyo.
+    const orderSeq = date !== originalMovements[0].date
+      ? nextOrderSeq(movements, date, orderId)
+      : originalMovements[0].orderSeq;
 
     const nextStock = { ...restoredStock };
     const newMovements = [];

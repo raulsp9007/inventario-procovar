@@ -68,7 +68,7 @@ function sortStats(stats, sortBy, buyers) {
 
 const SORT_LABELS = { recent: "Reciente", oldest: "Antiguo", name: "Nombre A-Z", qty: "Más unidades" };
 
-export default function Customers({ products, movements, customers, waitlist, showPrices, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData }) {
+export default function Customers({ products, movements, customers, waitlist, showPrices, sendBusinessName, onToggleSendBusinessName, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData }) {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [sortBy, setSortBy] = useState("recent");
@@ -202,6 +202,38 @@ export default function Customers({ products, movements, customers, waitlist, sh
       <div style={{ fontSize: 12, letterSpacing: "0.07em", color: "var(--muted)", fontWeight: 800, textTransform: "uppercase", marginBottom: 12 }}>
         CLIENTES ({allStats.length})
       </div>
+
+      <button
+        role="switch"
+        aria-checked={!!sendBusinessName}
+        onClick={onToggleSendBusinessName}
+        style={{
+          width: "100%", boxSizing: "border-box", textAlign: "left", fontFamily: "inherit", cursor: "pointer",
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", marginBottom: 12,
+          display: "flex", alignItems: "center", gap: 12,
+        }}
+      >
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>Mostrar negocio en Pedidos</span>
+          <span style={{ display: "block", fontSize: 12, color: "var(--muted)", marginTop: 2, lineHeight: 1.35 }}>
+            Muestra el negocio bajo el nombre del cliente. No se envía en los mensajes.
+          </span>
+        </span>
+        <span
+          aria-hidden="true"
+          style={{
+            flexShrink: 0, width: 40, height: 24, borderRadius: 999, position: "relative", transition: "background .15s",
+            background: sendBusinessName ? "var(--orange)" : "var(--border-strong)",
+          }}
+        >
+          <span
+            style={{
+              position: "absolute", top: 3, left: sendBusinessName ? 19 : 3, width: 18, height: 18, borderRadius: "50%",
+              background: "var(--cream)", boxShadow: "0 1px 2px rgba(0,0,0,.3)", transition: "left .15s",
+            }}
+          />
+        </span>
+      </button>
 
       {contactsWithPhone > 0 && (
         <div style={{ marginBottom: 12 }}>
