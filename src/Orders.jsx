@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus } from "lucide-react";
-import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
+import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP } from "./money";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness } from "./customerRegistry";
 import { productChipColors } from "./colorUtils";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
 import CierreDeVentasBanner from "./CierreDeVentasBanner.jsx";
+import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 
 const PAST_ORDERS_DAYS = 14;
 const FILTERS_STORAGE_KEY = "procovar-pedidos-filtros";
@@ -177,7 +178,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed }) {
+export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -197,6 +198,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
   const [showPast, setShowPast] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [confirmingPostponeId, setConfirmingPostponeId] = useState(null);
+  const [confirmingPostponeAll, setConfirmingPostponeAll] = useState(false);
   // Trackers ya completados que el usuario reabrió a mano para corregir un
   // paso -- por default un pedido con los 3 pasos hechos se ve colapsado.
   const [expandedCompletedTrackers, setExpandedCompletedTrackers] = useState(() => new Set());
@@ -212,7 +214,16 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // ignora en vez de confirmar la acción destructiva.
   const armedDeleteAtRef = useRef(new Map());
   const armedPostponeAtRef = useRef(new Map());
+  const armedPostponeAllAtRef = useRef(0);
   const DOUBLE_TAP_GUARD_MS = 400;
+  // Borrar y posponer se aplican 5 s después de tocar el botón (para poder
+  // deshacer). Tienen que usar el estado de ESE momento, no el del render en
+  // que se tocó el botón: si no, todo lo hecho en esos 5 s (otro borrado, un
+  // cambio de paso, un pedido nuevo) se pisaba y un pedido eliminado podía
+  // reaparecer. Por eso los temporizadores llaman a estas funciones a través
+  // de la referencia, que siempre apunta a la versión del último render.
+  const latestActions = useRef({});
+  latestActions.current = { onDeleteOrder, onEditOrder };
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
   const [pendingPostpones, setPendingPostpones] = useState(() => new Map());
   const [pendingEditUndo, setPendingEditUndo] = useState(null); // { orderId, customerName, revertDraft, timeoutId } | null
@@ -240,7 +251,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // la medianoche, getHours() vuelve a 0 así que esto vuelve a dar "hoy"
   // sin nada especial para la medianoche.
   const [activeSection, setActiveSection] = useState(() =>
-    cierreVentasHour != null && new Date().getHours() >= cierreVentasHour ? "manana" : "hoy"
+    isPastCierre(cierreVentasHour) ? "manana" : "hoy"
   );
   const [modalOpen, setModalOpen] = useState(false);
   // Bloquea envíos repetidos (doble clic/doble toque) mientras el formulario
@@ -299,7 +310,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
   const today = todayStr();
   const belongsToToday = (o) => o.date === today;
   const isUpcoming = (o) => o.date > today;
-  const pastCierreDeVentas = cierreVentasHour != null && new Date().getHours() >= cierreVentasHour;
+  const pastCierreDeVentas = isPastCierre(cierreVentasHour);
   const searchTerm = orderSearch.trim().toLowerCase();
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
 
@@ -380,6 +391,14 @@ export default function Orders({ products, movements, customers, stock, prices, 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movements, products, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterUnsentToCustomer, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, pendingPostpones, activeSection]);
+
+  // Pedidos de hoy que quedaron sin cerrar (para el aviso del cierre de ventas).
+  const cierrePending = useMemo(() => getCierrePending(allOrders, today), [allOrders, today]);
+
+  // Pasado el cierre de ventas ya no se capturan pedidos para hoy: los nuevos
+  // van para mañana. Editar un pedido que YA es de hoy sigue permitido.
+  const editingOrderIsHoy = !!editingOrderId && allOrders.find((o) => o.orderId === editingOrderId)?.bucket === "hoy";
+  const hoyLocked = pastCierreDeVentas && !editingOrderIsHoy;
 
   // Solo entra al panel si queda algo libre para prometer, o si ya tiene
   // reservas encima (aunque esté en 0 libre) -- un producto sin nada de
@@ -480,7 +499,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
   useEffect(() => {
     if (!prefill) return;
     resetForm();
-    setDraftBucket("hoy");
+    setDraftBucket(pastCierreDeVentas ? "manana" : "hoy");
     setCustomerName(prefill.customerName);
     const knownCustomer = findRegistryCustomer(customers, prefill.customerName);
     setBusinessName(knownCustomer ? knownCustomer.businessName : "");
@@ -512,7 +531,9 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // arranca en Programar).
   function openNewOrderModal() {
     resetForm();
-    setDraftBucket(activeSection);
+    // Pasado el cierre de ventas, los pedidos nuevos arrancan (y quedan) en
+    // "Para mañana" sin importar la lista que estés mirando.
+    setDraftBucket(pastCierreDeVentas ? "manana" : activeSection);
     setModalOpen(true);
   }
 
@@ -564,8 +585,50 @@ export default function Orders({ products, movements, customers, stock, prices, 
     return base;
   }
 
+  // Revisar lo pendiente del cierre de ventas: pasa a Hoy con los tres filtros
+  // de estado activos (se combinan en "o"), así la lista son justo los pedidos
+  // que todavía tienen algún paso sin hacer.
+  function reviewPendingOrders() {
+    setActiveSection("hoy");
+    setOrderSearch("");
+    setFilterProductCode("");
+    setFilterDelivery(false);
+    setFilterUnsent(true);
+    setFilterUnconfirmed(true);
+    setFilterUnsentToCustomer(true);
+  }
+
+  // Pedido de una lista que se pidió revisar desde otra pestaña (aviso global).
+  useEffect(() => {
+    if (!reviewPending) return;
+    reviewPendingOrders();
+    if (onReviewPendingConsumed) onReviewPendingConsumed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewPending]);
+
+  // "Posponer todos": mismo mecanismo de 2 toques que posponer uno solo, y
+  // cada pedido queda con su propio "Deshacer" de 5 s.
+  function handlePostponeAllClick() {
+    if (confirmingPostponeAll) {
+      if (Date.now() - armedPostponeAllAtRef.current < DOUBLE_TAP_GUARD_MS) return;
+      setConfirmingPostponeAll(false);
+      unconfirmedTodayOrders.forEach((order) => stagePostpone(order));
+      return;
+    }
+    armedPostponeAllAtRef.current = Date.now();
+    setConfirmingPostponeAll(true);
+    setTimeout(() => setConfirmingPostponeAll(false), 3000);
+  }
+
   function confirmOrder() {
     if (submittingRef.current) return;
+    // El modal pudo quedar abierto desde antes de la hora del cierre: si ya
+    // pasó, el pedido nuevo no puede ser de hoy.
+    if (isPastCierre(cierreVentasHour) && draftBucket === "hoy" && !editingOrderIsHoy) {
+      setDraftBucket("manana");
+      onError("Ya pasó el cierre de ventas: el pedido se guarda para mañana. Revísalo y confírmalo de nuevo.");
+      return;
+    }
     if (!customerName.trim()) {
       onError("Ingresa el nombre del cliente.");
       return;
@@ -673,7 +736,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // para mañana -- mismo mecanismo que editar y cambiar a "Programar" a
   // mano (devuelve el stock/ingreso de hoy, queda reservado sin comprometer).
   function postponeToTomorrow(order) {
-    onEditOrder(order.orderId, {
+    latestActions.current.onEditOrder(order.orderId, {
       customerName: order.customerName,
       businessName: order.businessName,
       customerPhone: order.customerPhone,
@@ -765,7 +828,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // tener que buscarlo en una lista de la que ya lo filtramos.
   function stageDelete(order) {
     const timeoutId = setTimeout(() => {
-      onDeleteOrder(order.orderId);
+      latestActions.current.onDeleteOrder(order.orderId);
       setPendingDeletes((m) => {
         const next = new Map(m);
         next.delete(order.orderId);
@@ -1223,12 +1286,23 @@ export default function Orders({ products, movements, customers, stock, prices, 
       {activeSection === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
         <CierreDeVentasBanner
           unconfirmedTodayOrders={unconfirmedTodayOrders}
+          pending={cierrePending}
           cierreVentasHour={cierreVentasHour}
           confirmingPostponeId={confirmingPostponeId}
           confirmingDeleteId={confirmingDeleteId}
+          confirmingPostponeAll={confirmingPostponeAll}
           onPostponeClick={handlePostponeClick}
           onDeleteClick={handleDeleteClick}
           onConfirmClick={(order) => onMarkConfirmed(order.orderId, true)}
+          onPostponeAllClick={handlePostponeAllClick}
+        />
+      )}
+
+      {activeSection === "manana" && pastCierreDeVentas && cierrePending.total > 0 && (
+        <CierrePendientesBanner
+          pending={cierrePending}
+          hourLabel={formatHour12(cierreVentasHour)}
+          onReview={reviewPendingOrders}
         />
       )}
 
@@ -1398,7 +1472,9 @@ export default function Orders({ products, movements, customers, stock, prices, 
         editingOrderId={editingOrderId}
         editingOrderSeq={editingOrderSeq}
         draftBucket={draftBucket}
-        onDraftBucketChange={setDraftBucket}
+        onDraftBucketChange={(bucket) => { if (bucket === "hoy" && hoyLocked) return; setDraftBucket(bucket); }}
+        hoyLocked={hoyLocked}
+        cierreHourLabel={cierreVentasHour != null ? formatHour12(cierreVentasHour) : ""}
         draftDate={draftDate}
         onDraftDateChange={setDraftDate}
         customerName={customerName}

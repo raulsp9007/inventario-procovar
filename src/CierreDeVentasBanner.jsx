@@ -1,11 +1,13 @@
 import { Clock, CornerUpRight, Trash2, Check } from "lucide-react";
+import { formatHour12 } from "./dateUtils";
+import { PendingCounts } from "./CierrePendientesBanner.jsx";
 
 // Aviso de cierre de ventas -- componente de presentación pura. La
 // condición de cuándo mostrarlo (activeSection/pastCierreDeVentas) y toda
 // la lógica de programar/eliminar siguen en Orders.jsx.
 export default function CierreDeVentasBanner({
-  unconfirmedTodayOrders, cierreVentasHour, confirmingPostponeId, confirmingDeleteId,
-  onPostponeClick, onDeleteClick, onConfirmClick,
+  unconfirmedTodayOrders, pending, cierreVentasHour, confirmingPostponeId, confirmingDeleteId, confirmingPostponeAll,
+  onPostponeClick, onDeleteClick, onConfirmClick, onPostponeAllClick,
 }) {
   const n = unconfirmedTodayOrders.length;
   return (
@@ -13,12 +15,25 @@ export default function CierreDeVentasBanner({
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <Clock size={16} color="var(--orange)" strokeWidth={2} />
         <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>
-          Cierre de ventas{cierreVentasHour != null ? ` · ${String(cierreVentasHour).padStart(2, "0")}:00` : ""}
+          Cierre de ventas{cierreVentasHour != null ? ` · ${formatHour12(cierreVentasHour)}` : ""}
         </span>
       </div>
-      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
+      <div style={{ fontSize: 13, color: "var(--muted)" }}>
         {n} pedido{n === 1 ? "" : "s"} de hoy sin confirmar. Revísalos antes de cerrar.
       </div>
+      {pending && <PendingCounts pending={pending} />}
+      {n > 1 && (
+        <button
+          onClick={onPostponeAllClick}
+          style={{
+            width: "100%", height: 38, borderRadius: 9, marginBottom: 6, fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            background: "var(--surface)", color: confirmingPostponeAll ? "var(--orange)" : "var(--text)",
+            border: `1px solid ${confirmingPostponeAll ? "var(--orange)" : "var(--border-strong)"}`,
+          }}
+        >
+          {confirmingPostponeAll ? "¿Seguro? toca de nuevo" : "Posponer todos"}
+        </button>
+      )}
       {unconfirmedTodayOrders.map((order, i) => (
         <div
           key={order.orderId}

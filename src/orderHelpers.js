@@ -19,6 +19,7 @@ export function groupAllOrders(movements) {
         confirmed: !!m.confirmed,
         bucket: m.bucket || "hoy",
         orderSeq: m.orderSeq || null,
+        manual: !!m.manual,
         date: m.date,
         timestamp: m.timestamp,
         lines: [],
@@ -69,6 +70,31 @@ export function renumberOpenOrders(movements, todayCal) {
       .forEach(([orderId], i) => newSeq.set(orderId, i + 1));
   });
   return movements.map((m) => (newSeq.has(m.orderId) ? { ...m, orderSeq: newSeq.get(m.orderId) } : m));
+}
+
+// Cierre de ventas: pasada esa hora ya no se capturan pedidos para hoy (los
+// nuevos van para mañana) y se avisa de lo que quedó sin cerrar. `hour` es el
+// ajuste cierreVentasHour (0-23), o null si está desactivado.
+export function isPastCierre(hour, now = new Date()) {
+  return hour != null && now.getHours() >= hour;
+}
+
+// Pedidos de hoy que quedaron sin cerrar: a los que les falta algún paso
+// (enviar al cliente, facturar, confirmar). Las ventas manuales no cuentan
+// (son un conteo, no un pedido con pasos) ni los programados. `unconfirmedOrders`
+// son los que se pueden posponer para mañana o eliminar desde el aviso.
+export function getCierrePending(orders, todayCal) {
+  const pending = orders.filter((o) => (
+    o.date === todayCal && o.bucket === "hoy" && !o.manual && !(o.sentToCustomer && o.sent && o.confirmed)
+  ));
+  return {
+    total: pending.length,
+    unsentToCustomer: pending.filter((o) => !o.sentToCustomer).length,
+    unsent: pending.filter((o) => !o.sent).length,
+    unconfirmed: pending.filter((o) => !o.confirmed).length,
+    orders: pending,
+    unconfirmedOrders: pending.filter((o) => !o.confirmed),
+  };
 }
 
 export function groupOrders(movements, dateStr) {

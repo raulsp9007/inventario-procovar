@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Check, Info, AlertTriangle, ChevronDown, History, Contact } from "lucide-react";
+import { X, Check, Info, AlertTriangle, ChevronDown, History, Contact, Lock } from "lucide-react";
 import { tomorrowStr, formatDateShort, formatDate } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
 import { productChipColors } from "./colorUtils";
@@ -26,6 +26,7 @@ function draftTotal(draftLines, prices, exchangeRate) {
 export default function OrderFormModal({
   open, onClose, editingOrderId, editingOrderSeq,
   draftBucket, onDraftBucketChange,
+  hoyLocked, cierreHourLabel,
   draftDate, onDraftDateChange,
   customerName, onCustomerNameChange,
   businessName, onBusinessNameChange,
@@ -121,12 +122,18 @@ export default function OrderFormModal({
           <div style={{ flexShrink: 0, display: "flex", gap: 4, background: "var(--segment-track)", borderRadius: 9, padding: 3 }}>
             <button
               onClick={() => onDraftBucketChange("hoy")}
+              disabled={hoyLocked}
+              title={hoyLocked ? "Ya pasó el cierre de ventas" : undefined}
               style={{
-                flex: 1, height: 34, borderRadius: 7, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                flex: 1, height: 34, borderRadius: 7, border: "none", fontSize: 13, fontWeight: 600,
+                cursor: hoyLocked ? "not-allowed" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
                 background: draftBucket === "hoy" ? "var(--ink)" : "transparent",
                 color: draftBucket === "hoy" ? "var(--cream)" : "var(--muted)",
+                opacity: hoyLocked ? 0.55 : 1,
               }}
             >
+              {hoyLocked && <Lock size={13} strokeWidth={2.2} aria-hidden="true" />}
               Hoy
             </button>
             <button
@@ -140,6 +147,18 @@ export default function OrderFormModal({
               Para mañana
             </button>
           </div>
+
+          {hoyLocked && !editingOrderId && (
+            <div style={{
+              flexShrink: 0, display: "flex", gap: 8, alignItems: "flex-start", background: "var(--banner-bg)",
+              border: "1px solid var(--border-warn)", borderRadius: 10, padding: "8px 12px", fontSize: 12.5, color: "var(--text)", lineHeight: 1.4,
+            }}>
+              <Lock size={14} strokeWidth={2} color="var(--orange)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>
+                Ya pasó el cierre de ventas{cierreHourLabel ? ` de las ${cierreHourLabel}` : ""}. Este pedido se guarda para mañana.
+              </span>
+            </div>
+          )}
 
           {/* Tarjeta CLIENTE */}
           <div style={{ flexShrink: 0, background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>

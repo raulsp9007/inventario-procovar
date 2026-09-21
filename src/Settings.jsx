@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { Sun, Moon, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { COPYRIGHT_NOTICE, LICENSE_SUMMARY } from "./legal.js";
-
-function formatHour(h) {
-  const period = h < 12 ? "AM" : "PM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:00 ${period}`;
-}
+import { formatHour12 } from "./dateUtils.js";
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 
@@ -179,7 +174,7 @@ export default function Settings({
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Cierre de ventas</div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
-          Pasada esta hora, en Pedidos vas a ver un aviso con los pedidos de hoy que sigan sin marcar Confirmado, para que decidas si eliminarlos o programarlos para mañana.
+          Pasada esta hora, los pedidos nuevos se guardan para mañana y ves un aviso con lo que quedó pendiente hoy, para que decidas si eliminarlo o programarlo para mañana. Las ventas manuales y editar pedidos de hoy siguen permitidos.
         </div>
         <select
           value={cierreVentasHour ?? ""}
@@ -191,7 +186,7 @@ export default function Settings({
         >
           <option value="">Desactivado</option>
           {HOUR_OPTIONS.map((h) => (
-            <option key={h} value={h}>{formatHour(h)}</option>
+            <option key={h} value={h}>{formatHour12(h)}</option>
           ))}
         </select>
       </div>

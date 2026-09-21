@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, isPastCierre, getCierrePending } from "./orderHelpers";
 
 function makeMovement(overrides = {}) {
   return {
@@ -335,5 +335,68 @@ describe("formatOrderForCustomer", () => {
     const text = formatOrderForCustomer(order, products);
     expect(text).not.toContain("Bar X");
     expect(text).not.toContain("nota interna");
+  });
+});
+
+describe("isPastCierre", () => {
+  const at = (h, m = 0) => new Date(2026, 8, 21, h, m);
+
+  it("sin hora configurada (null) nunca está pasado el cierre", () => {
+    expect(isPastCierre(null, at(23))).toBe(false);
+    expect(isPastCierre(undefined, at(23))).toBe(false);
+  });
+
+  it("antes de la hora no, desde la hora en punto sí", () => {
+    expect(isPastCierre(16, at(15, 59))).toBe(false);
+    expect(isPastCierre(16, at(16, 0))).toBe(true);
+    expect(isPastCierre(16, at(23, 30))).toBe(true);
+  });
+
+  it("la hora 0 (medianoche) cuenta como configurada: siempre pasada", () => {
+    expect(isPastCierre(0, at(0, 5))).toBe(true);
+  });
+});
+
+describe("getCierrePending", () => {
+  const TODAY = "2026-08-27";
+  const order = (o) => ({ orderId: "x", date: TODAY, bucket: "hoy", manual: false, sentToCustomer: false, sent: false, confirmed: false, ...o });
+
+  it("cuenta cuántos pedidos de hoy les falta cada paso", () => {
+    const orders = [
+      order({ orderId: "a" }),
+      order({ orderId: "b", sentToCustomer: true }),
+      order({ orderId: "c", sentToCustomer: true, sent: true }),
+      order({ orderId: "d", sentToCustomer: true, sent: true, confirmed: true }),
+    ];
+    const p = getCierrePending(orders, TODAY);
+    expect(p.total).toBe(3);
+    expect(p.unsentToCustomer).toBe(1);
+    expect(p.unsent).toBe(2);
+    expect(p.unconfirmed).toBe(3);
+  });
+
+  it("un pedido con todos los pasos hechos no es pendiente", () => {
+    const p = getCierrePending([order({ sentToCustomer: true, sent: true, confirmed: true })], TODAY);
+    expect(p.total).toBe(0);
+  });
+
+  it("ignora ventas manuales, pedidos de otros días y los programados", () => {
+    const orders = [
+      order({ orderId: "m", manual: true }),
+      order({ orderId: "ayer", date: "2026-08-26" }),
+      order({ orderId: "prog", bucket: "manana", date: "2026-08-28" }),
+    ];
+    expect(getCierrePending(orders, TODAY).total).toBe(0);
+  });
+
+  it("devuelve los pedidos sin confirmar, que son los que se pueden posponer", () => {
+    const orders = [
+      order({ orderId: "a" }),
+      order({ orderId: "b", sentToCustomer: true, sent: true, confirmed: true }),
+      order({ orderId: "c", confirmed: true }),
+    ];
+    const p = getCierrePending(orders, TODAY);
+    expect(p.unconfirmedOrders.map((o) => o.orderId)).toEqual(["a"]);
+    expect(p.orders.map((o) => o.orderId).sort()).toEqual(["a", "c"]);
   });
 });

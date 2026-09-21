@@ -16,20 +16,11 @@ export function tomorrowStr() {
   return toDateStr(d);
 }
 
-// Día "hábil" del negocio: pedidos hechos despues de las 4pm (hora del
-// dispositivo) cuentan para el día siguiente, no para hoy.
-const CUTOFF_HOUR = 16;
-
-export function businessDayStr(now = new Date()) {
-  const d = new Date(now);
-  if (d.getHours() >= CUTOFF_HOUR) {
-    d.setDate(d.getDate() + 1);
-  }
-  return toDateStr(d);
-}
-
-export function isPastCutoffNow(now = new Date()) {
-  return now.getHours() >= CUTOFF_HOUR;
+// "3 PM" / "4:00 PM" de una hora 0-23 -- para mostrar la hora del cierre de ventas.
+export function formatHour12(h) {
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:00 ${period}`;
 }
 
 export function formatDate(dateStr) {
@@ -57,7 +48,7 @@ export function formatDateTime(isoTimestamp) {
 }
 
 // Lunes de la semana de referenceDateStr (formato "YYYY-MM-DD").
-export function getWeekStartStr(referenceDateStr = businessDayStr()) {
+export function getWeekStartStr(referenceDateStr = todayStr()) {
   const d = new Date(referenceDateStr + "T00:00:00");
   const day = d.getDay(); // 0 = domingo, 1 = lunes, ... 6 = sábado
   const diffToMonday = day === 0 ? -6 : 1 - day;
@@ -66,7 +57,7 @@ export function getWeekStartStr(referenceDateStr = businessDayStr()) {
 }
 
 // Lunes y domingo de la semana ANTERIOR a la de referenceDateStr.
-export function getPreviousWeekRangeStr(referenceDateStr = businessDayStr()) {
+export function getPreviousWeekRangeStr(referenceDateStr = todayStr()) {
   const mondayStr = getWeekStartStr(referenceDateStr);
   const monday = new Date(mondayStr + "T00:00:00");
   const prevMonday = new Date(monday);
@@ -77,13 +68,13 @@ export function getPreviousWeekRangeStr(referenceDateStr = businessDayStr()) {
 }
 
 // Primer día del mes de referenceDateStr (formato "YYYY-MM-DD").
-export function getMonthStartStr(referenceDateStr = businessDayStr()) {
+export function getMonthStartStr(referenceDateStr = todayStr()) {
   const d = new Date(referenceDateStr + "T00:00:00");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
 }
 
 // Fecha n días antes de referenceDateStr (formato "YYYY-MM-DD").
-export function getDateNDaysAgoStr(n, referenceDateStr = businessDayStr()) {
+export function getDateNDaysAgoStr(n, referenceDateStr = todayStr()) {
   const d = new Date(referenceDateStr + "T00:00:00");
   d.setDate(d.getDate() - n);
   return toDateStr(d);

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Download, Upload } from "lucide-react";
 import { downloadBackup, downloadFile, shareBackup } from "./backup";
-import { formatDate, daysSince } from "./dateUtils.js";
+import { formatDate, daysSince, todayStr, formatHour12 } from "./dateUtils.js";
+import { groupAllOrders, isPastCierre, getCierrePending } from "./orderHelpers.js";
 import RadialNav, { VIEW_LABELS } from "./RadialNav.jsx";
 import Banner from "./Banner.jsx";
 import LowStockBanner from "./LowStockBanner.jsx";
@@ -13,6 +14,7 @@ import Portfolio from "./Portfolio.jsx";
 import Customers from "./Customers.jsx";
 import Settings from "./Settings.jsx";
 import BackupCard from "./BackupCard.jsx";
+import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, BACKUP_REMINDER_DAYS, lowStockThresholdFor } from "./useInventoryStore.js";
 
 export default function InventoryApp() {
@@ -20,6 +22,24 @@ export default function InventoryApp() {
   // "Más tarde" / "Entendido" de los avisos de datos: solo de esta sesión.
   const [backupReminderSnoozed, setBackupReminderSnoozed] = useState(false);
   const [storageNoticeDismissed, setStorageNoticeDismissed] = useState(false);
+  // Pedidos > Hoy con los filtros de pendientes puestos: lo pide el aviso del
+  // cierre de ventas desde otra pestaña, y Orders lo consume al montarse.
+  const [reviewPending, setReviewPending] = useState(false);
+  // Reloj: la app puede quedar abierta pasada la hora del cierre o la
+  // medianoche sin que nadie toque nada; sin esto, lo que depende del día o la
+  // hora (contador de Hoy, aviso de cierre) se quedaba con lo de antes hasta la
+  // próxima acción. Se re-evalúa cada minuto y al volver a la app.
+  const [, setClockTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setClockTick((t) => t + 1);
+    const onVisible = () => { if (document.visibilityState === "visible") bump(); };
+    const intervalId = setInterval(bump, 60000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
   // Cliente de la lista de espera al que se le va a hacer el pedido: Orders
   // lo consume al montarse (abre Nuevo pedido ya cargado) y lo limpia.
   const [orderPrefill, setOrderPrefill] = useState(null);
@@ -57,6 +77,12 @@ export default function InventoryApp() {
     confirmOrder, deleteOrder, editOrder, markOrderSent,
     updateCustomer, restoreCustomerData, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
   } = useInventoryStore();
+
+  // Cierre de ventas: pasada la hora, aviso de lo que quedó pendiente hoy en
+  // todas las pestañas menos Pedidos (ahí ya está el detalle).
+  const todayCal = todayStr();
+  const cierrePending = useMemo(() => getCierrePending(groupAllOrders(movements), todayCal), [movements, todayCal]);
+  const showCierreAviso = isPastCierre(cierreVentasHour) && cierrePending.total > 0 && view !== "pedidos";
 
   // Compartir por el menú del sistema; solo si de verdad se compartió o se
   // guardó el archivo cuenta como respaldo hecho (cerrar el menú no cuenta).
@@ -159,6 +185,14 @@ export default function InventoryApp() {
             Guardamos una copia intacta de lo que había, para poder recuperarlo.
             {loadProblem.hasPrev ? " También hay una copia automática del estado anterior." : ""}
           </Banner>
+        )}
+
+        {showCierreAviso && (
+          <CierrePendientesBanner
+            pending={cierrePending}
+            hourLabel={formatHour12(cierreVentasHour)}
+            onReview={() => { setReviewPending(true); setView("pedidos"); }}
+          />
         )}
 
         {movementsNearCap && (
@@ -311,6 +345,8 @@ export default function InventoryApp() {
             dailyHlGoal={dailyHlGoal}
             prefill={orderPrefill}
             onPrefillConsumed={() => setOrderPrefill(null)}
+            reviewPending={reviewPending}
+            onReviewPendingConsumed={() => setReviewPending(false)}
           />
         )}
 

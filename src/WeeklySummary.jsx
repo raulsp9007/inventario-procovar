@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, businessDayStr, formatDate } from "./dateUtils";
+import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 import { getCustomerSalesTotals, getCustomerStats } from "./customerHelpers";
 import { isCommittedMovement } from "./orderHelpers";
@@ -17,7 +17,9 @@ export default function WeeklySummary({
   onHlGoalChange,
 }) {
   const weekStart = getWeekStartStr();
-  const today = businessDayStr();
+  // Cada venta cuenta en su fecha real: pasado el cierre de ventas los pedidos
+  // nuevos ya se guardan para mañana, así que no hace falta correr el día.
+  const today = todayStr();
   const { start: prevStart, end: prevEnd } = getPreviousWeekRangeStr();
   const monthStart = getMonthStartStr();
   const weekTotal = totalRevenueInRange(movements, weekStart, today);

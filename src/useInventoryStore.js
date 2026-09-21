@@ -377,6 +377,17 @@ export function useInventoryStore() {
   const latestStateRef = useRef();
   latestStateRef.current = { movements, stock, cumulativeRevenue, cumulativeHl, currentPersistedState };
 
+  // Refleja de inmediato en la referencia lo que una operación acaba de
+  // guardar, sin esperar al próximo render. Hace falta para las operaciones
+  // que se ejecutan diferidas (borrar/posponer a los 5 s, o el paso
+  // automático a Hoy): si dos vencen seguidas -- por ejemplo tras bloquear el
+  // teléfono unos segundos -- la segunda tiene que partir de lo que dejó la
+  // primera, no del estado de antes.
+  function syncLatest(patch) {
+    const cur = latestStateRef.current;
+    latestStateRef.current = { ...cur, ...patch, currentPersistedState: { ...cur.currentPersistedState, ...patch } };
+  }
+
   const checkScheduledTransitions = useCallback(() => {
     const {
       movements: curMovements, stock: curStock,
@@ -393,6 +404,7 @@ export function useInventoryStore() {
     const nextCumulativeRevenue = curRevenue + addedRevenue;
     const nextCumulativeHl = curHl + addedHl;
 
+    syncLatest({ stock: nextStock, movements: nextMovements, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl });
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
@@ -763,7 +775,11 @@ export function useInventoryStore() {
     });
   }
 
+  // Se llama diferida (5 s después de tocar Eliminar): por eso lee el estado
+  // MÁS RECIENTE de la referencia, no el del render que creó esta función.
   function deleteOrder(orderId) {
+    const fresh = latestStateRef.current.currentPersistedState;
+    const { movements, stock, cumulativeRevenue, cumulativeHl } = fresh;
     const orderMovements = movements.filter((m) => m.orderId === orderId);
     if (orderMovements.length === 0) return;
     const wasCommitted = isCommittedMovement(orderMovements[0]);
@@ -781,12 +797,13 @@ export function useInventoryStore() {
     const nextMovements = movements.filter((m) => m.orderId !== orderId);
     const nextCumulativeRevenue = cumulativeRevenue - removedRevenue;
     const nextCumulativeHl = cumulativeHl - removedHl;
+    syncLatest({ stock: nextStock, movements: nextMovements, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl });
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
     setCumulativeHl(nextCumulativeHl);
     persist({
-      ...currentPersistedState,
+      ...fresh,
       stock: nextStock,
       movements: nextMovements,
       cumulativeRevenue: nextCumulativeRevenue,
@@ -802,7 +819,11 @@ export function useInventoryStore() {
   // mañana desde el aviso de cierre de ventas, el pedido tiene que quedar
   // SIEMPRE sin comprometer (fuera de stock/estadísticas de hoy) sin
   // importar si ya estaba marcado Enviado -- por eso ahí se fuerza `false`.
+  // Igual que deleteOrder, también se llama diferida (posponer a mañana desde
+  // el aviso de cierre): lee el estado más reciente de la referencia.
   function editOrder(orderId, { customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
+    const fresh = latestStateRef.current.currentPersistedState;
+    const { movements, stock, cumulativeRevenue, cumulativeHl, prices, products, exchangeRate, customers } = fresh;
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
     const wasSent = !!originalMovements[0].sent;
@@ -868,13 +889,14 @@ export function useInventoryStore() {
       }
     }
 
+    syncLatest({ stock: nextStock, movements: nextMovements, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl, customers: nextCustomers });
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
     setCumulativeHl(nextCumulativeHl);
     setCustomers(nextCustomers);
     persist({
-      ...currentPersistedState,
+      ...fresh,
       stock: nextStock,
       movements: nextMovements,
       cumulativeRevenue: nextCumulativeRevenue,
