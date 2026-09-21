@@ -7,6 +7,7 @@ import { totalHlSold, priceToCUP } from "./money";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 import { getHlBackfill, isHlBackfillable } from "./hlBackfill";
+import { buildRegistryFromMovements, upsertCustomer, patchCustomer, renameCustomer, removeCustomer } from "./customerRegistry";
 
 const DEFAULT_PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
@@ -22,14 +23,60 @@ export const LOW_STOCK_THRESHOLD = 20;
 // 5000 da meses de margen; igual se avisa (movementsNearCap) antes de
 // llegar, para exportar un respaldo a tiempo.
 export const MOVEMENTS_CAP = 5000;
-export const BACKUP_REMINDER_DAYS = 30;
+export const BACKUP_REMINDER_DAYS = 7;
 const STORAGE_KEY = "procovar-inventario-v1";
+// Red de seguridad, fuera del guardado principal: copia del estado de ayer
+// (se toma en el primer guardado de cada día) y copia intacta de un guardado
+// que no se pudo leer. Nunca deben impedir guardar: si no entran en el
+// almacenamiento, se descartan.
+export const PREV_STORAGE_KEY = "procovar-inventario-v1-prev";
+const PREV_AT_KEY = "procovar-inventario-v1-prev-at";
+export const CORRUPT_STORAGE_KEY = "procovar-inventario-v1-corrupt";
 const VALID_VIEWS = ["resumen", "pedidos", "portafolio", "clientes", "stock", "config"];
 const VIEW_STORAGE_KEY = "procovar-active-tab";
 const THEME_STORAGE_KEY = "procovar-theme";
 
 export function lowStockThresholdFor(product) {
   return product.lowStockThreshold != null ? product.lowStockThreshold : LOW_STOCK_THRESHOLD;
+}
+
+function readLocal(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+// Copia del estado anterior, una vez al día: se llama con el contenido que
+// había ANTES de este guardado. Solo copia si ese contenido se puede leer
+// (una copia dañada no debe pisar una buena) y nunca lanza: si no cabe, se
+// descarta la copia en vez de arriesgar el guardado principal.
+function saveDailyCopy(previousRaw) {
+  if (!previousRaw) return null;
+  try {
+    const lastAt = localStorage.getItem(PREV_AT_KEY);
+    if (lastAt && new Date(lastAt).toDateString() === new Date().toDateString()) return null;
+  } catch {
+    return null;
+  }
+  try {
+    JSON.parse(previousRaw);
+  } catch {
+    return null;
+  }
+  try {
+    const at = new Date().toISOString();
+    localStorage.setItem(PREV_STORAGE_KEY, previousRaw);
+    localStorage.setItem(PREV_AT_KEY, at);
+    return at;
+  } catch {
+    try {
+      localStorage.removeItem(PREV_STORAGE_KEY);
+      localStorage.removeItem(PREV_AT_KEY);
+    } catch {}
+    return null;
+  }
 }
 
 // Todo el estado y los handlers de InventoryApp.jsx, movidos tal cual (sin
@@ -55,6 +102,15 @@ export function useInventoryStore() {
   // llegue la próxima entrada. Independiente del stock y de los pedidos --
   // no aparta unidades. [{ id, code, customerName, qty, createdAt }]
   const [waitlist, setWaitlist] = useState([]);
+  // Registro de clientes propio (ver customerRegistry.js): vive aparte de los
+  // movimientos, así un cliente no desaparece al borrar sus pedidos.
+  const [customers, setCustomers] = useState([]);
+  // null = todavía no se sabe. false = el navegador no garantiza conservar los
+  // datos (puede borrarlos si falta espacio).
+  const [storageProtected, setStorageProtected] = useState(null);
+  // { hasPrev, prevAt } cuando el guardado no se pudo leer al abrir la app.
+  const [loadProblem, setLoadProblem] = useState(null);
+  const [autoCopyAt, setAutoCopyAt] = useState(() => readLocal(PREV_AT_KEY));
   // Avisos "repusiste un producto con clientes esperando" -- solo de la
   // sesión actual, no se guardan (la lista de espera en sí sí).
   const [restockAlerts, setRestockAlerts] = useState([]); // [{ code }]
@@ -121,7 +177,7 @@ export function useInventoryStore() {
   }
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
-    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, waitlist, whatsappPhone,
+    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, waitlist, customers, whatsappPhone,
     whatsappContactName, cierreVentasHour,
     senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
   };
@@ -129,7 +185,23 @@ export function useInventoryStore() {
   const persist = useCallback(async (nextState) => {
     setSaveState("saving");
     try {
-      await setData(STORAGE_KEY, JSON.stringify(nextState));
+      const serialized = JSON.stringify(nextState);
+      const previousRaw = readLocal(STORAGE_KEY);
+      try {
+        await setData(STORAGE_KEY, serialized);
+      } catch (quotaError) {
+        // Sin espacio: las copias de seguridad ceden el lugar al guardado
+        // principal, y se reintenta una vez.
+        try {
+          localStorage.removeItem(PREV_STORAGE_KEY);
+          localStorage.removeItem(PREV_AT_KEY);
+          localStorage.removeItem(CORRUPT_STORAGE_KEY);
+        } catch {}
+        setAutoCopyAt(null);
+        await setData(STORAGE_KEY, serialized);
+      }
+      const copiedAt = saveDailyCopy(previousRaw);
+      if (copiedAt) setAutoCopyAt(copiedAt);
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 1200);
     } catch (e) {
@@ -164,6 +236,13 @@ export function useInventoryStore() {
     const nextHlGoal = parsed.hlGoal ?? null;
     const nextDailyHlGoal = parsed.dailyHlGoal ?? null;
     const nextWaitlist = Array.isArray(parsed.waitlist) ? parsed.waitlist : [];
+    // Migración única: datos de antes del registro de clientes -- se arma
+    // desde los movimientos que ya hay (negocio y teléfono más recientes).
+    const migratedCustomers = !Array.isArray(parsed.customers);
+    // (los que solo están en la lista de espera también son clientes conocidos)
+    const nextCustomers = migratedCustomers
+      ? nextWaitlist.reduce((list, w) => upsertCustomer(list, { name: w.customerName }), buildRegistryFromMovements(loadedMovements))
+      : parsed.customers;
     const nextWhatsappPhone = parsed.whatsappPhone || "";
     const nextWhatsappContactName = parsed.whatsappContactName || "";
     const nextCierreVentasHour = parsed.cierreVentasHour ?? null;
@@ -190,6 +269,7 @@ export function useInventoryStore() {
     setHlGoal(nextHlGoal);
     setDailyHlGoal(nextDailyHlGoal);
     setWaitlist(nextWaitlist);
+    setCustomers(nextCustomers);
     setWhatsappPhone(nextWhatsappPhone);
     setWhatsappContactName(nextWhatsappContactName);
     setCierreVentasHour(nextCierreVentasHour);
@@ -198,13 +278,13 @@ export function useInventoryStore() {
     setSendBusinessName(nextSendBusinessName);
     setLastBackupAt(nextLastBackupAt);
 
-    if (alwaysPersist || migratedHl || migratedPricesToUsd) {
+    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers) {
       persist({
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
         cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
-        dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist,
+        dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist, customers: nextCustomers,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
         lastBackupAt: nextLastBackupAt,
@@ -212,19 +292,72 @@ export function useInventoryStore() {
     }
   }
 
+  // Pide al navegador que no borre los datos si falta espacio (las apps
+  // instaladas suelen recibirlo). Sin el permiso, se avisa para que el
+  // respaldo no dependa de eso.
+  async function requestPersistentStorage() {
+    try {
+      const storage = typeof navigator !== "undefined" ? navigator.storage : null;
+      if (!storage || typeof storage.persist !== "function") {
+        setStorageProtected(false);
+        return;
+      }
+      let granted = typeof storage.persisted === "function" ? await storage.persisted() : false;
+      if (!granted) granted = await storage.persist();
+      setStorageProtected(!!granted);
+    } catch {
+      setStorageProtected(false);
+    }
+  }
+
+  // El guardado existe pero no se pudo leer: se guarda una copia intacta
+  // aparte (el próximo guardado normal lo va a pisar) y se avisa, en vez de
+  // arrancar en blanco sin decir nada.
+  function handleUnreadableData(raw) {
+    try {
+      localStorage.setItem(CORRUPT_STORAGE_KEY, raw);
+    } catch {}
+    setLoadProblem({ hasPrev: !!readLocal(PREV_STORAGE_KEY), prevAt: readLocal(PREV_AT_KEY) });
+  }
+
   useEffect(() => {
     (async () => {
+      let raw = null;
       try {
         const result = await getData(STORAGE_KEY);
-        if (result && result.value) {
-          applyPersistedData(JSON.parse(result.value));
-        }
+        raw = result && result.value ? result.value : null;
+        if (raw) applyPersistedData(JSON.parse(raw));
       } catch (e) {
+        if (raw) handleUnreadableData(raw);
       } finally {
         setLoaded(true);
       }
+      requestPersistentStorage();
     })();
   }, []);
+
+  function getCorruptCopy() {
+    return readLocal(CORRUPT_STORAGE_KEY);
+  }
+
+  function dismissLoadProblem() {
+    setLoadProblem(null);
+  }
+
+  // Reemplaza los datos actuales por la copia de ayer. Devuelve si se pudo.
+  function restorePreviousCopy() {
+    try {
+      const raw = localStorage.getItem(PREV_STORAGE_KEY);
+      if (!raw) return false;
+      applyPersistedData(JSON.parse(raw), { alwaysPersist: true });
+      setLoadProblem(null);
+      return true;
+    } catch {
+      setError("No se pudo restaurar la copia anterior.");
+      setTimeout(() => setError(""), 3000);
+      return false;
+    }
+  }
 
   // Pedidos programados (bucket "manana") cuya fecha ya llegó (o pasó) se
   // comprometen solos como pedido de hoy: bucket pasa a "hoy" (con la fecha
@@ -487,8 +620,12 @@ export function useInventoryStore() {
       code, customerName: customerName.trim(), qty, createdAt: new Date().toISOString(),
     };
     const next = [...waitlist, entry];
+    // Quien espera producto ya es un cliente conocido, aunque todavía no
+    // tenga pedidos: entra al registro en el mismo guardado.
+    const nextCustomers = upsertCustomer(customers, { name: entry.customerName });
     setWaitlist(next);
-    persist({ ...currentPersistedState, waitlist: next });
+    setCustomers(nextCustomers);
+    persist({ ...currentPersistedState, waitlist: next, customers: nextCustomers });
   }
 
   function removeWaitlistEntry(id) {
@@ -601,11 +738,13 @@ export function useInventoryStore() {
     const nextCumulativeRevenue = cumulativeRevenue + addedRevenue;
     const nextCumulativeHl = cumulativeHl + addedHl;
     const nextWaitlist = waitlistEntryId ? waitlist.filter((w) => w.id !== waitlistEntryId) : waitlist;
+    const nextCustomers = upsertCustomer(customers, { name: customerName, businessName, phone: customerPhone });
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
     setCumulativeHl(nextCumulativeHl);
     if (nextWaitlist !== waitlist) setWaitlist(nextWaitlist);
+    setCustomers(nextCustomers);
     persist({
       ...currentPersistedState,
       stock: nextStock,
@@ -613,6 +752,7 @@ export function useInventoryStore() {
       cumulativeRevenue: nextCumulativeRevenue,
       cumulativeHl: nextCumulativeHl,
       waitlist: nextWaitlist,
+      customers: nextCustomers,
     });
   }
 
@@ -698,16 +838,37 @@ export function useInventoryStore() {
     const nextCumulativeRevenue = cumulativeRevenue - removedRevenue + addedRevenue;
     const nextCumulativeHl = cumulativeHl - removedHl + addedHl;
 
+    // Registro de clientes: solo se toca lo que el usuario cambió en ESTA
+    // edición. Editar un pedido viejo sin tocar el teléfono no debe pisar el
+    // teléfono actual del cliente con el que traía ese pedido.
+    const original = originalMovements[0];
+    const nextPhone = customerPhone ? toCubanPhone(customerPhone) : "";
+    let nextCustomers = customers;
+    if (customerName !== original.customerName) {
+      nextCustomers = upsertCustomer(customers, { name: customerName, businessName, phone: customerPhone });
+    } else {
+      const phoneChanged = nextPhone !== toCubanPhone(original.customerPhone || "");
+      const businessChanged = (businessName || "").trim() !== (original.businessName || "").trim();
+      if (phoneChanged || businessChanged) {
+        nextCustomers = patchCustomer(customers, customerName, {
+          ...(businessChanged ? { businessName: businessName || "" } : {}),
+          ...(phoneChanged ? { phone: customerPhone || "" } : {}),
+        });
+      }
+    }
+
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
     setCumulativeHl(nextCumulativeHl);
+    setCustomers(nextCustomers);
     persist({
       ...currentPersistedState,
       stock: nextStock,
       movements: nextMovements,
       cumulativeRevenue: nextCumulativeRevenue,
       cumulativeHl: nextCumulativeHl,
+      customers: nextCustomers,
     });
   }
 
@@ -815,25 +976,49 @@ export function useInventoryStore() {
   // separadas) para no arriesgar una carrera entre dos persist() seguidos
   // sobre el mismo `movements` (el segundo leería el estado viejo, de
   // antes del primer cambio).
-  function updateCustomer(oldName, newName, businessName) {
+  // El teléfono es opcional (undefined = no tocarlo; "" = borrarlo). Se
+  // actualiza también en los pedidos del cliente, porque los botones de
+  // llamar y WhatsApp de cada pedido leen el teléfono del propio pedido.
+  // Renombrar también actualiza la lista de espera (guarda el nombre como
+  // texto), todo en un solo guardado.
+  function updateCustomer(oldName, newName, businessName, phone) {
     const trimmedName = newName.trim() || oldName;
     const trimmedBusiness = businessName.trim();
+    const nextPhone = phone === undefined ? undefined : (phone ? toCubanPhone(phone) : "");
     const nextMovements = movements.map((m) =>
-      m.customerName === oldName ? { ...m, customerName: trimmedName, businessName: trimmedBusiness } : m
+      m.customerName === oldName
+        ? { ...m, customerName: trimmedName, businessName: trimmedBusiness, ...(nextPhone !== undefined ? { customerPhone: nextPhone } : {}) }
+        : m
     );
+    const nextCustomers = renameCustomer(customers, oldName, trimmedName, trimmedBusiness, phone);
+    const nextWaitlist = trimmedName !== oldName
+      ? waitlist.map((w) => (w.customerName === oldName ? { ...w, customerName: trimmedName } : w))
+      : waitlist;
     setMovements(nextMovements);
-    persist({ ...currentPersistedState, movements: nextMovements });
+    setCustomers(nextCustomers);
+    setWaitlist(nextWaitlist);
+    persist({ ...currentPersistedState, movements: nextMovements, customers: nextCustomers, waitlist: nextWaitlist });
   }
 
-  // Deshacer genérico para ediciones de cliente -- restaura el array de
-  // movements completo tal como estaba antes del cambio, en vez de intentar
-  // "revertir" el rename campo por campo. Si el rename fusionó dos clientes
-  // ya existentes (mismo nombre nuevo), revertir campo por campo movería
-  // también el historial del OTRO cliente por error; restaurar el snapshot
-  // completo es la única forma segura de deshacer sin importar si hubo fusión.
-  function restoreMovements(snapshot) {
-    setMovements(snapshot);
-    persist({ ...currentPersistedState, movements: snapshot });
+  // Saca al cliente del registro (no borra sus pedidos ni su lista de espera).
+  function deleteCustomer(name) {
+    const nextCustomers = removeCustomer(customers, name);
+    setCustomers(nextCustomers);
+    persist({ ...currentPersistedState, customers: nextCustomers });
+  }
+
+  // Deshacer genérico para ediciones de cliente -- restaura movimientos,
+  // registro y lista de espera tal como estaban antes del cambio, en vez de
+  // intentar "revertir" el rename campo por campo. Si el rename fusionó dos
+  // clientes ya existentes (mismo nombre nuevo), revertir campo por campo
+  // movería también el historial del OTRO cliente por error; restaurar el
+  // snapshot completo es la única forma segura de deshacer sin importar si
+  // hubo fusión.
+  function restoreCustomerData({ movements: snapshotMovements, customers: snapshotCustomers, waitlist: snapshotWaitlist }) {
+    setMovements(snapshotMovements);
+    setCustomers(snapshotCustomers);
+    setWaitlist(snapshotWaitlist);
+    persist({ ...currentPersistedState, movements: snapshotMovements, customers: snapshotCustomers, waitlist: snapshotWaitlist });
   }
 
   function markOrderConfirmed(orderId, confirmed) {
@@ -884,6 +1069,8 @@ export function useInventoryStore() {
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
+    customers, deleteCustomer,
+    storageProtected, loadProblem, dismissLoadProblem, getCorruptCopy, restorePreviousCopy, autoCopyAt,
     applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
@@ -909,6 +1096,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, restoreMovements, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
+    updateCustomer, restoreCustomerData, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
   };
 }

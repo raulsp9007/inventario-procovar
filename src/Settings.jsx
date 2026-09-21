@@ -24,6 +24,7 @@ export default function Settings({
   theme, onToggleTheme,
   showPrices, onToggleShowPrices,
   commissionPercent, hlGoal, sendBusinessName,
+  topSlot,
 }) {
   const [phoneInput, setPhoneInput] = useState(whatsappPhone || "");
   const [contactNameInput, setContactNameInput] = useState(whatsappContactName || "");
@@ -88,6 +89,8 @@ export default function Settings({
       <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
         CONFIGURACIÓN
       </div>
+
+      {topSlot}
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 14 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Apariencia</div>

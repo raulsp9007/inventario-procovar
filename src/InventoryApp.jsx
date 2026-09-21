@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Download, Upload } from "lucide-react";
-import { downloadBackup } from "./backup";
-import { formatDate } from "./dateUtils.js";
+import { downloadBackup, downloadFile, shareBackup } from "./backup";
+import { formatDate, daysSince } from "./dateUtils.js";
 import RadialNav, { VIEW_LABELS } from "./RadialNav.jsx";
 import Banner from "./Banner.jsx";
 import LowStockBanner from "./LowStockBanner.jsx";
@@ -12,10 +12,14 @@ import Orders from "./Orders.jsx";
 import Portfolio from "./Portfolio.jsx";
 import Customers from "./Customers.jsx";
 import Settings from "./Settings.jsx";
-import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, lowStockThresholdFor } from "./useInventoryStore.js";
+import BackupCard from "./BackupCard.jsx";
+import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, BACKUP_REMINDER_DAYS, lowStockThresholdFor } from "./useInventoryStore.js";
 
 export default function InventoryApp() {
   const [lowStockFilterActive, setLowStockFilterActive] = useState(false);
+  // "Más tarde" / "Entendido" de los avisos de datos: solo de esta sesión.
+  const [backupReminderSnoozed, setBackupReminderSnoozed] = useState(false);
+  const [storageNoticeDismissed, setStorageNoticeDismissed] = useState(false);
   // Cliente de la lista de espera al que se le va a hacer el pedido: Orders
   // lo consume al montarse (abre Nuevo pedido ya cargado) y lo limpia.
   const [orderPrefill, setOrderPrefill] = useState(null);
@@ -24,6 +28,8 @@ export default function InventoryApp() {
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
+    customers, deleteCustomer,
+    storageProtected, loadProblem, dismissLoadProblem, getCorruptCopy, restorePreviousCopy, autoCopyAt,
     applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
     cierreVentasHour, setCierreVentasHour,
@@ -49,8 +55,21 @@ export default function InventoryApp() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent,
-    updateCustomer, restoreMovements, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
+    updateCustomer, restoreCustomerData, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
   } = useInventoryStore();
+
+  // Compartir por el menú del sistema; solo si de verdad se compartió o se
+  // guardó el archivo cuenta como respaldo hecho (cerrar el menú no cuenta).
+  async function handleShareBackup() {
+    const result = await shareBackup(currentPersistedState);
+    if (result !== "cancelled") markBackupDone();
+  }
+
+  function handleDownloadCorruptCopy() {
+    const raw = getCorruptCopy();
+    if (!raw) return;
+    downloadFile(new File([raw], "procovar-datos-danados.json", { type: "application/json" }));
+  }
 
   if (!loaded) {
     return (
@@ -126,23 +145,52 @@ export default function InventoryApp() {
           onDismiss={dismissRestockAlert}
         />
 
+        {loadProblem && (
+          <Banner
+            variant="error"
+            style={{ marginBottom: 16 }}
+            actions={[
+              { label: "Descargar copia", kind: "secondary", onClick: handleDownloadCorruptCopy },
+              ...(loadProblem.hasPrev ? [{ label: "Restaurar anterior", kind: "primary", onClick: restorePreviousCopy }] : []),
+              { label: "Cerrar", kind: "secondary", onClick: dismissLoadProblem },
+            ]}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>No se pudieron leer tus datos guardados.</div>
+            Guardamos una copia intacta de lo que había, para poder recuperarlo.
+            {loadProblem.hasPrev ? " También hay una copia automática del estado anterior." : ""}
+          </Banner>
+        )}
+
         {movementsNearCap && (
           <Banner
             variant="warning"
             style={{ marginBottom: 16 }}
-            actions={[{ label: "Exportar respaldo", kind: "dark", onClick: () => { downloadBackup(currentPersistedState); markBackupDone(); } }]}
+            actions={[{ label: "Compartir respaldo", kind: "dark", onClick: handleShareBackup }]}
           >
-            El historial de movimientos está por llenarse ({movements.length}/{MOVEMENTS_CAP}). Exportá un respaldo pronto -- al llegar al tope, los movimientos más viejos se empiezan a perder.
+            El historial de movimientos está por llenarse ({movements.length}/{MOVEMENTS_CAP}). Comparte un respaldo pronto: al llegar al tope, los movimientos más viejos se empiezan a perder.
           </Banner>
         )}
 
-        {!movementsNearCap && backupReminderDue && (
+        {!movementsNearCap && backupReminderDue && !backupReminderSnoozed && (
           <Banner
             variant="warning"
             style={{ marginBottom: 16 }}
-            actions={[{ label: "Exportar respaldo", kind: "dark", onClick: () => { downloadBackup(currentPersistedState); markBackupDone(); } }]}
+            actions={[
+              { label: "Compartir respaldo", kind: "dark", onClick: handleShareBackup },
+              { label: "Más tarde", kind: "secondary", onClick: () => setBackupReminderSnoozed(true) },
+            ]}
           >
-            {lastBackupAt ? "Hace más de 30 días que no exportás un respaldo." : "Todavía no exportaste ningún respaldo."} Si perdés el dispositivo, se pierden los datos.
+            {lastBackupAt ? `Hace ${daysSince(lastBackupAt)} días que no compartes un respaldo.` : "Todavía no has hecho ningún respaldo."} Si pierdes el celular, se pierden los datos de tus clientes.
+          </Banner>
+        )}
+
+        {storageProtected === false && !storageNoticeDismissed && !loadProblem && !(backupReminderDue && !backupReminderSnoozed) && (movements.length > 0 || customers.length > 0) && (
+          <Banner
+            variant="warning"
+            style={{ marginBottom: 16 }}
+            actions={[{ label: "Entendido", kind: "secondary", onClick: () => setStorageNoticeDismissed(true) }]}
+          >
+            Tu navegador no garantiza conservar los datos si falta espacio. Comparte un respaldo seguido para no depender de eso.
           </Banner>
         )}
 
@@ -158,6 +206,7 @@ export default function InventoryApp() {
             stock={stock}
             prices={prices}
             movements={movements}
+            customers={customers}
             lastAdjustedAt={lastAdjustedAt}
             showPrices={showPrices}
             exchangeRate={exchangeRate}
@@ -235,6 +284,7 @@ export default function InventoryApp() {
           <Orders
             products={products}
             movements={movements}
+            customers={customers}
             stock={stock}
             prices={prices}
             showPrices={showPrices}
@@ -273,14 +323,31 @@ export default function InventoryApp() {
           <Customers
             products={products}
             movements={movements}
+            customers={customers}
+            waitlist={waitlist}
             showPrices={showPrices}
             onUpdateCustomer={updateCustomer}
-            onRestoreMovements={restoreMovements}
+            onDeleteCustomer={deleteCustomer}
+            onRestoreCustomerData={restoreCustomerData}
           />
         )}
 
         {view === "config" && (
           <Settings
+            topSlot={(
+              <BackupCard
+                storageProtected={storageProtected}
+                lastBackupAt={lastBackupAt}
+                reminderDays={BACKUP_REMINDER_DAYS}
+                movementsCount={movements.length}
+                customersCount={customers.length}
+                onShare={handleShareBackup}
+                onDownload={() => { downloadBackup(currentPersistedState); markBackupDone(); }}
+                onImport={() => fileInputRef.current?.click()}
+                autoCopyAt={autoCopyAt}
+                onRestoreCopy={restorePreviousCopy}
+              />
+            )}
             whatsappPhone={whatsappPhone}
             onWhatsappPhoneChange={(next) => {
               setWhatsappPhone(next);
@@ -341,7 +408,7 @@ export default function InventoryApp() {
           );
         })()}
 
-        <div style={{ marginTop: 20, display: "flex", justifyContent: "center", gap: 8 }}>
+        <div style={{ marginTop: 20, display: view === "config" ? "none" : "flex", justifyContent: "center", gap: 8 }}>
           <button
             onClick={() => { downloadBackup(currentPersistedState); markBackupDone(); }}
             style={{

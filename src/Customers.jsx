@@ -1,8 +1,22 @@
 import { useState } from "react";
-import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search } from "lucide-react";
+import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search, Phone, Contact, BookUser, Trash2 } from "lucide-react";
 import { formatDate, todayStr } from "./dateUtils";
 import { formatCUP } from "./money";
-import { getCustomerStats, getCustomerOrders, getCustomerProductHistory, getCustomerNames, findNearDuplicateCustomerName, getProductBuyers } from "./customerHelpers";
+import { getCustomerOrders, getCustomerProductHistory, findNearDuplicateCustomerName, getProductBuyers, cubanPhoneLocalPart } from "./customerHelpers";
+import { getRegistryStats, registryNames, buildVcf } from "./customerRegistry";
+import { shareContactsFile } from "./backup";
+
+// El picker de contactos del navegador (Contact Picker API) solo existe en
+// Chrome/Android por ahora -- repetido acá (igual que en OrderFormModal y
+// Settings) para no crear dependencias cruzadas entre componentes.
+const CONTACT_PICKER_SUPPORTED =
+  typeof navigator !== "undefined" && "contacts" in navigator && typeof window !== "undefined" && "ContactsManager" in window;
+
+// "5555 1234" a partir de los 8 dígitos locales.
+function formatLocalPhone(phone) {
+  const local = cubanPhoneLocalPart(phone);
+  return local.length === 8 ? `${local.slice(0, 4)} ${local.slice(4)}` : local;
+}
 
 // Ícono de moto (domicilio) -- repetido a mano (no importado de Orders.jsx)
 // por la misma razón que en OrderFormModal.jsx: es un ícono chico, no vale
@@ -54,7 +68,7 @@ function sortStats(stats, sortBy, buyers) {
 
 const SORT_LABELS = { recent: "Reciente", oldest: "Antiguo", name: "Nombre A-Z", qty: "Más unidades" };
 
-export default function Customers({ products, movements, showPrices, onUpdateCustomer, onRestoreMovements }) {
+export default function Customers({ products, movements, customers, waitlist, showPrices, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData }) {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [sortBy, setSortBy] = useState("recent");
@@ -64,39 +78,92 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [nameInput, setNameInput] = useState("");
   const [businessNameInput, setBusinessNameInput] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phonePickerError, setPhonePickerError] = useState("");
+  const [contactsNotice, setContactsNotice] = useState("");
   const [pendingUndo, setPendingUndo] = useState(null); // { message, snapshot, timeoutId } | null
 
-  function startRename(customerName, businessName) {
+  function startRename(customerName, businessName, phone) {
     setEditingCustomer(customerName);
     setNameInput(customerName);
     setBusinessNameInput(businessName || "");
+    setPhoneInput(cubanPhoneLocalPart(phone || ""));
+    setPhonePickerError("");
   }
 
-  function saveRename(oldName) {
-    const snapshot = movements;
-    onUpdateCustomer(oldName, nameInput, businessNameInput);
-    setEditingCustomer(null);
+  // Foto de todo lo que un cambio de cliente puede tocar (pedidos, registro
+  // y lista de espera) para poder deshacerlo entero.
+  function takeSnapshot() {
+    return { movements, customers, waitlist };
+  }
+
+  function showUndo(message, snapshot) {
     setPendingUndo((prev) => {
       if (prev) clearTimeout(prev.timeoutId);
       const timeoutId = setTimeout(() => {
         setPendingUndo((cur) => (cur && cur.timeoutId === timeoutId ? null : cur));
       }, 5000);
-      return { message: `Cambios guardados en ${nameInput.trim() || oldName}`, snapshot, timeoutId };
+      return { message, snapshot, timeoutId };
     });
+  }
+
+  function saveRename(oldName) {
+    const snapshot = takeSnapshot();
+    onUpdateCustomer(oldName, nameInput, businessNameInput, phoneInput);
+    setEditingCustomer(null);
+    showUndo(`Cambios guardados en ${nameInput.trim() || oldName}`, snapshot);
+  }
+
+  function removeCustomerRow(name) {
+    const snapshot = takeSnapshot();
+    onDeleteCustomer(name);
+    setEditingCustomer(null);
+    setExpandedCustomer(null);
+    showUndo(`${name} eliminado de Clientes`, snapshot);
   }
 
   function undoRename() {
     if (!pendingUndo) return;
     clearTimeout(pendingUndo.timeoutId);
-    onRestoreMovements(pendingUndo.snapshot);
+    onRestoreCustomerData(pendingUndo.snapshot);
     setPendingUndo(null);
+  }
+
+  // Autocompletar el teléfono eligiendo un contacto del dispositivo -- toma
+  // los últimos 8 dígitos (número local cubano), igual que en Nuevo pedido.
+  async function pickPhoneContact() {
+    setPhonePickerError("");
+    try {
+      const contacts = await navigator.contacts.select(["tel"], { multiple: false });
+      const contact = contacts && contacts[0];
+      const digits = (contact?.tel?.[0] || "").replace(/\D/g, "");
+      if (!digits) {
+        setPhonePickerError("Ese contacto no tiene número de teléfono.");
+        return;
+      }
+      setPhoneInput(digits.slice(-8));
+    } catch {
+      // Usuario canceló el picker -- no es un error real, no hace falta avisar.
+    }
+  }
+
+  const contactsWithPhone = customers.filter((c) => c.phone).length;
+
+  async function exportContacts() {
+    const vcf = buildVcf(customers);
+    if (!vcf) return;
+    const result = await shareContactsFile(vcf);
+    if (result === "downloaded") {
+      setContactsNotice("Archivo guardado. Ábrelo para importar los contactos a tu agenda.");
+      setTimeout(() => setContactsNotice(""), 6000);
+    }
   }
 
   function setModeFor(customerName, mode) {
     setModes((m) => ({ ...m, [customerName]: mode }));
   }
 
-  const allStats = getCustomerStats(movements, products);
+  const allStats = getRegistryStats(customers, movements, products);
 
   // Aviso de "cliente parecido" al renombrar -- igual que ya existe al crear
   // pedidos (Orders.jsx). Acá importa más: renombrar fusiona TODO el
@@ -105,7 +172,7 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
   // existentes. Se excluye el propio nombre viejo de la lista para no
   // compararlo contra sí mismo.
   const otherCustomerNames = editingCustomer
-    ? getCustomerNames(movements).filter((n) => n !== editingCustomer)
+    ? registryNames(customers).filter((n) => n !== editingCustomer)
     : [];
   const nearDuplicateName = editingCustomer
     ? findNearDuplicateCustomerName(otherCustomerNames, nameInput)
@@ -135,6 +202,25 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
       <div style={{ fontSize: 12, letterSpacing: "0.07em", color: "var(--muted)", fontWeight: 800, textTransform: "uppercase", marginBottom: 12 }}>
         CLIENTES ({allStats.length})
       </div>
+
+      {contactsWithPhone > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <button
+            onClick={exportContacts}
+            style={{
+              width: "100%", height: 40, borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--surface)",
+              color: "var(--text)", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+            }}
+          >
+            <BookUser size={15} strokeWidth={1.8} />
+            Exportar contactos (.vcf) · {contactsWithPhone}
+          </button>
+          {contactsNotice && (
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, textAlign: "center" }}>{contactsNotice}</div>
+          )}
+        </div>
+      )}
 
       {allStats.length > 0 && (
         <div style={{ background: "var(--surface-subtle)", border: "1px solid var(--border)", borderRadius: 12, display: "flex", alignItems: "stretch", marginBottom: 16 }}>
@@ -272,9 +358,45 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                       style={{
                         width: "100%", boxSizing: "border-box", height: 40, border: "1px solid var(--border)", borderRadius: 8,
                         padding: "0 10px", fontSize: 13, fontFamily: "inherit", color: "var(--text)", background: "var(--surface-subtle)",
-                        marginBottom: 10,
+                        marginBottom: 8,
                       }}
                     />
+
+                    <div style={{ display: "flex", gap: 8, marginBottom: phonePickerError ? 4 : 10 }}>
+                      <div style={{ flex: 1, minWidth: 0, height: 40, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-subtle)", display: "flex", alignItems: "center", overflow: "hidden" }}>
+                        <span style={{ flexShrink: 0, height: "100%", display: "flex", alignItems: "center", padding: "0 10px", borderRight: "1px solid var(--border)", fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>
+                          +53
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Teléfono (opcional)"
+                          aria-label="Teléfono"
+                          value={phoneInput}
+                          onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveRename(c.customerName); }}
+                          style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: "0 10px", fontSize: 13, fontFamily: "inherit", color: "var(--text)", fontVariantNumeric: "tabular-nums" }}
+                        />
+                      </div>
+                      {CONTACT_PICKER_SUPPORTED && (
+                        <button
+                          type="button"
+                          onClick={pickPhoneContact}
+                          title="Elegir contacto"
+                          aria-label="Elegir contacto"
+                          style={{
+                            flexShrink: 0, width: 40, height: 40, borderRadius: 8, cursor: "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            background: "var(--surface-subtle)", border: "1px solid var(--border)", color: "var(--muted)",
+                          }}
+                        >
+                          <Contact size={16} strokeWidth={1.8} />
+                        </button>
+                      )}
+                    </div>
+                    {phonePickerError && (
+                      <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 10 }}>{phonePickerError}</div>
+                    )}
 
                     {nearDuplicateName && (
                       <div style={{
@@ -310,6 +432,19 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                         Guardar
                       </button>
                     </div>
+                    <button
+                      onClick={() => removeCustomerRow(c.customerName)}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", marginTop: 12,
+                        background: "none", border: "none", color: "var(--danger)", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", padding: 6,
+                      }}
+                    >
+                      <Trash2 size={13} strokeWidth={2} />
+                      Eliminar cliente
+                    </button>
+                    <div style={{ fontSize: 11.5, color: "var(--faint)", textAlign: "center" }}>
+                      {c.hasOrders ? "Se quita de Clientes; sus pedidos se conservan." : "Este cliente no tiene pedidos."}
+                    </div>
                   </div>
                 ) : (
                   <button
@@ -325,7 +460,7 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                           {c.customerName}
                         </span>
                         <span
-                          onClick={(e) => { e.stopPropagation(); startRename(c.customerName, c.businessName); }}
+                          onClick={(e) => { e.stopPropagation(); startRename(c.customerName, c.businessName, c.phone); }}
                           title="Editar cliente"
                           role="button"
                           aria-label="Editar cliente"
@@ -342,10 +477,16 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                           {c.businessName}
                         </div>
                       )}
+                      {c.phone && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--muted)", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+                          <Phone size={10} strokeWidth={2} />
+                          {formatLocalPhone(c.phone)}
+                        </div>
+                      )}
                       <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>
                         {buyer
                           ? `${relativeDate(buyer.lastDate)} · ${buyer.times} pedido${buyer.times === 1 ? "" : "s"}`
-                          : relativeDate(c.lastPurchaseDate)}
+                          : (c.hasOrders ? relativeDate(c.lastPurchaseDate) : "Sin pedidos")}
                       </div>
                     </div>
                     {product && (
@@ -391,6 +532,9 @@ export default function Customers({ products, movements, showPrices, onUpdateCus
                     </div>
 
                     <div style={{ maxHeight: 260, overflowY: "auto" }}>
+                      {!c.hasOrders && (
+                        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aún no tiene pedidos. Se conserva en Clientes.</div>
+                      )}
                       {mode === "pedido" && orders.map((order) => {
                         const total = order.lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
                         return (

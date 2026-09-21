@@ -3,7 +3,8 @@ import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus, Phone } f
 import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow } from "./orderHelpers";
-import { getCustomerNames, matchCustomerNames, getCustomerBusinessName, getCustomerPhone, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart, getBusinessNames, getCustomerNameForBusiness } from "./customerHelpers";
+import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
+import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness } from "./customerRegistry";
 import { productChipColors } from "./colorUtils";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
@@ -166,7 +167,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed }) {
+export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onToggleSendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -402,7 +403,10 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     ? selectedProductCode
     : (availableProducts[0]?.code || "");
 
-  const customerNamesList = getCustomerNames(movements);
+  // Sugerencias y autocompletado salen del registro de clientes (no de los
+  // pedidos): así reflejan el teléfono y negocio editados en Clientes, y un
+  // cliente sin pedidos también se sugiere.
+  const customerNamesList = registryNames(customers);
   const suggestions = showSuggestions
     ? matchCustomerNames(customerNamesList, customerName).map((name) => ({ name, count: getCustomerOrders(movements, name).length }))
     : [];
@@ -417,15 +421,16 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function pickSuggestion(name) {
     setCustomerName(name);
     setShowSuggestions(false);
-    // Cliente ya registrado -- autocompleta negocio y teléfono guardados de
-    // algún pedido anterior (si nunca se cargaron, quedan vacíos).
-    setBusinessName(getCustomerBusinessName(movements, name));
-    setCustomerPhone(cubanPhoneLocalPart(getCustomerPhone(movements, name)));
+    // Cliente ya registrado -- autocompleta el negocio y teléfono guardados
+    // (si nunca se cargaron, quedan vacíos).
+    const known = findRegistryCustomer(customers, name);
+    setBusinessName(known ? known.businessName : "");
+    setCustomerPhone(known ? cubanPhoneLocalPart(known.phone) : "");
   }
 
-  const businessNamesList = getBusinessNames(movements);
+  const businessNamesList = registryBusinessNames(customers);
   const businessSuggestions = showBusinessSuggestions
-    ? matchCustomerNames(businessNamesList, businessName).map((name) => ({ name, customerName: getCustomerNameForBusiness(movements, name) }))
+    ? matchCustomerNames(businessNamesList, businessName).map((name) => ({ name, customerName: registryCustomerNameForBusiness(customers, name) }))
     : [];
 
   // Camino inverso a pickSuggestion -- útil cuando te acordás del negocio
@@ -434,10 +439,11 @@ export default function Orders({ products, movements, stock, prices, showPrices,
   function pickBusinessSuggestion(name) {
     setBusinessName(name);
     setShowBusinessSuggestions(false);
-    const customer = getCustomerNameForBusiness(movements, name);
+    const customer = registryCustomerNameForBusiness(customers, name);
     if (customer) {
       setCustomerName(customer);
-      setCustomerPhone(cubanPhoneLocalPart(getCustomerPhone(movements, customer)));
+      const known = findRegistryCustomer(customers, customer);
+      setCustomerPhone(known ? cubanPhoneLocalPart(known.phone) : "");
     }
   }
 
@@ -466,8 +472,9 @@ export default function Orders({ products, movements, stock, prices, showPrices,
     resetForm();
     setDraftBucket("hoy");
     setCustomerName(prefill.customerName);
-    setBusinessName(getCustomerBusinessName(movements, prefill.customerName));
-    setCustomerPhone(cubanPhoneLocalPart(getCustomerPhone(movements, prefill.customerName)));
+    const knownCustomer = findRegistryCustomer(customers, prefill.customerName);
+    setBusinessName(knownCustomer ? knownCustomer.businessName : "");
+    setCustomerPhone(knownCustomer ? cubanPhoneLocalPart(knownCustomer.phone) : "");
     setDraftLines([{ code: prefill.code, qty: String(prefill.qty) }]);
     waitlistEntryIdRef.current = prefill.waitId;
     setModalOpen(true);

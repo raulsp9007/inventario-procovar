@@ -4,7 +4,7 @@ import { formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, priceToCUP } from "./money";
 import Card from "./Card.jsx";
 import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
-import { getCustomerNames } from "./customerHelpers";
+import { registryNames } from "./customerRegistry";
 import { FORMAT_OPTIONS, unitPrice } from "./productFormats";
 import { getHlBackfill } from "./hlBackfill";
 
@@ -37,6 +37,7 @@ export default function ProductsView({
   stock,
   prices,
   movements,
+  customers,
   lastAdjustedAt,
   showPrices,
   exchangeRate,
@@ -345,7 +346,7 @@ export default function ProductsView({
   }
 
   const screenBg = editMode ? "var(--bg-edit)" : "transparent";
-  const customerNamesList = getCustomerNames(movements);
+  const customerNamesList = registryNames(customers);
 
   return (
     <div style={{ background: screenBg, margin: "-20px -16px 0", padding: "0 16px 16px", transition: "background 180ms ease-out", fontFamily: "'Archivo', system-ui, sans-serif" }}>

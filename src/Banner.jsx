@@ -36,7 +36,7 @@ export default function Banner({ variant = "warning", actions, layout = "stack",
     >
       <div>{children}</div>
       {actions && actions.length > 0 && (
-        <div style={{ display: "flex", gap: 8, marginTop: row ? 0 : 10, flexShrink: 0 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: row ? 0 : 10, flexShrink: 0 }}>
           {actions.map((a, i) => (
             <button
               key={i}
