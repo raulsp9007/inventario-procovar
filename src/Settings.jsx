@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Sun, Moon, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { COPYRIGHT_NOTICE, LICENSE_SUMMARY } from "./legal.js";
 import { formatHour12 } from "./dateUtils.js";
+import { usePwaStatus } from "./pwaStatus.js";
+import ConnectionStatus from "./ConnectionStatus.jsx";
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 
@@ -27,6 +29,7 @@ export default function Settings({
   const [sendChecked, setSendChecked] = useState(!!sendSenderName);
   const [pickerError, setPickerError] = useState("");
   const [clearingCache, setClearingCache] = useState(false);
+  const pwaStatus = usePwaStatus();
 
   // Borra el service worker y el cache de la PWA (versión vieja de la app
   // que haya quedado servida offline) y recarga -- no toca `localStorage`,
@@ -84,6 +87,8 @@ export default function Settings({
       <div style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10 }}>
         CONFIGURACIÓN
       </div>
+
+      <ConnectionStatus offline={pwaStatus.offline} updateAvailable={pwaStatus.updateAvailable} lastOnlineAt={pwaStatus.lastOnlineAt} />
 
       {topSlot}
 

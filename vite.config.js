@@ -21,6 +21,10 @@ export default defineConfig(({ mode, isPreview }) => {
       react(),
       VitePWA({
         registerType: "autoUpdate",
+        // El registro lo hace a mano src/pwaStatus.js (vía virtual:pwa-register),
+        // no el script que el plugin inyectaría solo -- así se puede exponer el
+        // aviso de "hay una versión nueva" en Configuración.
+        injectRegister: false,
         includeAssets: ["icon-192.png", "icon-512.png"],
         workbox: {
           navigateFallback: `${base}index.html`,

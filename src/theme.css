@@ -1,3 +1,40 @@
+/* Fuente Archivo autohospedada (antes venía de fonts.googleapis.com) -- para
+   que la app funcione 100% offline después de la primera carga, sin depender
+   de que Google Fonts esté disponible. Solo el subset "latin" (cubre acentos
+   y ñ del español). Los archivos viven en src/assets/fonts -- así Vite los
+   procesa como cualquier otro asset (los copia con hash a dist/assets/ y
+   arma la URL final ya con el base "/inventario-procovar/" puesto, en vez de
+   una ruta absoluta a mano que en producción apuntaría mal). El service
+   worker los precachea igual que el resto (globPatterns incluye woff2). */
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-700.woff2") format("woff2");
+}
+
 /* Variables de color -- claro por default (igual a los hex que ya usaba
    la app), oscuro vía [data-theme="dark"] en <html>. El toggle vive en
    InventoryApp.jsx y persiste en localStorage bajo una key separada de
