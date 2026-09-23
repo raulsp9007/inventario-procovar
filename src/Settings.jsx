@@ -29,12 +29,23 @@ export default function Settings({
   const [sendChecked, setSendChecked] = useState(!!sendSenderName);
   const [pickerError, setPickerError] = useState("");
   const [clearingCache, setClearingCache] = useState(false);
+  const [clearCacheError, setClearCacheError] = useState("");
   const pwaStatus = usePwaStatus();
 
   // Borra el service worker y el cache de la PWA (versión vieja de la app
   // que haya quedado servida offline) y recarga -- no toca `localStorage`,
   // así que los pedidos/stock/config quedan intactos.
+  // Sin conexión esto es contraproducente: borra lo único que la app tiene
+  // para funcionar offline (el precache) y no hay manera de traer nada
+  // nuevo, así que el navegador cae a su propia caché HTTP -- que puede
+  // tener una versión de index.html/JS más vieja que la que se veía antes
+  // de tocar el botón. Por eso, sin conexión, no se toca nada.
   async function clearCacheAndReload() {
+    if (pwaStatus.offline) {
+      setClearCacheError("Necesitas internet para esto. Sin conexión no hay una versión nueva que traer, y podrías terminar viendo una todavía más vieja.");
+      return;
+    }
+    setClearCacheError("");
     setClearingCache(true);
     try {
       if ("serviceWorker" in navigator) {
@@ -267,6 +278,9 @@ export default function Settings({
           <RefreshCw size={16} />
           {clearingCache ? "Borrando caché…" : "Borrar caché y recargar"}
         </button>
+        {clearCacheError && (
+          <div style={{ fontSize: 12, color: "var(--error-text)", marginTop: 8 }}>{clearCacheError}</div>
+        )}
       </div>
 
       <div style={{ marginTop: 14, padding: "4px 6px 8px", textAlign: "center" }}>
