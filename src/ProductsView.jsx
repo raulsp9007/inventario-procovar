@@ -7,6 +7,7 @@ import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
 import { registryNames } from "./customerRegistry";
 import { unitPrice } from "./productFormats";
 import { getHlBackfill } from "./hlBackfill";
+import { customerLabel } from "./nameLabels";
 
 // Franja/agarradera de puntos (6, en 2 columnas x 3 filas) -- reemplaza el
 // ícono GripVertical de lucide para calzar con el diseño exacto del
@@ -1077,7 +1078,7 @@ export default function ProductsView({
                               style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: wi === 0 ? "none" : "1px solid var(--hairline)" }}
                             >
                               <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                {w.customerName}
+                                {customerLabel(w.customerName)}
                               </span>
                               <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>x{w.qty}</span>
                               <span style={{ flexShrink: 0, fontSize: 11, color: "var(--faint)" }}>{formatDate(w.createdAt.slice(0, 10))}</span>

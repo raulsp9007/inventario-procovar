@@ -5,6 +5,7 @@ import { formatCUP } from "./money";
 import { getCustomerOrders, getCustomerProductHistory, findNearDuplicateCustomerName, getProductBuyers, cubanPhoneLocalPart } from "./customerHelpers";
 import { getRegistryStats, registryNames, buildVcf } from "./customerRegistry";
 import { shareContactsFile } from "./backup";
+import { customerLabel, businessLabel } from "./nameLabels";
 
 // El picker de contactos del navegador (Contact Picker API) solo existe en
 // Chrome/Android por ahora -- repetido acá (igual que en OrderFormModal y
@@ -489,7 +490,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                         <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {c.customerName}
+                          {customerLabel(c.customerName)}
                         </span>
                         <span
                           onClick={(e) => { e.stopPropagation(); startRename(c.customerName, c.businessName, c.phone); }}
@@ -506,7 +507,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
                       </div>
                       {c.businessName && (
                         <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {c.businessName}
+                          {businessLabel(c.businessName)}
                         </div>
                       )}
                       {c.phone && (

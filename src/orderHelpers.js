@@ -1,5 +1,6 @@
 import { formatDate } from "./dateUtils";
 import { formatCUP } from "./money";
+import { customerLabel, businessLabel } from "./nameLabels";
 
 export function groupAllOrders(movements) {
   const orderMovements = movements.filter((m) => m.orderId);
@@ -112,8 +113,9 @@ export function formatOrderForWhatsApp(order, products, { senderName, sendSender
   const lines = [];
   if (sendSenderName && senderName && senderName.trim()) lines.push(senderName.trim());
   if (order.isDelivery) lines.push("🛺 Domicilio 🛺");
-  lines.push(order.customerName);
-  if (order.businessName && order.businessName.trim()) lines.push(order.businessName.trim());
+  lines.push(customerLabel(order.customerName));
+  const business = businessLabel(order.businessName);
+  if (business) lines.push(business);
   if (order.note && order.note.trim()) lines.push(order.note.trim());
   order.lines.forEach((line) => {
     const product = products.find((p) => p.code === line.code);

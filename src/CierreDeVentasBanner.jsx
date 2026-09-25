@@ -1,6 +1,7 @@
 import { Clock, CornerUpRight, Trash2, Check } from "lucide-react";
 import { formatHour12 } from "./dateUtils";
 import { PendingCounts } from "./CierrePendientesBanner.jsx";
+import { customerLabel } from "./nameLabels";
 
 // Aviso de cierre de ventas -- componente de presentación pura. La
 // condición de cuándo mostrarlo (activeSection/pastCierreDeVentas) y toda
@@ -41,7 +42,7 @@ export default function CierreDeVentasBanner({
         >
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {order.customerName}
+              {customerLabel(order.customerName)}
             </div>
             {(confirmingPostponeId === order.orderId || confirmingDeleteId === order.orderId) && (
               <div style={{ fontSize: 11, fontWeight: 600, color: confirmingDeleteId === order.orderId ? "var(--red)" : "var(--orange)" }}>

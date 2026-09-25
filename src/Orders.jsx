@@ -10,6 +10,7 @@ import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
 import CierreDeVentasBanner from "./CierreDeVentasBanner.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
+import { customerLabel, businessLabel } from "./nameLabels";
 
 const PAST_ORDERS_DAYS = 14;
 const FILTERS_STORAGE_KEY = "procovar-pedidos-filtros";
@@ -873,12 +874,12 @@ export default function Orders({ products, movements, customers, stock, prices, 
                 )}
                 {order.isDelivery && <MotoIcon size={15} color="var(--text)" />}
                 <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {order.customerName}
+                  {customerLabel(order.customerName)}
                 </span>
               </div>
               {sendBusinessName && order.businessName && (
                 <div style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {order.businessName}
+                  {businessLabel(order.businessName)}
                 </div>
               )}
             </div>

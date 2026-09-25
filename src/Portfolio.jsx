@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { formatCUP, getProductSalesTotals } from "./money";
 import { getCustomerSalesTotals } from "./customerHelpers";
 import { todayStr, getWeekStartStr, getMonthStartStr } from "./dateUtils";
+import { customerLabel } from "./nameLabels";
 
 const RANGES = [
   { value: "hoy", label: "Hoy" },
@@ -244,7 +245,7 @@ export default function Portfolio({ products, movements, showPrices }) {
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {row.customerName}
+                    {customerLabel(row.customerName)}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                     Favorito: {product ? product.short : "—"}

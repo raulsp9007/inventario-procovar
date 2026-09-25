@@ -1,4 +1,5 @@
 import { BellRing, X } from "lucide-react";
+import { customerLabel } from "./nameLabels";
 
 // Aviso al reponer un producto que estaba en 0 y tiene clientes en lista de
 // espera. Cada cliente se puede convertir en un pedido real (abre Nuevo
@@ -62,7 +63,7 @@ export default function WaitlistRestockBanner({ alerts, waitlist, products, stoc
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0, fontSize: 13.5 }}>
-                    <span style={{ fontWeight: 600 }}>{w.customerName}</span>
+                    <span style={{ fontWeight: 600 }}>{customerLabel(w.customerName)}</span>
                     <span style={{ marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>x{w.qty}</span>
                   </div>
                   <button

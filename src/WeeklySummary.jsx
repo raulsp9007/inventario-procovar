@@ -3,6 +3,7 @@ import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, f
 import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 import { getCustomerSalesTotals, getCustomerStats } from "./customerHelpers";
 import { isCommittedMovement } from "./orderHelpers";
+import { customerLabel, businessLabel } from "./nameLabels";
 
 export default function WeeklySummary({
   products,
@@ -138,9 +139,9 @@ export default function WeeklySummary({
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                   <span style={{ fontSize: 12, color: "var(--text-faint)", width: 14, flexShrink: 0 }}>{i + 1}</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {c.customerName}
+                    {customerLabel(c.customerName)}
                     {businessNameByCustomer[c.customerName] && (
-                      <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {businessNameByCustomer[c.customerName]}</span>
+                      <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {businessLabel(businessNameByCustomer[c.customerName])}</span>
                     )}
                   </span>
                 </div>
