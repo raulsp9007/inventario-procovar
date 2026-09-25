@@ -5,7 +5,7 @@ import { formatCUP, formatUSD, priceToCUP } from "./money";
 import Card from "./Card.jsx";
 import { groupAllOrders, reservedForTomorrow } from "./orderHelpers.js";
 import { registryNames } from "./customerRegistry";
-import { FORMAT_OPTIONS, unitPrice } from "./productFormats";
+import { unitPrice } from "./productFormats";
 import { getHlBackfill } from "./hlBackfill";
 
 // Franja/agarradera de puntos (6, en 2 columnas x 3 filas) -- reemplaza el
@@ -32,6 +32,7 @@ const DRAG_HOLD_MS = 120;
 
 export default function ProductsView({
   products,
+  productFormats,
   activeProducts,
   archivedProducts,
   stock,
@@ -769,13 +770,13 @@ export default function ProductsView({
                         }}
                       >
                         <option value="">Sin formato</option>
-                        {FORMAT_OPTIONS.map((f) => (
+                        {productFormats.map((f) => (
                           <option key={f.code} value={f.code}>{f.code} ({f.units})</option>
                         ))}
                       </select>
                     </div>
                     {showPrices && editFormatInputs[p.code] && (() => {
-                      const u = unitPrice(parseFloat(editPriceInputs[p.code]) || 0, editFormatInputs[p.code], exchangeRate);
+                      const u = unitPrice(productFormats, parseFloat(editPriceInputs[p.code]) || 0, editFormatInputs[p.code], exchangeRate);
                       return u ? (
                         <div style={{ fontSize: 11.5, color: "var(--green)", textAlign: "right", paddingBottom: 6 }}>
                           Unidad: {u.usd != null ? `${formatUSD(u.usd)} · ` : ""}{formatCUP(u.cup)}
@@ -949,7 +950,7 @@ export default function ProductsView({
                         )
                       )}
                       {showPrices && p.format && (() => {
-                        const u = unitPrice(prices[p.code], p.format, exchangeRate);
+                        const u = unitPrice(productFormats, prices[p.code], p.format, exchangeRate);
                         return u ? (
                           <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--green)", marginTop: 1 }}>
                             Unidad:{" "}

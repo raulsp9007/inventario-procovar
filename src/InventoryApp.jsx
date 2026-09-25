@@ -49,6 +49,7 @@ export default function InventoryApp() {
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
     customers, deleteCustomer,
+    productFormats, saveProductFormat, deleteProductFormat,
     storageProtected, loadProblem, dismissLoadProblem, getCorruptCopy, restorePreviousCopy, autoCopyAt,
     applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
@@ -235,6 +236,7 @@ export default function InventoryApp() {
         {view === "stock" && (
           <ProductsView
             products={products}
+            productFormats={productFormats}
             activeProducts={activeProducts}
             archivedProducts={archivedProducts}
             stock={stock}
@@ -418,6 +420,10 @@ export default function InventoryApp() {
             commissionPercent={commissionPercent}
             hlGoal={hlGoal}
             sendBusinessName={sendBusinessName}
+            productFormats={productFormats}
+            products={products}
+            onSaveProductFormat={saveProductFormat}
+            onDeleteProductFormat={deleteProductFormat}
           />
         )}
 

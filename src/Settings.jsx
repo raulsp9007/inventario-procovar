@@ -4,6 +4,7 @@ import { COPYRIGHT_NOTICE, LICENSE_SUMMARY } from "./legal.js";
 import { formatHour12 } from "./dateUtils.js";
 import { usePwaStatus } from "./pwaStatus.js";
 import ConnectionStatus from "./ConnectionStatus.jsx";
+import ProductFormatsCard from "./ProductFormatsCard.jsx";
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 
@@ -21,6 +22,7 @@ export default function Settings({
   theme, onToggleTheme,
   showPrices, onToggleShowPrices,
   commissionPercent, hlGoal, sendBusinessName,
+  productFormats, products, onSaveProductFormat, onDeleteProductFormat,
   topSlot,
 }) {
   const [phoneInput, setPhoneInput] = useState(whatsappPhone || "");
@@ -259,6 +261,13 @@ export default function Settings({
           </div>
         </div>
       </div>
+
+      <ProductFormatsCard
+        formats={productFormats}
+        products={products}
+        onSaveProductFormat={onSaveProductFormat}
+        onDeleteProductFormat={onDeleteProductFormat}
+      />
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Actualizar app</div>

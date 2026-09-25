@@ -8,6 +8,7 @@ import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 import { getHlBackfill, isHlBackfillable } from "./hlBackfill";
 import { buildRegistryFromMovements, upsertCustomer, patchCustomer, renameCustomer, removeCustomer } from "./customerRegistry";
+import { DEFAULT_PRODUCT_FORMATS, buildInitialProductFormats, upsertProductFormat, removeProductFormat } from "./productFormats";
 
 const DEFAULT_PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
@@ -105,6 +106,13 @@ export function useInventoryStore() {
   // Registro de clientes propio (ver customerRegistry.js): vive aparte de los
   // movimientos, así un cliente no desaparece al borrar sus pedidos.
   const [customers, setCustomers] = useState([]);
+  // Formatos de venta editables desde Configuración (ver productFormats.js).
+  // Arranca con la lista de siempre -- mismo patrón que `products` con
+  // DEFAULT_PRODUCTS -- así una instalación nueva (sin nada guardado
+  // todavía, applyPersistedData ni se llega a llamar) ya tiene opciones para
+  // elegir en el desplegable, en vez de un formulario vacío hasta el primer
+  // guardado.
+  const [productFormats, setProductFormats] = useState(DEFAULT_PRODUCT_FORMATS);
   // null = todavía no se sabe. false = el navegador no garantiza conservar los
   // datos (puede borrarlos si falta espacio).
   const [storageProtected, setStorageProtected] = useState(null);
@@ -177,7 +185,7 @@ export function useInventoryStore() {
   }
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
-    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, waitlist, customers, whatsappPhone,
+    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, waitlist, customers, productFormats, whatsappPhone,
     whatsappContactName, cierreVentasHour,
     senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
     // Marca de que la numeración de pedidos ya es por día (ver applyPersistedData).
@@ -250,6 +258,13 @@ export function useInventoryStore() {
     const nextCustomers = migratedCustomers
       ? nextWaitlist.reduce((list, w) => upsertCustomer(list, { name: w.customerName }), buildRegistryFromMovements(loadedMovements))
       : parsed.customers;
+    // Migración única: antes los formatos eran una lista fija en el código,
+    // ahora se guardan acá -- se siembra con esa misma lista de siempre
+    // (más cualquier formato ya usado que faltara, ver buildInitialProductFormats).
+    const migratedProductFormats = !Array.isArray(parsed.productFormats);
+    const nextProductFormats = migratedProductFormats
+      ? buildInitialProductFormats(loadedProducts)
+      : parsed.productFormats;
     const nextWhatsappPhone = parsed.whatsappPhone || "";
     const nextWhatsappContactName = parsed.whatsappContactName || "";
     const nextCierreVentasHour = parsed.cierreVentasHour ?? null;
@@ -277,6 +292,7 @@ export function useInventoryStore() {
     setDailyHlGoal(nextDailyHlGoal);
     setWaitlist(nextWaitlist);
     setCustomers(nextCustomers);
+    setProductFormats(nextProductFormats);
     setWhatsappPhone(nextWhatsappPhone);
     setWhatsappContactName(nextWhatsappContactName);
     setCierreVentasHour(nextCierreVentasHour);
@@ -285,13 +301,13 @@ export function useInventoryStore() {
     setSendBusinessName(nextSendBusinessName);
     setLastBackupAt(nextLastBackupAt);
 
-    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq) {
+    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats) {
       persist({
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
         cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
-        dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist, customers: nextCustomers, orderSeqPerDay: true,
+        dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist, customers: nextCustomers, productFormats: nextProductFormats, orderSeqPerDay: true,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
         lastBackupAt: nextLastBackupAt,
@@ -690,6 +706,35 @@ export function useInventoryStore() {
     if (nextProducts.some((p) => !p)) return;
     setProducts(nextProducts);
     persist({ ...currentPersistedState, products: nextProducts });
+  }
+
+  // Alta o edición de un formato de venta (Configuración > Formatos de
+  // venta). Mismo nombre ya existente = le cambia las unidades en el lugar
+  // (ver upsertProductFormat) -- así se puede corregir un formato sin que
+  // los productos que ya lo usan se queden sin referencia.
+  function saveProductFormat(input) {
+    const { formats: nextFormats, error } = upsertProductFormat(productFormats, input);
+    if (error) {
+      setError(error);
+      setTimeout(() => setError(""), 3000);
+      return;
+    }
+    setProductFormats(nextFormats);
+    persist({ ...currentPersistedState, productFormats: nextFormats });
+  }
+
+  // No deja borrar un formato que algún producto todavía tiene puesto (ver
+  // removeProductFormat) -- avisa cuáles para que se les cambie el formato
+  // primero.
+  function deleteProductFormat(code) {
+    const { formats: nextFormats, error } = removeProductFormat(productFormats, code, products);
+    if (error) {
+      setError(error);
+      setTimeout(() => setError(""), 4000);
+      return;
+    }
+    setProductFormats(nextFormats);
+    persist({ ...currentPersistedState, productFormats: nextFormats });
   }
 
   // Venta suelta sin cliente real (ej. venta de mostrador que no se armó
@@ -1103,6 +1148,7 @@ export function useInventoryStore() {
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
     customers, deleteCustomer,
+    productFormats, saveProductFormat, deleteProductFormat,
     storageProtected, loadProblem, dismissLoadProblem, getCorruptCopy, restorePreviousCopy, autoCopyAt,
     applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,

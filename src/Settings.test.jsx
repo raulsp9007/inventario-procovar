@@ -22,6 +22,7 @@ function baseProps(overrides = {}) {
     theme: "light", onToggleTheme: () => {},
     showPrices: true, onToggleShowPrices: () => {},
     commissionPercent: 0, hlGoal: null, sendBusinessName: true,
+    productFormats: [], products: [], onSaveProductFormat: () => {}, onDeleteProductFormat: () => {},
     ...overrides,
   };
 }
