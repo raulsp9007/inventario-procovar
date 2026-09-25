@@ -101,14 +101,19 @@ export function groupOrders(movements, dateStr) {
   return groupAllOrders(movements).filter((order) => order.date === dateStr);
 }
 
-// El nombre del negocio es solo para mostrar dentro de la app (fila del
-// pedido) -- nunca se manda en el mensaje de WhatsApp, sin importar el
-// checkbox "Mostrar negocio en todos los pedidos".
+// Mensaje al facturador (contacto de negocio configurado en Config): lleva
+// el negocio del cliente si está guardado, justo debajo de su nombre --
+// ayuda a identificar el pedido cuando el cliente compra a nombre de un
+// local. Independiente del checkbox "Mostrar negocio en Pedidos" (ese solo
+// controla la fila del pedido dentro de la app). El mensaje AL CLIENTE
+// (formatOrderForCustomer) no lleva esto -- no tiene sentido decirle a él
+// mismo el nombre de su propio negocio.
 export function formatOrderForWhatsApp(order, products, { senderName, sendSenderName } = {}) {
   const lines = [];
   if (sendSenderName && senderName && senderName.trim()) lines.push(senderName.trim());
   if (order.isDelivery) lines.push("🛺 Domicilio 🛺");
   lines.push(order.customerName);
+  if (order.businessName && order.businessName.trim()) lines.push(order.businessName.trim());
   if (order.note && order.note.trim()) lines.push(order.note.trim());
   order.lines.forEach((line) => {
     const product = products.find((p) => p.code === line.code);

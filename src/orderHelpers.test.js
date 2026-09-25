@@ -276,10 +276,27 @@ describe("formatOrderForWhatsApp", () => {
     expect(text).toBe("🛺 Domicilio 🛺\nCliente A\nSin hielo\nParranda 1500ml - 1");
   });
 
-  it("nunca manda el nombre del negocio en el mensaje, aunque el pedido tenga uno guardado (es solo para mostrar en la app)", () => {
+  it("incluye el negocio (si el pedido tiene uno guardado) justo debajo del cliente", () => {
     const order = { customerName: "Cliente A", businessName: "Bar Cliente A", isDelivery: false, note: "", lines: [{ code: "P1500", qty: 1 }] };
     const text = formatOrderForWhatsApp(order, products, {});
+    expect(text).toBe("Cliente A\nBar Cliente A\nParranda 1500ml - 1");
+  });
+
+  it("sin negocio guardado, no agrega esa línea", () => {
+    const order = { customerName: "Cliente A", businessName: "", isDelivery: false, note: "", lines: [{ code: "P1500", qty: 1 }] };
+    const text = formatOrderForWhatsApp(order, products, {});
     expect(text).toBe("Cliente A\nParranda 1500ml - 1");
+    expect(formatOrderForWhatsApp({ ...order, businessName: undefined }, products, {})).toBe(text);
+    expect(formatOrderForWhatsApp({ ...order, businessName: "   " }, products, {})).toBe(text);
+  });
+
+  it("negocio, domicilio, nota y remitente juntos van en el orden: remitente, domicilio, cliente, negocio, nota, productos", () => {
+    const order = {
+      customerName: "Cliente A", businessName: "Bar Cliente A", isDelivery: true, note: "Sin hielo",
+      lines: [{ code: "P1500", qty: 1 }],
+    };
+    const text = formatOrderForWhatsApp(order, products, { senderName: "Raul", sendSenderName: true });
+    expect(text).toBe("Raul\n🛺 Domicilio 🛺\nCliente A\nBar Cliente A\nSin hielo\nParranda 1500ml - 1");
   });
 
   it("agrega el nombre del remitente solo si sendSenderName está activo", () => {
