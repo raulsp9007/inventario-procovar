@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search, Phone, Contact, BookUser, Trash2 } from "lucide-react";
 import { formatDate, todayStr } from "./dateUtils";
 import { formatCUP } from "./money";
@@ -69,7 +69,7 @@ function sortStats(stats, sortBy, buyers) {
 
 const SORT_LABELS = { recent: "Reciente", oldest: "Antiguo", name: "Nombre A-Z", qty: "Más unidades" };
 
-export default function Customers({ products, movements, customers, waitlist, showPrices, sendBusinessName, onToggleSendBusinessName, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData }) {
+export default function Customers({ products, movements, customers, waitlist, showPrices, sendBusinessName, onToggleSendBusinessName, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData, openCustomer, onOpenCustomerConsumed }) {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [sortBy, setSortBy] = useState("recent");
@@ -83,6 +83,17 @@ export default function Customers({ products, movements, customers, waitlist, sh
   const [phonePickerError, setPhonePickerError] = useState("");
   const [contactsNotice, setContactsNotice] = useState("");
   const [pendingUndo, setPendingUndo] = useState(null); // { message, snapshot, timeoutId } | null
+  const rowRefs = useRef({});
+
+  // Al llegar desde "tocar el nombre" en Pedidos: abre esa ficha y le hace
+  // scroll -- se consume enseguida para no re-abrirla si el cliente la
+  // cierra y algo más en la app vuelve a renderizar este componente.
+  useEffect(() => {
+    if (!openCustomer) return;
+    setExpandedCustomer(openCustomer);
+    rowRefs.current[openCustomer]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    onOpenCustomerConsumed();
+  }, [openCustomer, onOpenCustomerConsumed]);
 
   function startRename(customerName, businessName, phone) {
     setEditingCustomer(customerName);
@@ -365,7 +376,11 @@ export default function Customers({ products, movements, customers, waitlist, sh
             const orders = isExpanded && mode === "pedido" ? getCustomerOrders(movements, c.customerName) : [];
             const productHistory = isExpanded && mode === "producto" ? getCustomerProductHistory(movements, c.customerName) : [];
             return (
-              <div key={c.customerName} style={{ borderTop: i === 0 ? "none" : "1px solid var(--hairline)" }}>
+              <div
+                key={c.customerName}
+                ref={(el) => { rowRefs.current[c.customerName] = el; }}
+                style={{ borderTop: i === 0 ? "none" : "1px solid var(--hairline)" }}
+              >
                 {editingCustomer === c.customerName ? (
                   <div style={{ padding: 14 }}>
                     <div style={{ marginBottom: 8 }}>

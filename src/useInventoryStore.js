@@ -910,7 +910,7 @@ export function useInventoryStore() {
       const unitPrice = priceToCUP(prices[code], exchangeRate);
       const product = products.find((p) => p.code === code);
       const unitHl = product?.hl || 0;
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone ? toCubanPhone(customerPhone) : "", isDelivery, note, bucket, date, sent: nextSent }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone ? toCubanPhone(customerPhone) : "", isDelivery, note, bucket, date, sent: nextSent, timestamp: originalMovements[0].timestamp }));
       if (willBeCommitted) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;

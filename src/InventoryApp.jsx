@@ -43,6 +43,9 @@ export default function InventoryApp() {
   // Cliente de la lista de espera al que se le va a hacer el pedido: Orders
   // lo consume al montarse (abre Nuevo pedido ya cargado) y lo limpia.
   const [orderPrefill, setOrderPrefill] = useState(null);
+  // Nombre del cliente tocado desde Pedidos: Customers lo consume al
+  // montarse (expande su ficha) y lo limpia.
+  const [customerToOpen, setCustomerToOpen] = useState(null);
   const {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
@@ -343,6 +346,7 @@ export default function InventoryApp() {
               setError(message);
               setTimeout(() => setError(""), 2500);
             }}
+            onSelectCustomer={(name) => { setCustomerToOpen(name); setView("clientes"); }}
             cierreVentasHour={cierreVentasHour}
             dailyHlGoal={dailyHlGoal}
             prefill={orderPrefill}
@@ -368,6 +372,8 @@ export default function InventoryApp() {
             onUpdateCustomer={updateCustomer}
             onDeleteCustomer={deleteCustomer}
             onRestoreCustomerData={restoreCustomerData}
+            openCustomer={customerToOpen}
+            onOpenCustomerConsumed={() => setCustomerToOpen(null)}
           />
         )}
 

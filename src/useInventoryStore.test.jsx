@@ -63,3 +63,30 @@ describe("useInventoryStore -- ajuste global de mostrar negocio", () => {
     expect(persisted.sendBusinessName).toBe(false);
   });
 });
+
+describe("useInventoryStore -- editar un pedido no cambia su posición en la lista", () => {
+  it("editOrder conserva el timestamp original (no sube al tope de 'recientes')", async () => {
+    const { result } = await renderLoadedStore();
+    const code = result.current.products[0].code;
+    act(() => {
+      result.current.confirmOrder({
+        customerName: "Ana", businessName: "", customerPhone: "", isDelivery: false, note: "",
+        lines: [{ code, qty: 1 }], bucket: "hoy",
+      });
+    });
+    await waitFor(() => expect(result.current.movements.some((m) => m.customerName === "Ana")).toBe(true));
+    const orderId = result.current.movements.find((m) => m.customerName === "Ana").orderId;
+    const originalTimestamp = result.current.movements.find((m) => m.orderId === orderId).timestamp;
+
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+
+    act(() => {
+      result.current.editOrder(orderId, {
+        customerName: "Ana", businessName: "", customerPhone: "", isDelivery: false, note: "",
+        lines: [{ code, qty: 2 }], bucket: "hoy",
+      });
+    });
+    await waitFor(() => expect(result.current.movements.find((m) => m.orderId === orderId).qty).toBe(2));
+    expect(result.current.movements.find((m) => m.orderId === orderId).timestamp).toBe(originalTimestamp);
+  });
+});

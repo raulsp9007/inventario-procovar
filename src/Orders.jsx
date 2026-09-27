@@ -179,7 +179,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed }) {
+export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -886,9 +886,16 @@ export default function Orders({ products, movements, customers, stock, prices, 
                   <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 500, color: "var(--faintest)", fontVariantNumeric: "tabular-nums" }}>#{order.orderSeq}</span>
                 )}
                 {order.isDelivery && <MotoIcon size={15} color="var(--text)" />}
-                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <button
+                  onClick={() => onSelectCustomer(order.customerName)}
+                  style={{
+                    flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, margin: 0,
+                    fontFamily: "inherit", fontSize: 15, fontWeight: 600, color: "var(--text)", cursor: "pointer",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}
+                >
                   {customerLabel(order.customerName)}
-                </span>
+                </button>
               </div>
               {sendBusinessName && order.businessName && (
                 <div style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
