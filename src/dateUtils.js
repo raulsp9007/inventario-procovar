@@ -16,6 +16,26 @@ export function tomorrowStr() {
   return toDateStr(d);
 }
 
+// N días después de dateStr (formato "YYYY-MM-DD"). Puede ser negativo.
+export function addDaysStr(dateStr, days) {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return toDateStr(d);
+}
+
+export function isSundayStr(dateStr) {
+  return new Date(dateStr + "T00:00:00").getDay() === 0;
+}
+
+// Los domingos no se despacha -- el "próximo día que sí" es hoy + 1, salvo
+// que hoy sea sábado: ahí se salta el domingo y cae directo en lunes. Se usa
+// en vez de tomorrowStr() en todo lo que agenda un pedido a futuro (Para
+// mañana, posponer, etc.) -- tomorrowStr() se deja tal cual para el resto.
+export function nextBusinessDayStr(referenceDateStr = todayStr()) {
+  const day = new Date(referenceDateStr + "T00:00:00").getDay(); // 0 domingo ... 6 sábado
+  return addDaysStr(referenceDateStr, day === 6 ? 2 : 1);
+}
+
 // "3 PM" / "4:00 PM" de una hora 0-23 -- para mostrar la hora del cierre de ventas.
 export function formatHour12(h) {
   const period = h < 12 ? "AM" : "PM";

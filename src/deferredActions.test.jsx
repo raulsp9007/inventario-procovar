@@ -50,6 +50,9 @@ function stageDeleteFirstCard() {
 beforeEach(() => {
   localStorage.clear();
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  // Fijo a un lunes: sin esto, el reloj real del entorno puede caer en
+  // domingo (Hoy bloqueado) y estos tests dejan de tener sentido.
+  vi.setSystemTime(new Date("2026-09-21T09:00:00"));
 });
 
 afterEach(() => {

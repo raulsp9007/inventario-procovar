@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X, Check, Info, AlertTriangle, ChevronDown, History, Contact, Lock } from "lucide-react";
-import { tomorrowStr, formatDateShort, formatDate } from "./dateUtils";
+import { nextBusinessDayStr, formatDateShort, formatDate } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
 import { productChipColors } from "./colorUtils";
 import { getCustomerProductHistory } from "./customerHelpers";
@@ -26,7 +26,7 @@ function draftTotal(draftLines, prices, exchangeRate) {
 export default function OrderFormModal({
   open, onClose, editingOrderId, editingOrderSeq,
   draftBucket, onDraftBucketChange,
-  hoyLocked, cierreHourLabel,
+  hoyLocked, hoyLockedMessage,
   draftDate, onDraftDateChange,
   customerName, onCustomerNameChange,
   businessName, onBusinessNameChange,
@@ -123,7 +123,7 @@ export default function OrderFormModal({
             <button
               onClick={() => onDraftBucketChange("hoy")}
               disabled={hoyLocked}
-              title={hoyLocked ? "Ya pasó el cierre de ventas" : undefined}
+              title={hoyLocked ? hoyLockedMessage : undefined}
               style={{
                 flex: 1, height: 34, borderRadius: 7, border: "none", fontSize: 13, fontWeight: 600,
                 cursor: hoyLocked ? "not-allowed" : "pointer",
@@ -154,9 +154,7 @@ export default function OrderFormModal({
               border: "1px solid var(--border-warn)", borderRadius: 10, padding: "8px 12px", fontSize: 12.5, color: "var(--text)", lineHeight: 1.4,
             }}>
               <Lock size={14} strokeWidth={2} color="var(--orange)" style={{ flexShrink: 0, marginTop: 2 }} />
-              <span>
-                Ya pasó el cierre de ventas{cierreHourLabel ? ` de las ${cierreHourLabel}` : ""}. Este pedido se guarda para mañana.
-              </span>
+              <span>{hoyLockedMessage}</span>
             </div>
           )}
 
@@ -173,7 +171,7 @@ export default function OrderFormModal({
                   <input
                     type="date"
                     value={draftDate}
-                    min={tomorrowStr()}
+                    min={nextBusinessDayStr()}
                     onChange={(e) => onDraftDateChange(e.target.value)}
                     style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", border: "none" }}
                   />

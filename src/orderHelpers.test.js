@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, isPastCierre, getCierrePending } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, isPastCierre, getCierrePending, fixSundayScheduledOrders } from "./orderHelpers";
 
 function makeMovement(overrides = {}) {
   return {
@@ -415,5 +415,44 @@ describe("getCierrePending", () => {
     const p = getCierrePending(orders, TODAY);
     expect(p.unconfirmedOrders.map((o) => o.orderId)).toEqual(["a"]);
     expect(p.orders.map((o) => o.orderId).sort()).toEqual(["a", "c"]);
+  });
+});
+
+describe("fixSundayScheduledOrders", () => {
+  it("corre al lunes un pedido 'para mañana' sin enviar que haya quedado en domingo", () => {
+    const movements = [makeMovement({ bucket: "manana", date: "2026-09-27", sent: false })]; // domingo
+    const next = fixSundayScheduledOrders(movements);
+    expect(next[0].date).toBe("2026-09-28"); // lunes
+    expect(next[0]).not.toBe(movements[0]);
+  });
+
+  it("no toca uno ya enviado (comprometido), aunque su fecha sea domingo", () => {
+    const movements = [makeMovement({ bucket: "manana", date: "2026-09-27", sent: true })];
+    expect(fixSundayScheduledOrders(movements)).toBe(movements);
+  });
+
+  it("no toca uno de bucket 'hoy', aunque su fecha sea domingo", () => {
+    const movements = [makeMovement({ bucket: "hoy", date: "2026-09-27", sent: true })];
+    expect(fixSundayScheduledOrders(movements)).toBe(movements);
+  });
+
+  it("no toca uno 'para mañana' que ya cae en un día que no es domingo", () => {
+    const movements = [makeMovement({ bucket: "manana", date: "2026-09-28", sent: false })];
+    expect(fixSundayScheduledOrders(movements)).toBe(movements);
+  });
+
+  it("devuelve el mismo array si no hay nada que corregir", () => {
+    const movements = [makeMovement({ bucket: "hoy", date: "2026-09-25" })];
+    expect(fixSundayScheduledOrders(movements)).toBe(movements);
+  });
+
+  it("corrige varios pedidos y dentro de un mismo pedido (varias líneas) a la vez", () => {
+    const movements = [
+      makeMovement({ orderId: "o1", code: "P1500", bucket: "manana", date: "2026-09-27", sent: false }),
+      makeMovement({ orderId: "o1", code: "P500", bucket: "manana", date: "2026-09-27", sent: false }),
+      makeMovement({ orderId: "o2", bucket: "manana", date: "2026-09-27", sent: false }),
+    ];
+    const next = fixSundayScheduledOrders(movements);
+    expect(next.every((m) => m.date === "2026-09-28")).toBe(true);
   });
 });

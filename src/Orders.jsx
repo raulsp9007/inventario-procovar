@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus } from "lucide-react";
-import { todayStr, tomorrowStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
+import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
@@ -188,7 +188,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
   const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
   const [draftBucket, setDraftBucket] = useState("hoy");
-  const [draftDate, setDraftDate] = useState(() => tomorrowStr());
+  const [draftDate, setDraftDate] = useState(() => nextBusinessDayStr());
   const [pendingReserveConfirm, setPendingReserveConfirm] = useState(null); // { draft, reserveDips } | null
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
@@ -252,7 +252,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // la medianoche, getHours() vuelve a 0 así que esto vuelve a dar "hoy"
   // sin nada especial para la medianoche.
   const [activeSection, setActiveSection] = useState(() =>
-    isPastCierre(cierreVentasHour) ? "manana" : "hoy"
+    (isPastCierre(cierreVentasHour) || isSundayStr(todayStr())) ? "manana" : "hoy"
   );
   const [modalOpen, setModalOpen] = useState(false);
   // Bloquea envíos repetidos (doble clic/doble toque) mientras el formulario
@@ -311,7 +311,11 @@ export default function Orders({ products, movements, customers, stock, prices, 
   const today = todayStr();
   const belongsToToday = (o) => o.date === today;
   const isUpcoming = (o) => o.date > today;
-  const pastCierreDeVentas = isPastCierre(cierreVentasHour);
+  // Los domingos no se despacha: "Hoy" queda bloqueado todo el día, igual
+  // que pasado el cierre de ventas (mismo candado, misma reprogramación a
+  // "para mañana" -- ver hoyLocked más abajo).
+  const todayIsSunday = isSundayStr(today);
+  const pastCierreDeVentas = isPastCierre(cierreVentasHour) || todayIsSunday;
   const searchTerm = orderSearch.trim().toLowerCase();
   const pastCutoff = getDateNDaysAgoStr(PAST_ORDERS_DAYS, today);
 
@@ -400,6 +404,9 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // van para mañana. Editar un pedido que YA es de hoy sigue permitido.
   const editingOrderIsHoy = !!editingOrderId && allOrders.find((o) => o.orderId === editingOrderId)?.bucket === "hoy";
   const hoyLocked = pastCierreDeVentas && !editingOrderIsHoy;
+  const hoyLockedMessage = todayIsSunday
+    ? "Los domingos no se despacha. Este pedido se guarda para el próximo día hábil."
+    : `Ya pasó el cierre de ventas${cierreVentasHour != null ? ` de las ${formatHour12(cierreVentasHour)}` : ""}. Este pedido se guarda para mañana.`;
 
   // Solo entra al panel si queda algo libre para prometer, o si ya tiene
   // reservas encima (aunque esté en 0 libre) -- un producto sin nada de
@@ -491,7 +498,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
     waitlistEntryIdRef.current = null;
     // No se resetea draftBucket: si confirmaste un pedido Programado,
     // te quedás en "Programar" para seguir cargando pedidos del mismo tipo.
-    setDraftDate(tomorrowStr());
+    setDraftDate(nextBusinessDayStr());
   }
 
   // Pedido armado desde la lista de espera (banner al reponer stock): abre
@@ -523,7 +530,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
     setEditingOrderId(order.orderId);
     setEditingOrderSeq(order.orderSeq);
     setDraftBucket(order.bucket);
-    setDraftDate(order.bucket === "manana" ? order.date : tomorrowStr());
+    setDraftDate(order.bucket === "manana" ? order.date : nextBusinessDayStr());
     setModalOpen(true);
   }
 
@@ -625,9 +632,11 @@ export default function Orders({ products, movements, customers, stock, prices, 
     if (submittingRef.current) return;
     // El modal pudo quedar abierto desde antes de la hora del cierre: si ya
     // pasó, el pedido nuevo no puede ser de hoy.
-    if (isPastCierre(cierreVentasHour) && draftBucket === "hoy" && !editingOrderIsHoy) {
+    if (pastCierreDeVentas && draftBucket === "hoy" && !editingOrderIsHoy) {
       setDraftBucket("manana");
-      onError("Ya pasó el cierre de ventas: el pedido se guarda para mañana. Revísalo y confírmalo de nuevo.");
+      onError(todayIsSunday
+        ? "Los domingos no se despacha: el pedido se guarda para el próximo día hábil. Revísalo y confírmalo de nuevo."
+        : "Ya pasó el cierre de ventas: el pedido se guarda para mañana. Revísalo y confírmalo de nuevo.");
       return;
     }
     if (!customerName.trim()) {
@@ -643,6 +652,10 @@ export default function Orders({ products, movements, customers, stock, prices, 
     }
     if (draftBucket === "manana" && (!draftDate || draftDate <= today)) {
       onError("Elegí una fecha futura para el pedido programado.");
+      return;
+    }
+    if (draftBucket === "manana" && isSundayStr(draftDate)) {
+      onError("No se despacha los domingos, elegí otro día.");
       return;
     }
     const reserveDips = [];
@@ -745,7 +758,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
       note: order.note,
       lines: order.lines.map((l) => ({ code: l.code, qty: l.qty })),
       bucket: "manana",
-      date: tomorrowStr(),
+      date: nextBusinessDayStr(),
       forceSent: false,
     });
   }
@@ -1475,7 +1488,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
         draftBucket={draftBucket}
         onDraftBucketChange={(bucket) => { if (bucket === "hoy" && hoyLocked) return; setDraftBucket(bucket); }}
         hoyLocked={hoyLocked}
-        cierreHourLabel={cierreVentasHour != null ? formatHour12(cierreVentasHour) : ""}
+        hoyLockedMessage={hoyLockedMessage}
         draftDate={draftDate}
         onDraftDateChange={setDraftDate}
         customerName={customerName}

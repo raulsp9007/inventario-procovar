@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import InventoryApp from "./InventoryApp";
 import { todayStr } from "./dateUtils";
@@ -27,6 +27,14 @@ function seed(view) {
 
 beforeEach(() => {
   localStorage.clear();
+  // Fijo a un lunes: el pedido sembrado es bucket "hoy", y un domingo real
+  // la pestaña Pedidos arranca en "Para mañana" (ver Sunday lock).
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date("2026-09-21T09:00:00"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("iconos de cliente y negocio en la app", () => {

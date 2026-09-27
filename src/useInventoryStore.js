@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getData, setData } from "./storage";
-import { todayStr, tomorrowStr, daysSince } from "./dateUtils";
-import { isCommittedMovement, computeScheduledTransition, nextOrderSeq, renumberOpenOrders } from "./orderHelpers";
+import { todayStr, nextBusinessDayStr, daysSince } from "./dateUtils";
+import { isCommittedMovement, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, fixSundayScheduledOrders } from "./orderHelpers";
 import { toCubanPhone } from "./customerHelpers";
 import { totalHlSold, priceToCUP } from "./money";
 import { parseBackupFile } from "./backup";
@@ -228,9 +228,15 @@ export function useInventoryStore() {
     // Migración única: la numeración de pedidos era global (#1, #2, ... sin
     // fin) y ahora se reinicia cada día -- se renumeran los de hoy y futuros.
     const migratedOrderSeq = !parsed.orderSeqPerDay;
-    const loadedMovements = migratedOrderSeq
+    const renumberedMovements = migratedOrderSeq
       ? renumberOpenOrders(parsed.movements || [], todayStr())
       : (parsed.movements || []);
+    // Los domingos no se despacha: corrige solos los pedidos "para mañana"
+    // sin facturar que hayan quedado agendados un domingo (de antes de esta
+    // regla, o de un backup viejo). Sin bandera -- se repite en cada carga,
+    // gratis si no encuentra nada (ver fixSundayScheduledOrders).
+    const loadedMovements = fixSundayScheduledOrders(renumberedMovements);
+    const sundayScheduleFixed = loadedMovements !== renumberedMovements;
     const loadedProducts = parsed.products || DEFAULT_PRODUCTS;
     const nextStock = parsed.stock || {};
     const nextLastAdjustedAt = parsed.lastAdjustedAt || {};
@@ -301,7 +307,7 @@ export function useInventoryStore() {
     setSendBusinessName(nextSendBusinessName);
     setLastBackupAt(nextLastBackupAt);
 
-    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats) {
+    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats || sundayScheduleFixed) {
       persist({
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
@@ -471,7 +477,9 @@ export function useInventoryStore() {
   // reservas para mañana sin comprometer todavía -- una vez enviados,
   // ambos dejan de aparecer acá porque ya no son "pendientes de envío".
   const todayCal = todayStr();
-  const tomorrowCal = tomorrowStr();
+  // Los domingos no se despacha: el "mañana" relevante es el próximo día
+  // hábil (un sábado, eso es el lunes -- ver nextBusinessDayStr).
+  const nextBizDayCal = nextBusinessDayStr(todayCal);
   const { todaysMovements, mananaMovements } = useMemo(() => {
     const todaysMovements = movements.filter((m) => {
       if (m.date !== todayCal) return false;
@@ -480,11 +488,11 @@ export function useInventoryStore() {
     const mananaMovements = movements.filter((m) => {
       if (m.type !== "venta") return false;
       if (m.date === todayCal) return !m.sent;
-      if (m.date === tomorrowCal) return !isCommittedMovement(m);
+      if (m.date === nextBizDayCal) return !isCommittedMovement(m);
       return false;
     });
     return { todaysMovements, mananaMovements };
-  }, [movements, todayCal, tomorrowCal]);
+  }, [movements, todayCal, nextBizDayCal]);
 
   // Aviso temprano antes de llegar al tope -- así hay tiempo de exportar un
   // respaldo antes de que los movimientos más viejos empiecen a perderse.
@@ -778,7 +786,7 @@ export function useInventoryStore() {
   function confirmOrder({ customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate, waitlistEntryId }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const committed = bucket === "hoy";
-    const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
+    const date = bucket === "hoy" ? todayStr() : (chosenDate || nextBusinessDayStr());
     // Numero solo para ubicar el pedido en la app (no se manda por WhatsApp).
     // Se reinicia cada dia -- se deriva del maximo de esa fecha en vez de
     // guardar un contador aparte.
@@ -887,7 +895,7 @@ export function useInventoryStore() {
 
     const nextSent = forceSent !== undefined ? forceSent : wasSent;
     const willBeCommitted = bucket === "hoy" || (bucket === "manana" && nextSent);
-    const date = bucket === "hoy" ? todayStr() : (chosenDate || tomorrowStr());
+    const date = bucket === "hoy" ? todayStr() : (chosenDate || nextBusinessDayStr());
     // Si el pedido cambia de día (pospuesto, o editado a otra fecha) toma el
     // siguiente número del día nuevo; si no, conserva el suyo.
     const orderSeq = date !== originalMovements[0].date

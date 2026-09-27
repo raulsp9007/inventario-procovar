@@ -28,8 +28,11 @@ function saved() {
   return JSON.parse(localStorage.getItem(STORAGE_KEY));
 }
 
+// Lunes fijo (no el "hoy" real del entorno, que puede caer domingo y romper
+// estos tests contra el bloqueo de Hoy de los domingos).
+const BASE_DATE = "2026-09-21";
 function setClock(hour) {
-  vi.setSystemTime(new Date(`${todayStr()}T${String(hour).padStart(2, "0")}:00:00`));
+  vi.setSystemTime(new Date(`${BASE_DATE}T${String(hour).padStart(2, "0")}:00:00`));
 }
 
 async function renderApp() {

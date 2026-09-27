@@ -1,4 +1,4 @@
-import { formatDate } from "./dateUtils";
+import { formatDate, isSundayStr, addDaysStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { customerLabel, businessLabel } from "./nameLabels";
 
@@ -96,6 +96,24 @@ export function getCierrePending(orders, todayCal) {
     orders: pending,
     unconfirmedOrders: pending.filter((o) => !o.confirmed),
   };
+}
+
+// Los domingos no se despacha: un pedido "para mañana" sin facturar que haya
+// quedado agendado un domingo (de antes de esta regla, o de un backup viejo)
+// se corre al lunes siguiente. Nunca toca un pedido ya comprometido (bucket
+// "hoy", o "manana" ya enviado) -- eso ya se facturó, no se reescribe el
+// pasado. Sin bandera de migración: es gratis repetirlo en cada carga (barre
+// todo el historial una vez, no encuentra nada casi siempre) y así protege
+// también contra un backup importado más adelante. Devuelve el mismo array
+// (misma referencia) si no había nada que corregir.
+export function fixSundayScheduledOrders(movements) {
+  let changed = false;
+  const next = movements.map((m) => {
+    if (m.bucket !== "manana" || m.sent || !m.date || !isSundayStr(m.date)) return m;
+    changed = true;
+    return { ...m, date: addDaysStr(m.date, 1) };
+  });
+  return changed ? next : movements;
 }
 
 export function groupOrders(movements, dateStr) {
