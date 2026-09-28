@@ -607,7 +607,11 @@ export function useInventoryStore() {
       const trimmedName = (editNameInputs[p.code] || "").trim();
       const hlVal = parseFloat(editHlInputs[p.code]);
       const lowStockVal = parseInt(editLowStockInputs[p.code], 10);
-      const nextP = trimmedName ? { ...p, name: trimmedName } : { ...p };
+      // El nombre corto es lo que se muestra en Pedidos y casi toda la app
+      // (por espacio); no hay forma de editarlo aparte, así que si cambia el
+      // nombre completo, el corto lo sigue -- si no, el cambio de nombre no
+      // se vería reflejado donde más se usa.
+      const nextP = trimmedName && trimmedName !== p.name ? { ...p, name: trimmedName, short: trimmedName } : { ...p };
       if (Number.isFinite(hlVal) && hlVal >= 0) nextP.hl = hlVal;
       else delete nextP.hl;
       if (Number.isFinite(lowStockVal) && lowStockVal >= 0) nextP.lowStockThreshold = lowStockVal;

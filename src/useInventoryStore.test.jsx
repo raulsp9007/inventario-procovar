@@ -90,3 +90,42 @@ describe("useInventoryStore -- editar un pedido no cambia su posición en la lis
     expect(result.current.movements.find((m) => m.orderId === orderId).timestamp).toBe(originalTimestamp);
   });
 });
+
+describe("useInventoryStore -- renombrar un producto actualiza su nombre corto", () => {
+  it("saveEdit sincroniza el nombre corto con el nombre completo al renombrar", async () => {
+    const { result } = await renderLoadedStore();
+    const code = result.current.products[0].code;
+    const originalShort = result.current.products[0].short;
+    expect(originalShort).not.toBe("Parranda Especial");
+
+    act(() => {
+      result.current.openEdit();
+    });
+    act(() => {
+      result.current.setEditNameInputs((s) => ({ ...s, [code]: "Parranda Especial" }));
+    });
+    act(() => {
+      result.current.saveEdit();
+    });
+
+    const updated = result.current.products.find((p) => p.code === code);
+    expect(updated.name).toBe("Parranda Especial");
+    expect(updated.short).toBe("Parranda Especial");
+  });
+
+  it("no toca el nombre corto de un producto que no se renombró", async () => {
+    const { result } = await renderLoadedStore();
+    const untouchedCode = result.current.products[1].code;
+    const untouchedShort = result.current.products[1].short;
+
+    act(() => {
+      result.current.openEdit();
+    });
+    act(() => {
+      result.current.saveEdit();
+    });
+
+    const stillThere = result.current.products.find((p) => p.code === untouchedCode);
+    expect(stillThere.short).toBe(untouchedShort);
+  });
+});
