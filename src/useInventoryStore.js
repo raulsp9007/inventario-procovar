@@ -8,7 +8,7 @@ import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 import { getHlBackfill, isHlBackfillable } from "./hlBackfill";
 import { buildRegistryFromMovements, upsertCustomer, patchCustomer, renameCustomer, removeCustomer } from "./customerRegistry";
-import { DEFAULT_PRODUCT_FORMATS, buildInitialProductFormats, upsertProductFormat, removeProductFormat } from "./productFormats";
+import { DEFAULT_PRODUCT_FORMATS, buildInitialProductFormats, upsertProductFormat, removeProductFormat, updateProductFormat } from "./productFormats";
 
 const DEFAULT_PRODUCTS = [
   { code: "P1500", name: "Parranda 1500ml", short: "P-1500", color: "#C77A2E" },
@@ -735,6 +735,22 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, productFormats: nextFormats });
   }
 
+  // Edita un formato ya existente (nombre y/o unidades) -- a diferencia de
+  // saveProductFormat, acá se sabe cuál era antes (oldCode), así que
+  // renombrarlo no crea uno nuevo: actualiza ESE y a los productos que lo
+  // tenían puesto (ver updateProductFormat).
+  function editProductFormat(oldCode, input) {
+    const { formats: nextFormats, products: nextProducts, error } = updateProductFormat(productFormats, products, oldCode, input);
+    if (error) {
+      setError(error);
+      setTimeout(() => setError(""), 3000);
+      return;
+    }
+    setProductFormats(nextFormats);
+    if (nextProducts !== products) setProducts(nextProducts);
+    persist({ ...currentPersistedState, productFormats: nextFormats, products: nextProducts });
+  }
+
   // No deja borrar un formato que algún producto todavía tiene puesto (ver
   // removeProductFormat) -- avisa cuáles para que se les cambie el formato
   // primero.
@@ -1160,7 +1176,7 @@ export function useInventoryStore() {
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
     customers, deleteCustomer,
-    productFormats, saveProductFormat, deleteProductFormat,
+    productFormats, saveProductFormat, deleteProductFormat, editProductFormat,
     storageProtected, loadProblem, dismissLoadProblem, getCorruptCopy, restorePreviousCopy, autoCopyAt,
     applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,

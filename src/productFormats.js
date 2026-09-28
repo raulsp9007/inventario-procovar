@@ -80,6 +80,32 @@ export function upsertProductFormat(formats, { code, units }) {
   return { formats: next, error: null };
 }
 
+// Edita un formato YA EXISTENTE (nombre y/o unidades) -- a diferencia de
+// upsertProductFormat, acá se sabe cuál es (oldCode), así que un cambio de
+// nombre no crea uno nuevo: renombra ese y de paso actualiza a todos los
+// productos que lo tenían puesto, para que no se queden con un `format` que
+// ya no existe en ningún lado.
+export function updateProductFormat(formats, products, oldCode, { code, units }) {
+  const idx = formats.findIndex((f) => f.code === oldCode);
+  if (idx === -1) return { formats, products, error: null };
+  const trimmed = normalizedCode(code);
+  const parsedUnits = parseInt(units, 10);
+  if (!trimmed) return { formats, products, error: "Ponle un nombre al formato." };
+  if (!Number.isFinite(parsedUnits) || parsedUnits < 1) {
+    return { formats, products, error: "Las unidades tienen que ser un número mayor que 0." };
+  }
+  const collidesWithOther = formats.some((f, i) => i !== idx && f.code.toLowerCase() === trimmed.toLowerCase());
+  if (collidesWithOther) {
+    return { formats, products, error: `Ya existe un formato llamado "${trimmed}".` };
+  }
+  const nextFormats = formats.map((f, i) => (i === idx ? { code: trimmed, units: parsedUnits } : f));
+  const codeChanged = trimmed !== oldCode;
+  const nextProducts = codeChanged
+    ? products.map((p) => (p.format === oldCode ? { ...p, format: trimmed } : p))
+    : products;
+  return { formats: nextFormats, products: nextProducts, error: null };
+}
+
 // No deja borrar un formato que algún producto activo o archivado todavía
 // tiene puesto -- si no, ese producto se queda con un `format` que ya no
 // aparece en ningún lado (el desplegable lo perdería silenciosamente).

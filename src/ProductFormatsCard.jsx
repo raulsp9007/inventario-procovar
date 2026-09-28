@@ -7,10 +7,11 @@ import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 // borrar uno que algún producto tenga puesto (ver removeProductFormat en
 // productFormats.js), así que el peor caso de un toque de más es borrar uno
 // que no se estaba usando -- se vuelve a agregar con el mismo nombre y listo.
-export default function ProductFormatsCard({ formats, products, onSaveProductFormat, onDeleteProductFormat }) {
+export default function ProductFormatsCard({ formats, products, onSaveProductFormat, onDeleteProductFormat, onEditProductFormat }) {
   const [newCode, setNewCode] = useState("");
   const [newUnits, setNewUnits] = useState("");
   const [editingCode, setEditingCode] = useState(null);
+  const [editNameInput, setEditNameInput] = useState("");
   const [editUnitsInput, setEditUnitsInput] = useState("");
 
   function isInUse(code) {
@@ -26,11 +27,12 @@ export default function ProductFormatsCard({ formats, products, onSaveProductFor
 
   function startEdit(format) {
     setEditingCode(format.code);
+    setEditNameInput(format.code);
     setEditUnitsInput(String(format.units));
   }
 
-  function confirmEdit(code) {
-    onSaveProductFormat({ code, units: editUnitsInput });
+  function confirmEdit(oldCode) {
+    onEditProductFormat(oldCode, { code: editNameInput, units: editUnitsInput });
     setEditingCode(null);
   }
 
@@ -56,26 +58,25 @@ export default function ProductFormatsCard({ formats, products, onSaveProductFor
             key={f.code}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 9, background: "var(--surface-subtle)", border: "1px solid var(--border)" }}
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {f.code}
-              </div>
-              {isInUse(f.code) && (
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>En uso</div>
-              )}
-            </div>
             {editingCode === f.code ? (
               <>
                 <input
+                  type="text"
+                  autoFocus
+                  value={editNameInput}
+                  onChange={(e) => setEditNameInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") confirmEdit(f.code); }}
+                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                />
+                <input
                   type="number"
                   inputMode="numeric"
-                  autoFocus
                   value={editUnitsInput}
                   onChange={(e) => setEditUnitsInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") confirmEdit(f.code); }}
-                  style={{ ...inputStyle, width: 72, textAlign: "right" }}
+                  style={{ ...inputStyle, width: 64, textAlign: "right" }}
                 />
-                <button onClick={() => confirmEdit(f.code)} aria-label={`Guardar unidades de ${f.code}`} style={{ ...iconButtonStyle, color: "var(--accent-green-text)" }}>
+                <button onClick={() => confirmEdit(f.code)} aria-label={`Guardar formato ${f.code}`} style={{ ...iconButtonStyle, color: "var(--accent-green-text)" }}>
                   <Check size={16} />
                 </button>
                 <button onClick={() => setEditingCode(null)} aria-label="Cancelar" style={{ ...iconButtonStyle, color: "var(--text-muted)" }}>
@@ -84,8 +85,16 @@ export default function ProductFormatsCard({ formats, products, onSaveProductFor
               </>
             ) : (
               <>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {f.code}
+                  </div>
+                  {isInUse(f.code) && (
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>En uso</div>
+                  )}
+                </div>
                 <span style={{ fontSize: 13, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{f.units} uds</span>
-                <button onClick={() => startEdit(f)} aria-label={`Editar unidades de ${f.code}`} style={{ ...iconButtonStyle, color: "var(--text-muted)" }}>
+                <button onClick={() => startEdit(f)} aria-label={`Editar formato ${f.code}`} style={{ ...iconButtonStyle, color: "var(--text-muted)" }}>
                   <Pencil size={14} />
                 </button>
                 <button onClick={() => onDeleteProductFormat(f.code)} aria-label={`Eliminar formato ${f.code}`} style={{ ...iconButtonStyle, color: "var(--danger)" }}>

@@ -22,7 +22,7 @@ export default function Settings({
   theme, onToggleTheme,
   showPrices, onToggleShowPrices,
   commissionPercent, hlGoal, sendBusinessName,
-  productFormats, products, onSaveProductFormat, onDeleteProductFormat,
+  productFormats, products, onSaveProductFormat, onDeleteProductFormat, onEditProductFormat,
   topSlot,
 }) {
   const [phoneInput, setPhoneInput] = useState(whatsappPhone || "");
@@ -267,6 +267,7 @@ export default function Settings({
         products={products}
         onSaveProductFormat={onSaveProductFormat}
         onDeleteProductFormat={onDeleteProductFormat}
+        onEditProductFormat={onEditProductFormat}
       />
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>

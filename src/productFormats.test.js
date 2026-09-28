@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_PRODUCT_FORMATS, buildInitialProductFormats, getFormat, unitPrice, upsertProductFormat, removeProductFormat } from "./productFormats";
+import { DEFAULT_PRODUCT_FORMATS, buildInitialProductFormats, getFormat, unitPrice, upsertProductFormat, removeProductFormat, updateProductFormat } from "./productFormats";
 
 describe("unitPrice", () => {
   it("divide el precio USD y el CUP entre las unidades del formato", () => {
@@ -113,5 +113,52 @@ describe("removeProductFormat", () => {
     const { error } = removeProductFormat(formats, "sixpack", products);
     expect(error).toMatch(/2 productos/);
     expect(error).toMatch(/Uno, Dos/);
+  });
+});
+
+describe("updateProductFormat", () => {
+  const formats = [{ code: "sixpack", units: 6 }, { code: "docena", units: 12 }];
+  const products = [{ code: "P1", name: "Uno", format: "sixpack" }, { code: "P2", name: "Dos", format: "otro" }];
+
+  it("renombra el formato y actualiza a los productos que lo usan", () => {
+    const { formats: nextFormats, products: nextProducts, error } = updateProductFormat(formats, products, "sixpack", { code: "paquete6", units: "6" });
+    expect(error).toBeNull();
+    expect(nextFormats).toEqual([{ code: "paquete6", units: 6 }, { code: "docena", units: 12 }]);
+    expect(nextProducts.find((p) => p.code === "P1").format).toBe("paquete6");
+    expect(nextProducts.find((p) => p.code === "P2").format).toBe("otro"); // no lo usaba, no se toca
+  });
+
+  it("puede cambiar solo las unidades sin renombrar", () => {
+    const { formats: nextFormats, products: nextProducts } = updateProductFormat(formats, products, "sixpack", { code: "sixpack", units: "8" });
+    expect(nextFormats).toEqual([{ code: "sixpack", units: 8 }, { code: "docena", units: 12 }]);
+    expect(nextProducts).toBe(products); // el codigo no cambio, no hace falta tocar productos
+  });
+
+  it("recorta espacios del nombre nuevo", () => {
+    const { formats: nextFormats } = updateProductFormat(formats, products, "sixpack", { code: "  paquete6  ", units: "6" });
+    expect(nextFormats[0].code).toBe("paquete6");
+  });
+
+  it("rechaza nombre vacío sin tocar nada", () => {
+    const { formats: nextFormats, products: nextProducts, error } = updateProductFormat(formats, products, "sixpack", { code: "   ", units: "6" });
+    expect(error).toMatch(/nombre/i);
+    expect(nextFormats).toBe(formats);
+    expect(nextProducts).toBe(products);
+  });
+
+  it("rechaza unidades invalidas sin tocar nada", () => {
+    expect(updateProductFormat(formats, products, "sixpack", { code: "sixpack", units: "0" }).error).toMatch(/unidades/i);
+    expect(updateProductFormat(formats, products, "sixpack", { code: "sixpack", units: "abc" }).error).toMatch(/unidades/i);
+  });
+
+  it("rechaza renombrar a un nombre que ya usa OTRO formato existente", () => {
+    const { formats: nextFormats, error } = updateProductFormat(formats, products, "sixpack", { code: "docena", units: "6" });
+    expect(error).toMatch(/ya existe/i);
+    expect(nextFormats).toBe(formats);
+  });
+
+  it("no lo cuenta como colision consigo mismo (solo cambiar mayusculas o unidades)", () => {
+    const { error } = updateProductFormat(formats, products, "sixpack", { code: "SixPack", units: "6" });
+    expect(error).toBeNull();
   });
 });

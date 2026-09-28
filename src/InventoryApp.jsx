@@ -52,7 +52,7 @@ export default function InventoryApp() {
     showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
     customers, deleteCustomer,
-    productFormats, saveProductFormat, deleteProductFormat,
+    productFormats, saveProductFormat, deleteProductFormat, editProductFormat,
     storageProtected, loadProblem, dismissLoadProblem, getCorruptCopy, restorePreviousCopy, autoCopyAt,
     applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
@@ -430,6 +430,7 @@ export default function InventoryApp() {
             products={products}
             onSaveProductFormat={saveProductFormat}
             onDeleteProductFormat={deleteProductFormat}
+            onEditProductFormat={editProductFormat}
           />
         )}
 

@@ -40,22 +40,32 @@ describe("ProductFormatsCard", () => {
   });
 
   it("edita las unidades de un formato existente", () => {
-    const onSave = vi.fn();
-    render(<ProductFormatsCard formats={formats} products={[]} onSaveProductFormat={onSave} onDeleteProductFormat={() => {}} />);
-    fireEvent.click(screen.getByLabelText("Editar unidades de sixpack"));
-    const input = screen.getByLabelText("Guardar unidades de sixpack").parentElement.querySelector("input");
-    fireEvent.change(input, { target: { value: "8" } });
-    fireEvent.click(screen.getByLabelText("Guardar unidades de sixpack"));
-    expect(onSave).toHaveBeenCalledWith({ code: "sixpack", units: "8" });
+    const onEdit = vi.fn();
+    render(<ProductFormatsCard formats={formats} products={[]} onSaveProductFormat={() => {}} onDeleteProductFormat={() => {}} onEditProductFormat={onEdit} />);
+    fireEvent.click(screen.getByLabelText("Editar formato sixpack"));
+    const unitsInput = screen.getByLabelText("Guardar formato sixpack").parentElement.querySelector('input[type="number"]');
+    fireEvent.change(unitsInput, { target: { value: "8" } });
+    fireEvent.click(screen.getByLabelText("Guardar formato sixpack"));
+    expect(onEdit).toHaveBeenCalledWith("sixpack", { code: "sixpack", units: "8" });
   });
 
-  it("cancelar la edición no llama a onSaveProductFormat", () => {
-    const onSave = vi.fn();
-    render(<ProductFormatsCard formats={formats} products={[]} onSaveProductFormat={onSave} onDeleteProductFormat={() => {}} />);
-    fireEvent.click(screen.getByLabelText("Editar unidades de sixpack"));
+  it("edita el nombre de un formato existente", () => {
+    const onEdit = vi.fn();
+    render(<ProductFormatsCard formats={formats} products={[]} onSaveProductFormat={() => {}} onDeleteProductFormat={() => {}} onEditProductFormat={onEdit} />);
+    fireEvent.click(screen.getByLabelText("Editar formato sixpack"));
+    const nameInput = screen.getByLabelText("Guardar formato sixpack").parentElement.querySelector('input[type="text"]');
+    fireEvent.change(nameInput, { target: { value: "paquete6" } });
+    fireEvent.click(screen.getByLabelText("Guardar formato sixpack"));
+    expect(onEdit).toHaveBeenCalledWith("sixpack", { code: "paquete6", units: "6" });
+  });
+
+  it("cancelar la edición no llama a onEditProductFormat", () => {
+    const onEdit = vi.fn();
+    render(<ProductFormatsCard formats={formats} products={[]} onSaveProductFormat={() => {}} onDeleteProductFormat={() => {}} onEditProductFormat={onEdit} />);
+    fireEvent.click(screen.getByLabelText("Editar formato sixpack"));
     fireEvent.click(screen.getByLabelText("Cancelar"));
-    expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Editar unidades de sixpack")).toBeTruthy();
+    expect(onEdit).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Editar formato sixpack")).toBeTruthy();
   });
 
   it("eliminar llama a onDeleteProductFormat con el código", () => {

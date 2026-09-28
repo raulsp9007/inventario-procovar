@@ -79,4 +79,28 @@ describe("useInventoryStore -- formatos de venta", () => {
     await waitFor(() => expect(result.current.error).toMatch(/Parranda 1500ml/));
     expect(result.current.productFormats.some((f) => f.code === "sixpack")).toBe(true);
   });
+
+  it("editProductFormat renombra un formato y actualiza a los productos que lo usan", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      movements: [],
+      products: [{ code: "P1", name: "Parranda 1500ml", format: "sixpack" }],
+      productFormats: DEFAULT_PRODUCT_FORMATS,
+    }));
+    const { result } = await renderLoadedStore();
+    act(() => { result.current.editProductFormat("sixpack", { code: "paquete6", units: "6" }); });
+
+    await waitFor(() => expect(result.current.productFormats.some((f) => f.code === "paquete6")).toBe(true));
+    expect(result.current.productFormats.some((f) => f.code === "sixpack")).toBe(false);
+    expect(result.current.products.find((p) => p.code === "P1").format).toBe("paquete6");
+    expect(savedState().productFormats.some((f) => f.code === "paquete6")).toBe(true);
+    expect(savedState().products.find((p) => p.code === "P1").format).toBe("paquete6");
+  });
+
+  it("editProductFormat con nombre repetido de OTRO formato avisa y no cambia nada", async () => {
+    const { result } = await renderLoadedStore();
+    const before = result.current.productFormats;
+    act(() => { result.current.editProductFormat("sixpack", { code: "paca12u", units: "6" }); });
+    await waitFor(() => expect(result.current.error).toMatch(/ya existe/i));
+    expect(result.current.productFormats).toBe(before);
+  });
 });
