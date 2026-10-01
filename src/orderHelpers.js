@@ -157,7 +157,7 @@ export function formatOrderForCustomer(order, products) {
   const lines = [`Tu pedido para ${formatDate(order.date)}: ${pickupInfo}`, ""];
   order.lines.forEach((line) => {
     const product = products.find((p) => p.code === line.code);
-    lines.push(`${line.qty}x ${product ? product.name : line.code}`);
+    lines.push(`${line.qty}x ${product ? product.name : line.code} (${formatCUP(line.unitPrice || 0)})`);
   });
   lines.push("", `Total: ${formatCUP(total)}`);
   return lines.join("\n");
