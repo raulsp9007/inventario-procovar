@@ -555,7 +555,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
                 )}
 
                 {isExpanded && (
-                  <div style={{ background: "var(--surface-subtle)", borderTop: "1px solid var(--hairline)", padding: "12px 14px 14px" }}>
+                  <div className="expandin" style={{ background: "var(--surface-subtle)", borderTop: "1px solid var(--hairline)", padding: "12px 14px 14px" }}>
                     <div style={{ background: "var(--segment-track)", borderRadius: 9, padding: 3, display: "flex", gap: 2, marginBottom: 12, width: "fit-content" }}>
                       <button
                         onClick={() => setModeFor(c.customerName, "pedido")}

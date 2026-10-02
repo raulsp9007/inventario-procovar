@@ -172,3 +172,45 @@
   --segment-track: #363A2D;
   --disabled-bg: #4A4D3E;
 }
+
+/* Animaciones cortas y baratas (solo opacity/transform, salvo el max-height
+   de la ficha de cliente, que es un solo elemento por 220 ms). Nada corre en
+   bucle. Se apagan con "reducir movimiento" del sistema (bloque de abajo). */
+
+/* Cambio de pestaña: solo fundido (sin transform, para no crear un bloque
+   contenedor que desplace los modales con position:fixed durante la
+   animación). */
+@keyframes viewFade { from { opacity: 0; } to { opacity: 1; } }
+.viewfade { animation: viewFade 0.18s ease-out; }
+
+/* Pedido que se elimina o pospone: se desliza, se desvanece y colapsa. */
+@keyframes orderLeave {
+  0%   { opacity: 1; transform: translateX(0); max-height: 400px; }
+  60%  { opacity: 0; transform: translateX(32px); max-height: 170px; }
+  100% { opacity: 0; transform: translateX(32px); max-height: 0; }
+}
+.orderleave { animation: orderLeave 0.26s ease-in forwards; overflow: hidden; pointer-events: none; }
+
+/* Número que cambia (contadores): un pulso breve. */
+@keyframes numPulse { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 100% { transform: scale(1); } }
+.numpulse { display: inline-block; animation: numPulse 0.28s ease-out; }
+
+/* Paso de pedido recién marcado (Enviado/Facturado/Confirmado). */
+@keyframes stepPop { 0% { transform: scale(0.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.steppop { animation: stepPop 0.26s ease-out; }
+
+/* Ficha de cliente que se abre. */
+@keyframes expandIn { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 700px; } }
+.expandin { overflow: hidden; animation: expandIn 0.22s ease-out; }
+
+/* Efecto de presión en los botones. Un transform inline (p. ej. el menú
+   radial) gana sobre esto, así que no los afecta. */
+button { transition: transform 0.1s ease; }
+button:active:not(:disabled) { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .viewfade, .orderleave, .numpulse, .steppop, .expandin { animation: none; }
+  .orderleave { opacity: 0; max-height: 0; }
+  button { transition: none; }
+  button:active:not(:disabled) { transform: none; }
+}

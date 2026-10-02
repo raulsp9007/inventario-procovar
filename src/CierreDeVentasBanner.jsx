@@ -8,7 +8,7 @@ import { customerLabel } from "./nameLabels";
 // la lógica de programar/eliminar siguen en Orders.jsx.
 export default function CierreDeVentasBanner({
   unconfirmedTodayOrders, pending, cierreVentasHour, confirmingPostponeId, confirmingDeleteId, confirmingPostponeAll,
-  onPostponeClick, onDeleteClick, onConfirmClick, onPostponeAllClick,
+  onPostponeClick, onDeleteClick, onConfirmClick, onPostponeAllClick, leavingIds,
 }) {
   const n = unconfirmedTodayOrders.length;
   return (
@@ -38,6 +38,7 @@ export default function CierreDeVentasBanner({
       {unconfirmedTodayOrders.map((order, i) => (
         <div
           key={order.orderId}
+          className={leavingIds && leavingIds.has(order.orderId) ? "orderleave" : undefined}
           style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-warn)" }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>

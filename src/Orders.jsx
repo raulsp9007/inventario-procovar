@@ -11,6 +11,8 @@ import OrderFormModal from "./OrderFormModal.jsx";
 import CierreDeVentasBanner from "./CierreDeVentasBanner.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import { customerLabel, businessLabel } from "./nameLabels";
+import PulseNumber from "./PulseNumber.jsx";
+import { leaveAnimationMs } from "./motion";
 
 const PAST_ORDERS_DAYS = 14;
 const FILTERS_STORAGE_KEY = "procovar-pedidos-filtros";
@@ -84,6 +86,24 @@ function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirm
   const allDone = steps.every((s) => s.done);
   const firstPendingIndex = steps.findIndex((s) => !s.done);
 
+  // El "pop" del círculo va solo en los pasos que se acaban de marcar, no en
+  // los que ya venían hechos al abrir la app (si no, todos los pedidos harían
+  // pop a la vez al cargar). `popping` guarda la clase mientras el paso siga
+  // marcado: un re-render cualquiera (p. ej. el aviso "Guardando…") no debe
+  // cortarla a media animación -- una clase que ya estaba no se reanima.
+  const previousDone = useRef(null);
+  const popping = useRef({});
+  steps.forEach((s) => {
+    if (!s.done) popping.current[s.key] = false;
+    else if (previousDone.current && previousDone.current[s.key] === false) popping.current[s.key] = true;
+  });
+  useEffect(() => {
+    previousDone.current = Object.fromEntries(steps.map((s) => [s.key, s.done]));
+    // Al colapsar a la pastilla "Confirmado" los círculos se desmontan: sin
+    // esto, al volver a expandir harían pop otra vez.
+    if (allDone && !expanded) popping.current = {};
+  });
+
   function toggleStep(index) {
     const step = steps[index];
     if (!step.done) {
@@ -139,7 +159,7 @@ function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirm
                 background: step.done ? "var(--green)" : "var(--border)",
               }} />
             )}
-            <div style={{
+            <div className={popping.current[step.key] ? "steppop" : undefined} style={{
               position: "relative", width: 24, height: 24, borderRadius: "50%",
               display: "flex", alignItems: "center", justifyContent: "center",
               background: step.done ? "var(--green)" : "var(--surface-sunken)",
@@ -227,6 +247,27 @@ export default function Orders({ products, movements, customers, stock, prices, 
   latestActions.current = { onDeleteOrder, onEditOrder };
   const [pendingDeletes, setPendingDeletes] = useState(() => new Map());
   const [pendingPostpones, setPendingPostpones] = useState(() => new Map());
+  // Pedidos que están saliendo (animación de eliminar/posponer): siguen en la
+  // lista unos 260 ms con la clase .orderleave y recién después se "esconden"
+  // (pendingDeletes/pendingPostpones) con su Deshacer de 5 s de siempre.
+  const [leavingIds, setLeavingIds] = useState(() => new Set());
+
+  function leaveThen(orders, commit) {
+    const ms = leaveAnimationMs();
+    if (ms === 0) {
+      orders.forEach(commit);
+      return;
+    }
+    setLeavingIds((prev) => new Set([...prev, ...orders.map((o) => o.orderId)]));
+    setTimeout(() => {
+      orders.forEach(commit);
+      setLeavingIds((prev) => {
+        const next = new Set(prev);
+        orders.forEach((o) => next.delete(o.orderId));
+        return next;
+      });
+    }, ms);
+  }
   const [pendingEditUndo, setPendingEditUndo] = useState(null); // { orderId, customerName, revertDraft, timeoutId } | null
   // Solo oculta el toast del stack visual -- el timeout real que aplica la
   // eliminación/pospuesta sigue corriendo igual, esto no cancela nada.
@@ -620,7 +661,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
     if (confirmingPostponeAll) {
       if (Date.now() - armedPostponeAllAtRef.current < DOUBLE_TAP_GUARD_MS) return;
       setConfirmingPostponeAll(false);
-      unconfirmedTodayOrders.forEach((order) => stagePostpone(order));
+      leaveThen(unconfirmedTodayOrders, commitPostpone);
       return;
     }
     armedPostponeAllAtRef.current = Date.now();
@@ -785,6 +826,10 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // 5s sin que se apriete "Deshacer". Mientras tanto el pedido se esconde
   // de las listas (pendingPostpones), pero nada del pedido cambió todavía.
   function stagePostpone(order) {
+    leaveThen([order], commitPostpone);
+  }
+
+  function commitPostpone(order) {
     const timeoutId = setTimeout(() => {
       postponeToTomorrow(order);
       setPendingPostpones((m) => {
@@ -841,6 +886,10 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // customerName ademas del timeout para poder mostrarlo en el aviso sin
   // tener que buscarlo en una lista de la que ya lo filtramos.
   function stageDelete(order) {
+    leaveThen([order], commitDelete);
+  }
+
+  function commitDelete(order) {
     const timeoutId = setTimeout(() => {
       latestActions.current.onDeleteOrder(order.orderId);
       setPendingDeletes((m) => {
@@ -871,6 +920,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
     return (
       <div
         key={order.orderId}
+        className={leavingIds.has(order.orderId) ? "orderleave" : undefined}
         style={{
           display: "flex", alignItems: "stretch", background: "var(--surface)",
           border: `1px solid ${isDeleting ? "var(--danger-border)" : "var(--border)"}`,
@@ -1167,7 +1217,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
                   color: active ? "var(--ink)" : "var(--muted)",
                 }}
               >
-                {tab.count}
+                <PulseNumber value={tab.count} />
               </span>
             </button>
           );
@@ -1298,7 +1348,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
               background: chip.active ? "var(--banner-bg)" : "var(--surface)",
             }}
           >
-            <span style={{ color: "var(--faint)", fontSize: 15, fontWeight: 700 }}>{chip.count}</span>
+            <span style={{ color: "var(--faint)", fontSize: 15, fontWeight: 700 }}><PulseNumber value={chip.count} /></span>
             <span>{chip.label}</span>
           </button>
         ))}
@@ -1316,6 +1366,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
           onDeleteClick={handleDeleteClick}
           onConfirmClick={(order) => onMarkConfirmed(order.orderId, true)}
           onPostponeAllClick={handlePostponeAllClick}
+          leavingIds={leavingIds}
         />
       )}
 

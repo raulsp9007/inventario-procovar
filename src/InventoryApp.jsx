@@ -13,6 +13,7 @@ import Orders from "./Orders.jsx";
 import Portfolio from "./Portfolio.jsx";
 import Customers from "./Customers.jsx";
 import Settings from "./Settings.jsx";
+import PulseNumber from "./PulseNumber.jsx";
 import BackupCard from "./BackupCard.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, BACKUP_REMINDER_DAYS, lowStockThresholdFor } from "./useInventoryStore.js";
@@ -144,11 +145,11 @@ export default function InventoryApp() {
           <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 11, color: "var(--on-ink-subtitle)", letterSpacing: "0.06em" }}>UNIDADES TOTALES</div>
-              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{totalStock}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><PulseNumber value={totalStock} /></div>
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 11, color: "var(--on-ink-subtitle)", letterSpacing: "0.06em" }}>VENDIDO HOY</div>
-              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--on-ink-accent)" }}>{todaysUnitsSold}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--on-ink-accent)" }}><PulseNumber value={todaysUnitsSold} /></div>
             </div>
           </div>
         </div>
@@ -236,6 +237,9 @@ export default function InventoryApp() {
           <Banner variant="error" style={{ marginBottom: 16 }}>{error}</Banner>
         )}
 
+        {/* key={view}: al cambiar de pestaña el contenedor se remonta y su
+            fundido (theme.css, .viewfade) arranca de nuevo. */}
+        <div key={view} className="viewfade">
         {view === "stock" && (
           <ProductsView
             products={products}
@@ -433,6 +437,7 @@ export default function InventoryApp() {
             onEditProductFormat={editProductFormat}
           />
         )}
+        </div>
 
         {pendingImport && (() => {
           const importedMovements = pendingImport.movements || [];
