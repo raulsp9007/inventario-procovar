@@ -230,6 +230,24 @@ export default function Orders({ products, movements, customers, stock, prices, 
       return next;
     });
   }
+  // En cuanto un pedido reabierto deja de tener los 3 pasos hechos (se
+  // desmarcó uno, por la vía que sea), se olvida que estaba reabierto: así,
+  // al completarlo de nuevo vuelve a colapsar a la pastilla "Confirmado". Sin
+  // esto quedaba abierto para siempre -- la pastilla era la única forma de
+  // reabrir y el track abierto no tiene cómo volver a cerrarse.
+  useEffect(() => {
+    if (expandedCompletedTrackers.size === 0) return;
+    const stillComplete = new Set(
+      groupAllOrders(movements).filter((o) => o.sentToCustomer && o.sent && o.confirmed).map((o) => o.orderId)
+    );
+    const stale = [...expandedCompletedTrackers].filter((id) => !stillComplete.has(id));
+    if (stale.length === 0) return;
+    setExpandedCompletedTrackers((s) => {
+      const next = new Set(s);
+      stale.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, [movements, expandedCompletedTrackers]);
   // Momento en que se armó cada "¿Seguro?" -- si el segundo toque llega
   // demasiado rápido (mal-tap doble sin querer, no una decisión real) se
   // ignora en vez de confirmar la acción destructiva.
