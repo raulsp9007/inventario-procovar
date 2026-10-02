@@ -25,7 +25,10 @@ export default function Today({
   const hlSoldToday = totalHlSold(todaysSentSales, products);
   // % contra la meta diaria (Productos) -- solo tiene sentido con lo
   // realmente vendido/comprometido, no con lo pendiente sin enviar todavía.
-  const dailyHlPct = !pendingMode && dailyHlGoal ? Math.round((hlSoldToday / dailyHlGoal) * 100) : null;
+  // Solo con una meta numérica positiva: un respaldo importado con otro tipo
+  // de dato ahí no debe mostrar "NaN%".
+  const hasDailyGoal = typeof dailyHlGoal === "number" && Number.isFinite(dailyHlGoal) && dailyHlGoal > 0;
+  const dailyHlPct = !pendingMode && hasDailyGoal ? Math.round((hlSoldToday / dailyHlGoal) * 100) : null;
   const ordersToday = new Set(todaysSentSales.filter((m) => m.orderId).map((m) => m.orderId)).size;
 
   const activeProducts = products.filter((p) => !p.archived);
