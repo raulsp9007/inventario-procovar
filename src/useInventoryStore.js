@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { getData, setData } from "./storage";
+import { getData, setData, decodeFromStorage } from "./storage";
 import { todayStr, nextBusinessDayStr, daysSince } from "./dateUtils";
 import { isCommittedMovement, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, fixSundayScheduledOrders } from "./orderHelpers";
 import { toCubanPhone } from "./customerHelpers";
@@ -21,9 +21,11 @@ const DEFAULT_PRODUCTS = [
 export const LOW_STOCK_THRESHOLD = 20;
 // Antes en 500 -- para un negocio activo (~30 movimientos/día) eso se
 // llenaba en un par de semanas y los más viejos se perdían sin aviso.
-// 5000 da meses de margen; igual se avisa (movementsNearCap) antes de
-// llegar, para exportar un respaldo a tiempo.
-export const MOVEMENTS_CAP = 5000;
+// 5000 daba ~4 meses (~110 días a 31/día) y tampoco más cabía en
+// localStorage sin comprimir. Con el guardado comprimido (storage.js, ~6x),
+// 20.000 ocupan ~1,3 MB: ~21 meses al ritmo actual. Igual se avisa
+// (movementsNearCap) antes de llegar, para exportar un respaldo a tiempo.
+export const MOVEMENTS_CAP = 20000;
 export const BACKUP_REMINDER_DAYS = 7;
 const STORAGE_KEY = "procovar-inventario-v1";
 // Red de seguridad, fuera del guardado principal: copia del estado de ayer
@@ -52,8 +54,10 @@ function readLocal(key) {
 // Copia del estado anterior, una vez al día: se llama con el contenido que
 // había ANTES de este guardado. Solo copia si ese contenido se puede leer
 // (una copia dañada no debe pisar una buena) y nunca lanza: si no cabe, se
-// descarta la copia en vez de arriesgar el guardado principal.
-function saveDailyCopy(previousRaw) {
+// descarta la copia en vez de arriesgar el guardado principal. `previousRaw`
+// es lo guardado tal cual (comprimido o plano, ver storage.js): se valida
+// descomprimiéndolo, pero la copia se guarda igual que estaba.
+async function saveDailyCopy(previousRaw) {
   if (!previousRaw) return null;
   try {
     const lastAt = localStorage.getItem(PREV_AT_KEY);
@@ -62,7 +66,7 @@ function saveDailyCopy(previousRaw) {
     return null;
   }
   try {
-    JSON.parse(previousRaw);
+    JSON.parse(await decodeFromStorage(previousRaw));
   } catch {
     return null;
   }
@@ -210,7 +214,7 @@ export function useInventoryStore() {
         setAutoCopyAt(null);
         await setData(STORAGE_KEY, serialized);
       }
-      const copiedAt = saveDailyCopy(previousRaw);
+      const copiedAt = await saveDailyCopy(previousRaw);
       if (copiedAt) setAutoCopyAt(copiedAt);
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 1200);
@@ -355,7 +359,9 @@ export function useInventoryStore() {
       try {
         const result = await getData(STORAGE_KEY);
         raw = result && result.value ? result.value : null;
-        if (raw) applyPersistedData(JSON.parse(raw));
+        // `raw` queda como se guardó (comprimido o plano): si no se puede
+        // leer, esa es la copia intacta que se conserva (handleUnreadableData).
+        if (raw) applyPersistedData(JSON.parse(await decodeFromStorage(raw)));
       } catch (e) {
         if (raw) handleUnreadableData(raw);
       } finally {
@@ -373,12 +379,13 @@ export function useInventoryStore() {
     setLoadProblem(null);
   }
 
-  // Reemplaza los datos actuales por la copia de ayer. Devuelve si se pudo.
-  function restorePreviousCopy() {
+  // Reemplaza los datos actuales por la copia de ayer. Devuelve (como
+  // promesa, porque puede estar comprimida) si se pudo.
+  async function restorePreviousCopy() {
     try {
       const raw = localStorage.getItem(PREV_STORAGE_KEY);
       if (!raw) return false;
-      applyPersistedData(JSON.parse(raw), { alwaysPersist: true });
+      applyPersistedData(JSON.parse(await decodeFromStorage(raw)), { alwaysPersist: true });
       setLoadProblem(null);
       return true;
     } catch {

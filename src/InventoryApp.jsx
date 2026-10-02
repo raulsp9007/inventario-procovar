@@ -206,7 +206,7 @@ export default function InventoryApp() {
             style={{ marginBottom: 16 }}
             actions={[{ label: "Compartir respaldo", kind: "dark", onClick: handleShareBackup }]}
           >
-            El historial de movimientos está por llenarse ({movements.length}/{MOVEMENTS_CAP}). Comparte un respaldo pronto: al llegar al tope, los movimientos más viejos se empiezan a perder.
+            El historial de movimientos está por llenarse ({movements.length}/{MOVEMENTS_CAP}). Comparte un respaldo ahora: al llegar al tope, los movimientos más viejos se borran de la app y ese respaldo es la única copia que va a quedar de ellos.
           </Banner>
         )}
 

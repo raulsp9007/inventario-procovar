@@ -192,7 +192,7 @@ describe("protección de los datos guardados", () => {
     expect(result.current.loadProblem.hasPrev).toBe(true);
 
     let ok;
-    act(() => { ok = result.current.restorePreviousCopy(); });
+    await act(async () => { ok = await result.current.restorePreviousCopy(); });
     expect(ok).toBe(true);
     await waitFor(() => expect(result.current.movements).toHaveLength(1));
     expect(result.current.loadProblem).toBeNull();
