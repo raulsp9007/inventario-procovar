@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./theme.css";
 import InventoryApp from "./InventoryApp.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
+import SplashScreen from "./SplashScreen.jsx";
 import { COPYRIGHT_NOTICE, LICENSE_SUMMARY } from "./legal.js";
 import { initPwaStatus } from "./pwaStatus.js";
 
@@ -15,7 +16,9 @@ initPwaStatus();
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <InventoryApp />
+      <SplashScreen>
+        <InventoryApp />
+      </SplashScreen>
     </ErrorBoundary>
   </React.StrictMode>
 );
