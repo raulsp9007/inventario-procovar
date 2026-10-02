@@ -161,7 +161,7 @@ export default function OrderFormModal({
           {/* Tarjeta CLIENTE */}
           <div style={{ flexShrink: 0, background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>CLIENTE</span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>CLIENTE</span>
               <span style={{ flex: 1 }} />
               {draftBucket === "manana" && (
                 <div style={{ position: "relative", display: "inline-flex" }}>
@@ -390,8 +390,8 @@ export default function OrderFormModal({
           {draftLines.length > 0 && (
             <div style={{ flexShrink: 0, background: "var(--surface)", border: "1px solid var(--ink)", borderRadius: 12, overflow: "hidden" }}>
               <div style={{ background: "var(--ink)", padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--cream)" }}>EN EL PEDIDO</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--on-ink-subtitle)" }}>{draftLines.length}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--cream)" }}>EN EL PEDIDO</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--on-ink-subtitle)" }}>{draftLines.length}</span>
               </div>
               {draftLines.map((line, i) => {
                 const product = products.find((p) => p.code === line.code);
@@ -451,7 +451,7 @@ export default function OrderFormModal({
                   <span style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
                     {formatCUP(total).replace(" CUP", "")}
                   </span>
-                  <span style={{ fontSize: 10, fontWeight: 500, color: "var(--faint)" }}>CUP</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)" }}>CUP</span>
                 </div>
               )}
             </div>
@@ -460,7 +460,7 @@ export default function OrderFormModal({
           {/* AGREGAR PRODUCTO / OTRO */}
           {availableProducts.length > 0 ? (
             <div style={{ flexShrink: 0, border: "1.5px dashed var(--border-edit)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 9, background: "var(--surface)" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>
                 {draftLines.length > 0 ? "AGREGAR OTRO" : "AGREGAR PRODUCTO"}
               </span>
               <div style={{ position: "relative" }}>

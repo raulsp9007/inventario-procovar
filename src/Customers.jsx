@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search, Phone, Contact, BookUser, Trash2 } from "lucide-react";
+import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search, Phone, PhoneOff, Contact, BookUser, Trash2 } from "lucide-react";
 import { formatDate, todayStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { getCustomerOrders, getCustomerProductHistory, findNearDuplicateCustomerName, getProductBuyers, cubanPhoneLocalPart } from "./customerHelpers";
@@ -83,19 +83,31 @@ export default function Customers({ products, movements, customers, waitlist, sh
   const [phonePickerError, setPhonePickerError] = useState("");
   const [contactsNotice, setContactsNotice] = useState("");
   const [pendingUndo, setPendingUndo] = useState(null); // { message, snapshot, timeoutId } | null
+  const [onlyNoPhone, setOnlyNoPhone] = useState(false);
+  // Qué campo recibe el cursor al abrir la edición: el nombre normalmente, el
+  // teléfono cuando se llega desde "Sin tel." de un pedido.
+  const [editFocus, setEditFocus] = useState("name");
   const rowRefs = useRef({});
 
-  // Al llegar desde "tocar el nombre" en Pedidos: abre esa ficha y le hace
-  // scroll -- se consume enseguida para no re-abrirla si el cliente la
-  // cierra y algo más en la app vuelve a renderizar este componente.
+  // Al llegar desde Pedidos ({ name, edit }): con edit abre la edición del
+  // cliente (para agregarle el teléfono); sin edit, abre su ficha. En ambos
+  // casos hace scroll -- y se consume enseguida para no re-abrirla si el
+  // cliente la cierra y algo más en la app vuelve a renderizar este componente.
   useEffect(() => {
     if (!openCustomer) return;
-    setExpandedCustomer(openCustomer);
-    rowRefs.current[openCustomer]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const { name, edit } = openCustomer;
+    const target = edit ? allStats.find((c) => c.customerName === name) : null;
+    if (target) {
+      startRename(target.customerName, target.businessName, target.phone, "phone");
+    } else {
+      setExpandedCustomer(name);
+    }
+    rowRefs.current[name]?.scrollIntoView({ behavior: "smooth", block: "center" });
     onOpenCustomerConsumed();
   }, [openCustomer, onOpenCustomerConsumed]);
 
-  function startRename(customerName, businessName, phone) {
+  function startRename(customerName, businessName, phone, focus = "name") {
+    setEditFocus(focus);
     setEditingCustomer(customerName);
     setNameInput(customerName);
     setBusinessNameInput(businessName || "");
@@ -200,7 +212,11 @@ export default function Customers({ products, movements, customers, waitlist, sh
         return c.customerName.toLowerCase().includes(q) || (c.businessName || "").toLowerCase().includes(q);
       })
     : allStats;
-  const filtered = buyers ? searched.filter((c) => buyers.has(c.customerName)) : searched;
+  // Clientes sin teléfono (no se les puede llamar ni mandar WhatsApp): el
+  // total sale del registro entero, no de lo que deja la búsqueda.
+  const noPhoneCount = allStats.filter((c) => !c.phone).length;
+  const phoneFiltered = onlyNoPhone ? searched.filter((c) => !c.phone) : searched;
+  const filtered = buyers ? phoneFiltered.filter((c) => buyers.has(c.customerName)) : phoneFiltered;
   const stats = sortStats(filtered, sortBy, buyers);
   const filteredUnits = buyers ? stats.reduce((sum, c) => sum + buyers.get(c.customerName).qty, 0) : 0;
 
@@ -341,6 +357,22 @@ export default function Customers({ products, movements, customers, waitlist, sh
             </select>
             <ChevronDown size={14} color="var(--faint)" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
           </div>
+          {(noPhoneCount > 0 || onlyNoPhone) && (
+            <button
+              onClick={() => setOnlyNoPhone((v) => !v)}
+              aria-pressed={onlyNoPhone}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, marginTop: 8, height: 34, padding: "0 12px", borderRadius: 999,
+                fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                border: `1px solid ${onlyNoPhone ? "var(--orange)" : "var(--border)"}`,
+                background: onlyNoPhone ? "var(--banner-bg)" : "var(--surface-subtle)",
+                color: onlyNoPhone ? "var(--orange-text)" : "var(--muted)",
+              }}
+            >
+              <PhoneOff size={14} strokeWidth={2} />
+              {`Sin teléfono · ${noPhoneCount}`}
+            </button>
+          )}
           {buyers && stats.length > 0 && (
             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
               {`${stats.length} cliente${stats.length === 1 ? "" : "s"} · ${filteredUnits} uds de ${filterProduct ? filterProduct.name : "este producto"}`}
@@ -360,7 +392,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
             {search.trim() ? `Ningún cliente coincide con "${search}"` : "Ningún cliente coincide con el filtro"}
           </div>
           <button
-            onClick={() => { setSearch(""); changeProductFilter(""); }}
+            onClick={() => { setSearch(""); setOnlyNoPhone(false); changeProductFilter(""); }}
             style={{ fontSize: 13, color: "var(--text)", fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 4 }}
           >
             Limpiar filtros
@@ -386,7 +418,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
                     <div style={{ marginBottom: 8 }}>
                       <input
                         type="text"
-                        autoFocus
+                        autoFocus={editFocus === "name"}
                         placeholder="Nombre y apellidos"
                         value={nameInput}
                         onChange={(e) => setNameInput(e.target.value)}
@@ -418,6 +450,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
                         <input
                           type="text"
                           inputMode="numeric"
+                          autoFocus={editFocus === "phone"}
                           placeholder="Teléfono (opcional)"
                           aria-label="Teléfono"
                           value={phoneInput}
@@ -525,10 +558,15 @@ export default function Customers({ products, movements, customers, waitlist, sh
                           {businessLabel(c.businessName)}
                         </div>
                       )}
-                      {c.phone && (
+                      {c.phone ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--muted)", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
                           <Phone size={10} strokeWidth={2} />
                           {formatLocalPhone(c.phone)}
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 500, color: "var(--orange-text)", marginTop: 2 }}>
+                          <PhoneOff size={10} strokeWidth={2} />
+                          Sin teléfono
                         </div>
                       )}
                       <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>
@@ -543,7 +581,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
                         padding: "5px 8px 5px 6px", flexShrink: 0, maxWidth: 96,
                       }}>
                         <span style={{ width: 6, height: 6, borderRadius: "50%", background: product.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontVariantNumeric: "tabular-nums" }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontVariantNumeric: "tabular-nums" }}>
                           {buyer ? `${product.short} x${buyer.qty}` : product.short}
                         </span>
                       </div>

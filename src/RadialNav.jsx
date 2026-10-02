@@ -49,7 +49,7 @@ export default function RadialNav({ view, setView }) {
             >
               <tab.Icon size={18} color={active ? "var(--cream)" : "currentColor"} />
             </span>
-            <span style={{ fontSize: 10, fontWeight: active ? 600 : 500, lineHeight: 1, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 11, fontWeight: active ? 600 : 500, lineHeight: 1, whiteSpace: "nowrap" }}>
               {tab.short}
             </span>
           </button>

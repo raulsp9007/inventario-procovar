@@ -32,7 +32,7 @@ describe("tocar el nombre de un cliente en Pedidos", () => {
     // El reloj real puede caer domingo (Pedidos abre en "Para mañana"); nos
     // aseguramos de estar en "Hoy", donde está sembrado el pedido.
     fireEvent.click(await screen.findByRole("button", { name: /^Hoy/ }));
-    const nameButton = await screen.findByRole("button", { name: /Ana Lopez/ });
+    const nameButton = await screen.findByRole("button", { name: "👤 Ana Lopez" });
     fireEvent.click(nameButton);
 
     await waitFor(() => expect(screen.getByText(/CLIENTES/)).toBeTruthy());

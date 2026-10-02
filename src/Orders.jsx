@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus } from "lucide-react";
+import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff } from "lucide-react";
 import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
@@ -130,7 +130,7 @@ function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirm
           <Check size={13} strokeWidth={3} color="var(--green)" />
           <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--green)" }}>Confirmado</span>
         </button>
-        <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--faintest)", whiteSpace: "nowrap" }}>tocar para editar</span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faintest)", whiteSpace: "nowrap" }}>tocar para editar</span>
       </div>
     );
   }
@@ -149,7 +149,7 @@ function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirm
             aria-label={step.label}
             aria-pressed={step.done}
             style={{
-              flex: 1, minWidth: 0, position: "relative", display: "flex", flexDirection: "column",
+              flex: "1 1 auto", minWidth: 0, position: "relative", display: "flex", flexDirection: "column",
               alignItems: "center", gap: 4, background: "transparent", border: "none", cursor: "pointer", padding: 0,
             }}
           >
@@ -169,7 +169,7 @@ function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirm
                 ? <Check size={12} strokeWidth={3} color="var(--cream)" />
                 : <span style={{ fontSize: 12, fontWeight: isNextPending ? 700 : 600, color: circleColor }}>{i + 1}</span>}
             </div>
-            <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.04em", color: labelColor }}>{step.short}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: labelColor }}>{step.short}</span>
           </button>
         );
       })}
@@ -975,13 +975,13 @@ export default function Orders({ products, movements, customers, stock, prices, 
               {showPrices && (
                 <div style={{ display: "flex", alignItems: "baseline", gap: 3, justifyContent: "flex-end" }}>
                   <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{totalNumber}</span>
-                  <span style={{ fontSize: 10, fontWeight: 500, color: "var(--faint)" }}>{totalUnit}</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)" }}>{totalUnit}</span>
                 </div>
               )}
               {showDate && (
                 <span style={{
                   display: "inline-flex", marginTop: 4, background: "var(--banner-bg)", border: "1px solid var(--border-warn)",
-                  borderRadius: 999, padding: "2px 7px", fontSize: 10, fontWeight: 600, color: "var(--orange-text)",
+                  borderRadius: 999, padding: "2px 7px", fontSize: 11, fontWeight: 600, color: "var(--orange-text)",
                 }}>
                   {formatDate(order.date)}
                 </span>
@@ -1053,7 +1053,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
               </div>
             </div>
           ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 8, borderTop: "1px solid var(--hairline)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, paddingTop: 8, borderTop: "1px solid var(--hairline)" }}>
               <OrderStepTrack
                 order={order}
                 onMarkSentToCustomer={onMarkSentToCustomer}
@@ -1065,6 +1065,21 @@ export default function Orders({ products, movements, customers, stock, prices, 
               />
               <div style={{ flexShrink: 0, width: 1, height: 34, background: "var(--hairline)" }} />
               <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}>
+                {!order.customerPhone && (
+                  <button
+                    onClick={() => onSelectCustomer(order.customerName, { edit: true })}
+                    title="Sin teléfono: toca para agregarlo"
+                    aria-label={`Agregar teléfono de ${order.customerName}`}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 4, height: 32, padding: "0 10px",
+                      borderRadius: 999, flexShrink: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 600,
+                      background: "var(--surface-subtle)", border: "1px dashed var(--orange)", color: "var(--orange-text)",
+                    }}
+                  >
+                    <PhoneOff size={13} strokeWidth={2} />
+                    Sin tel.
+                  </button>
+                )}
                 {order.customerPhone && (
                   <a
                     href={`tel:+${toCubanPhone(order.customerPhone)}`}
@@ -1073,7 +1088,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "center",
                       background: "var(--surface-subtle)", border: "1px solid var(--border-strong)", borderRadius: "50%", color: "var(--call-blue)",
-                      width: 36, height: 36, flexShrink: 0, boxSizing: "border-box", textDecoration: "none",
+                      width: 34, height: 34, flexShrink: 0, boxSizing: "border-box", textDecoration: "none",
                     }}
                   >
                     <CallIcon size={17} />
@@ -1090,7 +1105,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "center",
                       background: "var(--whatsapp)", border: "none", borderRadius: "50%", color: "#FFFFFF",
-                      width: 40, height: 40, cursor: "pointer", flexShrink: 0,
+                      width: 38, height: 38, cursor: "pointer", flexShrink: 0,
                     }}
                   >
                     <WhatsAppIcon size={20} />
@@ -1105,13 +1120,13 @@ export default function Orders({ products, movements, customers, stock, prices, 
                   aria-label="Registrar (negocio)"
                   style={{
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
-                    width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                    width: 38, height: 38, borderRadius: 10, flexShrink: 0,
                     background: "var(--surface-subtle)", border: "1px solid var(--border-strong)", color: "var(--text)",
                     cursor: "pointer",
                   }}
                 >
                   <Receipt size={15} strokeWidth={1.7} />
-                  <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: "0.06em", color: "var(--muted)" }}>FACT.</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "var(--muted)" }}>FACT.</span>
                 </button>
                 <button
                   onClick={() => startEdit(order)}
@@ -1119,7 +1134,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
                   aria-label="Editar pedido"
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 30, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
+                    width: 28, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
                   }}
                 >
                   <Pencil size={16} strokeWidth={1.8} />
@@ -1130,7 +1145,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
                   aria-label="Eliminar pedido"
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 30, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
+                    width: 28, height: 32, background: "transparent", border: "none", color: "var(--faint)", cursor: "pointer", flexShrink: 0,
                   }}
                 >
                   <Trash2 size={16} strokeWidth={1.8} />

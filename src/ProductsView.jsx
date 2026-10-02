@@ -531,7 +531,7 @@ export default function ProductsView({
                     <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {editNameInputs[p.code] ?? p.name}
                     </div>
-                    <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 2 }}>
+                    <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }}>
                       {p.code}{lastMovement ? ` · últ. mov. ${formatDate(lastMovement.date)}` : ""}
                     </div>
                   </div>
@@ -603,7 +603,7 @@ export default function ProductsView({
                           padding: "0 0 5px", borderRadius: 0,
                         }}
                       />
-                      <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 5 }}>
+                      <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 5 }}>
                         {p.code}
                         {lastMovement ? ` · últ. mov. ${formatDate(lastMovement.date)}` : ""}
                         {lastAdjustedAt[p.code] ? ` · stock ajustado ${formatDate(lastAdjustedAt[p.code].slice(0, 10))}` : ""}
@@ -629,8 +629,8 @@ export default function ProductsView({
                   {/* b) Bloque STOCK ACTUAL */}
                   <div style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px 12px" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>STOCK ACTUAL</span>
-                      <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--faint)" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>STOCK ACTUAL</span>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)" }}>
                         antes {originalEditSnapshotRef.current?.editInputs[p.code] ?? editInputs[p.code]}
                       </span>
                     </div>
@@ -683,7 +683,7 @@ export default function ProductsView({
                               fontSize: 15, fontWeight: 600, fontVariantNumeric: "tabular-nums", padding: 0, borderRadius: 0,
                             }}
                           />
-                          <span style={{ fontSize: 9, fontWeight: 500, letterSpacing: "0.08em", color: "var(--faint)", marginTop: 2 }}>CANT.</span>
+                          <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.08em", color: "var(--faint)", marginTop: 2 }}>CANT.</span>
                         </div>
                         <button
                           type="button"
@@ -992,7 +992,7 @@ export default function ProductsView({
                       }}>
                         {qty}
                       </span>
-                      <span style={{ fontSize: 10, fontWeight: 500, color: isLow ? "var(--orange-2)" : "var(--faint)" }}>uds</span>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: isLow ? "var(--orange-2)" : "var(--faint)" }}>uds</span>
                     </div>
                     <button
                       onClick={() => { setWaitPanelCode(null); setManualSaleCode(manualSaleCode === p.code ? null : p.code); setManualSaleQty(""); }}
@@ -1162,7 +1162,7 @@ export default function ProductsView({
                 display: "flex", flexDirection: "column", gap: 9, background: "var(--surface)",
               }}
             >
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>AGREGAR PRODUCTO</div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>AGREGAR PRODUCTO</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   type="text"
@@ -1212,7 +1212,7 @@ export default function ProductsView({
                 padding: "11px 12px", marginBottom: showArchived ? 10 : 0,
               }}
             >
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>
                 PRODUCTOS ELIMINADOS ({archivedProducts.length})
               </span>
               <span style={{ flex: 1 }} />
