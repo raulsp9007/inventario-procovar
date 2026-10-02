@@ -600,7 +600,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
                                 return (
                                   <div key={line.code} style={{ display: "flex", alignItems: "center", gap: 4, background: "var(--panel-alt)", borderRadius: 999, padding: "3px 8px 3px 5px" }}>
                                     <span style={{ width: 6, height: 6, borderRadius: "50%", background: lp?.color || "var(--faintest)" }} />
-                                    <span style={{ fontSize: 11, color: "var(--text)", fontWeight: 500 }}>{lp ? lp.short : line.code}</span>
+                                    <span style={{ fontSize: 11, color: "var(--text)", fontWeight: 500 }}>{`${lp ? lp.short : line.code} x${line.qty}`}</span>
                                   </div>
                                 );
                               })}
