@@ -166,8 +166,8 @@ function openOrderWhatsApp(order, products, phone, senderOptions) {
 // Copia del pedido directo al teléfono del cliente (no al contacto de
 // negocio configurado) -- mensaje aparte, sin remitente ni negocio, ver
 // formatOrderForCustomer.
-function openOrderWhatsAppToCustomer(order, products) {
-  const text = formatOrderForCustomer(order, products);
+function openOrderWhatsAppToCustomer(order, products, exchangeRate) {
+  const text = formatOrderForCustomer(order, products, { exchangeRate });
   // toCubanPhone de nuevo acá (ya se aplica al guardar el pedido) -- por
   // si el número viene de un dato viejo importado que nunca pasó por esa
   // normalización. Así el link de wa.me nunca sale mal armado.
@@ -1014,7 +1014,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
                 {order.customerPhone && (
                   <button
                     onClick={() => {
-                      openOrderWhatsAppToCustomer(order, products);
+                      openOrderWhatsAppToCustomer(order, products, exchangeRate);
                       onMarkSentToCustomer(order.orderId, true);
                     }}
                     title="Enviar copia al cliente"

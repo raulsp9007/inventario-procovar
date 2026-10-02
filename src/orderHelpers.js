@@ -1,5 +1,5 @@
 import { formatDate, isSundayStr, addDaysStr } from "./dateUtils";
-import { formatCUP } from "./money";
+import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { customerLabel, businessLabel } from "./nameLabels";
 
 export function groupAllOrders(movements) {
@@ -147,19 +147,25 @@ export function formatOrderForWhatsApp(order, products, { senderName, sendSender
 // negocio, remitente ni nota interna: solo lo que el cliente necesita ver
 // para confirmar qué compró, cuándo pasa a buscarlo (o si es domicilio) y
 // cuánto paga.
-export function formatOrderForCustomer(order, products) {
+export function formatOrderForCustomer(order, products, { exchangeRate } = {}) {
   const total = order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
   // Los sábados el local cierra temprano -- la ventana de recogida es más
   // corta. getDay() 6 = sábado.
   const isSaturday = new Date(order.date + "T00:00:00").getDay() === 6;
-  const pickupWindow = isSaturday ? "(recoger entre 9:00 am y 11am)" : "(recoger entre 9:00 am y 3:00pm)";
+  const pickupWindow = isSaturday ? "(recoger entre 9:00 am y 11:00 am)" : "(recoger entre 9:00 am y 3:00 pm)";
   const pickupInfo = order.isDelivery ? "(Domicilio)" : pickupWindow;
-  const lines = [`Tu pedido para ${formatDate(order.date)}: ${pickupInfo}`, ""];
+  // *...* = negrita de WhatsApp.
+  const lines = [`*Tu pedido para ${formatDate(order.date)}* ${pickupInfo}`, ""];
   order.lines.forEach((line) => {
     const product = products.find((p) => p.code === line.code);
-    lines.push(`${line.qty}x ${product ? product.name : line.code} (${formatCUP(line.unitPrice || 0)})`);
+    lines.push(`${line.qty}x ${product ? product.name : line.code} (${formatCUP(line.unitPrice || 0)} c/u)`);
   });
-  lines.push("", `Total: ${formatCUP(total)}`);
+  lines.push("", "*Total:*", formatCUP(total));
+  // Sin tasa cargada no hay USD que mostrar -- mejor omitir la línea que
+  // mandar "US$0.00".
+  const totalUsd = convertToUSD(total, exchangeRate);
+  if (totalUsd != null) lines.push(formatUSD(totalUsd));
+  lines.push("", "¡Gracias por tu compra!");
   return lines.join("\n");
 }
 

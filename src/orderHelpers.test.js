@@ -314,34 +314,43 @@ describe("formatOrderForCustomer", () => {
     { code: "M330", name: "Malta Guajira 330ml" },
   ];
 
-  it("arma el mensaje con fecha, horario de recogida, productos con su precio unitario y total -- sin negocio ni remitente", () => {
+  it("arma el mensaje con encabezado en negrita, precio c/u, total en CUP y USD, y cierre -- sin negocio ni remitente", () => {
     const order = {
       date: "2026-08-28", isDelivery: false,
       lines: [{ code: "P1500", qty: 5, unitPrice: 100 }, { code: "M330", qty: 1, unitPrice: 200 }],
     };
-    const text = formatOrderForCustomer(order, products);
+    const text = formatOrderForCustomer(order, products, { exchangeRate: 120 });
     expect(text).toBe(
-      "Tu pedido para 28 ago 2026: (recoger entre 9:00 am y 3:00pm)\n\n5x Parranda 1500ml (100 CUP)\n1x Malta Guajira 330ml (200 CUP)\n\nTotal: 700 CUP"
+      "*Tu pedido para 28 ago 2026* (recoger entre 9:00 am y 3:00 pm)\n\n5x Parranda 1500ml (100 CUP c/u)\n1x Malta Guajira 330ml (200 CUP c/u)\n\n*Total:*\n700 CUP\nUS$5.83\n\n¡Gracias por tu compra!"
     );
+  });
+
+  it("sin tasa de cambio no sale la línea de USD", () => {
+    const order = { date: "2026-08-28", isDelivery: false, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
+    for (const opts of [undefined, {}, { exchangeRate: null }, { exchangeRate: 0 }]) {
+      const text = formatOrderForCustomer(order, products, opts);
+      expect(text).toContain("*Total:*\n100 CUP\n\n¡Gracias por tu compra!");
+      expect(text).not.toContain("US$");
+    }
   });
 
   it("si la fecha cae sábado, la ventana de recogida es más corta (9 a 11)", () => {
     // 2026-08-29 es sábado
     const order = { date: "2026-08-29", isDelivery: false, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
     const text = formatOrderForCustomer(order, products);
-    expect(text.startsWith("Tu pedido para 29 ago 2026: (recoger entre 9:00 am y 11am)\n")).toBe(true);
+    expect(text.startsWith("*Tu pedido para 29 ago 2026* (recoger entre 9:00 am y 11:00 am)\n")).toBe(true);
   });
 
   it("un sábado con domicilio sigue mostrando (Domicilio), no la ventana corta", () => {
     const order = { date: "2026-08-29", isDelivery: true, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
     const text = formatOrderForCustomer(order, products);
-    expect(text.startsWith("Tu pedido para 29 ago 2026: (Domicilio)\n")).toBe(true);
+    expect(text.startsWith("*Tu pedido para 29 ago 2026* (Domicilio)\n")).toBe(true);
   });
 
   it("si es domicilio, muestra (Domicilio) en vez del horario de recogida", () => {
     const order = { date: "2026-08-28", isDelivery: true, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
     const text = formatOrderForCustomer(order, products);
-    expect(text.startsWith("Tu pedido para 28 ago 2026: (Domicilio)\n")).toBe(true);
+    expect(text.startsWith("*Tu pedido para 28 ago 2026* (Domicilio)\n")).toBe(true);
   });
 
   it("nunca incluye nombre del negocio, nota, ni remitente", () => {
