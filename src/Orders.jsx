@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff } from "lucide-react";
+import { Trash2, Receipt, UserCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff } from "lucide-react";
 import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
@@ -80,7 +80,11 @@ function MotoIcon({ size = 15, color = "currentColor", strokeWidth = 1.7 }) {
 function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirmed, onSetOrderSteps, expanded, onToggleExpanded }) {
   const steps = [
     { key: "sentToCustomer", label: "Enviado", short: "ENV.", done: !!order.sentToCustomer },
-    { key: "sent", label: "Facturado", short: "FACT.", done: !!order.sent },
+    // Con domicilio este mismo paso es el del supervisor (a quien se le manda
+    // el pedido en vez de al facturador) -- misma bandera `sent`, otro nombre.
+    order.isDelivery
+      ? { key: "sent", label: "Supervisor", short: "SUP.", done: !!order.sent }
+      : { key: "sent", label: "Facturado", short: "FACT.", done: !!order.sent },
     { key: "confirmed", label: "Confirmado", short: "CONF.", done: !!order.confirmed },
   ];
   const allDone = steps.every((s) => s.done);
@@ -199,7 +203,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed }) {
+export default function Orders({ products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -1111,13 +1115,14 @@ export default function Orders({ products, movements, customers, stock, prices, 
                     <WhatsAppIcon size={20} />
                   </button>
                 )}
+                {/* Pedidos con domicilio van al supervisor(a); el resto, al facturador(a). */}
                 <button
                   onClick={() => {
-                    openOrderWhatsApp(order, products, whatsappPhone, senderOptions);
+                    openOrderWhatsApp(order, products, order.isDelivery ? supervisorPhone : whatsappPhone, senderOptions);
                     onMarkSent(order.orderId, true);
                   }}
-                  title="Registrar (negocio)"
-                  aria-label="Registrar (negocio)"
+                  title={order.isDelivery ? "Enviar a supervisor(a)" : "Registrar (negocio)"}
+                  aria-label={order.isDelivery ? "Enviar a supervisor(a)" : "Registrar (negocio)"}
                   style={{
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
                     width: 38, height: 38, borderRadius: 10, flexShrink: 0,
@@ -1125,8 +1130,8 @@ export default function Orders({ products, movements, customers, stock, prices, 
                     cursor: "pointer",
                   }}
                 >
-                  <Receipt size={15} strokeWidth={1.7} />
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "var(--muted)" }}>FACT.</span>
+                  {order.isDelivery ? <UserCheck size={15} strokeWidth={1.7} /> : <Receipt size={15} strokeWidth={1.7} />}
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "var(--muted)" }}>{order.isDelivery ? "SUP." : "FACT."}</span>
                 </button>
                 <button
                   onClick={() => startEdit(order)}

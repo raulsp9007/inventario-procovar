@@ -128,6 +128,10 @@ export function useInventoryStore() {
   const [restockAlerts, setRestockAlerts] = useState([]); // [{ code }]
   const [whatsappPhone, setWhatsappPhone] = useState("");
   const [whatsappContactName, setWhatsappContactName] = useState("");
+  // Segundo contacto de WhatsApp: recibe los pedidos con domicilio (el
+  // facturador recibe el resto). Mismo formato que whatsappPhone.
+  const [supervisorPhone, setSupervisorPhone] = useState("");
+  const [supervisorContactName, setSupervisorContactName] = useState("");
   const [cierreVentasHour, setCierreVentasHour] = useState(null); // 0-23, o null = desactivado
   const [senderName, setSenderName] = useState("");
   const [sendSenderName, setSendSenderName] = useState(false);
@@ -190,7 +194,7 @@ export function useInventoryStore() {
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, waitlist, customers, productFormats, whatsappPhone,
-    whatsappContactName, cierreVentasHour,
+    whatsappContactName, supervisorPhone, supervisorContactName, cierreVentasHour,
     senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
     // Marca de que la numeración de pedidos ya es por día (ver applyPersistedData).
     orderSeqPerDay: true,
@@ -277,6 +281,8 @@ export function useInventoryStore() {
       : parsed.productFormats;
     const nextWhatsappPhone = parsed.whatsappPhone || "";
     const nextWhatsappContactName = parsed.whatsappContactName || "";
+    const nextSupervisorPhone = parsed.supervisorPhone || "";
+    const nextSupervisorContactName = parsed.supervisorContactName || "";
     const nextCierreVentasHour = parsed.cierreVentasHour ?? null;
     const nextSenderName = parsed.senderName || "";
     const nextSendSenderName = parsed.sendSenderName ?? false;
@@ -305,6 +311,8 @@ export function useInventoryStore() {
     setProductFormats(nextProductFormats);
     setWhatsappPhone(nextWhatsappPhone);
     setWhatsappContactName(nextWhatsappContactName);
+    setSupervisorPhone(nextSupervisorPhone);
+    setSupervisorContactName(nextSupervisorContactName);
     setCierreVentasHour(nextCierreVentasHour);
     setSenderName(nextSenderName);
     setSendSenderName(nextSendSenderName);
@@ -318,7 +326,8 @@ export function useInventoryStore() {
         cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
         dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist, customers: nextCustomers, productFormats: nextProductFormats, orderSeqPerDay: true,
-        whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName, cierreVentasHour: nextCierreVentasHour,
+        whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName,
+        supervisorPhone: nextSupervisorPhone, supervisorContactName: nextSupervisorContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
         lastBackupAt: nextLastBackupAt,
       });
@@ -1187,6 +1196,7 @@ export function useInventoryStore() {
     storageProtected, loadProblem, dismissLoadProblem, getCorruptCopy, restorePreviousCopy, autoCopyAt,
     applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
+    supervisorPhone, setSupervisorPhone, supervisorContactName, setSupervisorContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
     sendBusinessName, setSendBusinessNameSetting,

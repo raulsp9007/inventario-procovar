@@ -57,6 +57,7 @@ export default function InventoryApp() {
     storageProtected, loadProblem, dismissLoadProblem, getCorruptCopy, restorePreviousCopy, autoCopyAt,
     applyHlBackfill,
     whatsappPhone, setWhatsappPhone, whatsappContactName, setWhatsappContactName,
+    supervisorPhone, setSupervisorPhone, supervisorContactName, setSupervisorContactName,
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
     sendBusinessName, setSendBusinessNameSetting,
@@ -335,6 +336,7 @@ export default function InventoryApp() {
             todaysMovements={todaysMovements}
             mananaMovements={mananaMovements}
             whatsappPhone={whatsappPhone}
+            supervisorPhone={supervisorPhone}
             senderName={senderName}
             sendSenderName={sendSenderName}
             sendBusinessName={sendBusinessName}
@@ -406,6 +408,16 @@ export default function InventoryApp() {
             onWhatsappContactNameChange={(next) => {
               setWhatsappContactName(next);
               persist({ ...currentPersistedState, whatsappContactName: next });
+            }}
+            supervisorPhone={supervisorPhone}
+            onSupervisorPhoneChange={(next) => {
+              setSupervisorPhone(next);
+              persist({ ...currentPersistedState, supervisorPhone: next });
+            }}
+            supervisorContactName={supervisorContactName}
+            onSupervisorContactNameChange={(next) => {
+              setSupervisorContactName(next);
+              persist({ ...currentPersistedState, supervisorContactName: next });
             }}
             cierreVentasHour={cierreVentasHour}
             onCierreVentasHourChange={(next) => {

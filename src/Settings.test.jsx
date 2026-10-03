@@ -17,6 +17,8 @@ function baseProps(overrides = {}) {
   return {
     whatsappPhone: "", onWhatsappPhoneChange: () => {},
     whatsappContactName: "", onWhatsappContactNameChange: () => {},
+    supervisorPhone: "", onSupervisorPhoneChange: () => {},
+    supervisorContactName: "", onSupervisorContactNameChange: () => {},
     cierreVentasHour: null, onCierreVentasHourChange: () => {},
     senderName: "", sendSenderName: false, onSenderSettingsChange: () => {},
     theme: "light", onToggleTheme: () => {},

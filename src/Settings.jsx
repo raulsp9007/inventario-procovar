@@ -5,18 +5,15 @@ import { formatHour12 } from "./dateUtils.js";
 import { usePwaStatus } from "./pwaStatus.js";
 import ConnectionStatus from "./ConnectionStatus.jsx";
 import ProductFormatsCard from "./ProductFormatsCard.jsx";
+import WhatsappContactCard from "./WhatsappContactCard.jsx";
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
-
-// El picker de contactos del navegador (Contact Picker API) solo existe en
-// Chrome/Android por ahora -- en iPhone o desktop no aparece el botón, no
-// tiene sentido ofrecer algo que va a fallar siempre.
-const CONTACT_PICKER_SUPPORTED =
-  typeof navigator !== "undefined" && "contacts" in navigator && typeof window !== "undefined" && "ContactsManager" in window;
 
 export default function Settings({
   whatsappPhone, onWhatsappPhoneChange,
   whatsappContactName, onWhatsappContactNameChange,
+  supervisorPhone, onSupervisorPhoneChange,
+  supervisorContactName, onSupervisorContactNameChange,
   cierreVentasHour, onCierreVentasHourChange,
   senderName, sendSenderName, onSenderSettingsChange,
   theme, onToggleTheme,
@@ -25,11 +22,8 @@ export default function Settings({
   productFormats, products, onSaveProductFormat, onDeleteProductFormat, onEditProductFormat,
   topSlot,
 }) {
-  const [phoneInput, setPhoneInput] = useState(whatsappPhone || "");
-  const [contactNameInput, setContactNameInput] = useState(whatsappContactName || "");
   const [nameInput, setNameInput] = useState(senderName || "");
   const [sendChecked, setSendChecked] = useState(!!sendSenderName);
-  const [pickerError, setPickerError] = useState("");
   const [clearingCache, setClearingCache] = useState(false);
   const [clearCacheError, setClearCacheError] = useState("");
   const pwaStatus = usePwaStatus();
@@ -60,32 +54,6 @@ export default function Settings({
       }
     } finally {
       window.location.reload();
-    }
-  }
-
-  function save() {
-    const digits = phoneInput.replace(/\D/g, "");
-    setPhoneInput(digits);
-    onWhatsappPhoneChange(digits);
-  }
-
-  async function pickContact() {
-    setPickerError("");
-    try {
-      const contacts = await navigator.contacts.select(["name", "tel"], { multiple: false });
-      const contact = contacts && contacts[0];
-      const tel = contact?.tel?.[0]?.replace(/\D/g, "") || "";
-      if (!tel) {
-        setPickerError("Ese contacto no tiene número de teléfono.");
-        return;
-      }
-      const name = contact?.name?.[0] || "";
-      setPhoneInput(tel);
-      setContactNameInput(name);
-      onWhatsappPhoneChange(tel);
-      onWhatsappContactNameChange(name);
-    } catch {
-      // Usuario canceló el picker -- no es un error real, no hace falta avisar.
     }
   }
 
@@ -139,55 +107,26 @@ export default function Settings({
         </button>
       </div>
 
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px" }}>
-        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Facturador(a)</div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
-          Código de país + número, sin espacios ni "+". Ej: 5359XXXXXXX. Al enviar un pedido, se abre el chat directo con este número.
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="5359XXXXXXX"
-            value={phoneInput}
-            onChange={(e) => { setPhoneInput(e.target.value); setContactNameInput(""); }}
-            onKeyDown={(e) => { if (e.key === "Enter") save(); }}
-            onBlur={save}
-            style={{
-              flex: "1 1 auto", minWidth: 140, border: "1px solid var(--border)", borderRadius: 7,
-              padding: "9px 12px", fontSize: 14, boxSizing: "border-box",
-            }}
-          />
-          <button
-            onClick={save}
-            style={{
-              flex: "0 0 auto", background: "var(--ink)", color: "var(--cream)", border: "none",
-              borderRadius: 7, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            Guardar
-          </button>
-        </div>
-        {CONTACT_PICKER_SUPPORTED && (
-          <button
-            onClick={pickContact}
-            style={{
-              marginTop: 8, background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)",
-              borderRadius: 7, padding: "7px 12px", fontSize: 12.5, cursor: "pointer",
-            }}
-          >
-            Elegir contacto
-          </button>
-        )}
-        {pickerError && (
-          <div style={{ fontSize: 12, color: "var(--error-text)", marginTop: 8 }}>{pickerError}</div>
-        )}
-        {whatsappPhone && (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
-            Guardado: {whatsappContactName ? `${whatsappContactName} · ${whatsappPhone}` : whatsappPhone}
-          </div>
-        )}
-      </div>
+      <WhatsappContactCard
+        title="Facturador(a)"
+        description={'Código de país + número, sin espacios ni "+". Ej: 5359XXXXXXX. Al enviar un pedido sin domicilio, se abre el chat directo con este número.'}
+        inputLabel="Teléfono del facturador(a)"
+        phone={whatsappPhone}
+        onPhoneChange={onWhatsappPhoneChange}
+        contactName={whatsappContactName}
+        onContactNameChange={onWhatsappContactNameChange}
+      />
+
+      <WhatsappContactCard
+        title="Supervisor(a)"
+        description={'Código de país + número, sin espacios ni "+". Ej: 5359XXXXXXX. Los pedidos con domicilio se envían al chat directo con este número.'}
+        inputLabel="Teléfono del supervisor(a)"
+        phone={supervisorPhone}
+        onPhoneChange={onSupervisorPhoneChange}
+        contactName={supervisorContactName}
+        onContactNameChange={onSupervisorContactNameChange}
+        marginTop={14}
+      />
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Cierre de ventas</div>
