@@ -10,6 +10,7 @@ vi.mock("./imageResize", () => ({
 }));
 
 import InventoryApp from "./InventoryApp";
+import { resizeImageFile } from "./imageResize";
 import { putProductImage, getProductImage, listProductImageCodes, deleteProductImage } from "./productImageStore";
 
 // Fotos de los productos (opción A): una foto por producto, guardada aparte
@@ -37,6 +38,9 @@ let shareSpy;
 let urlCount;
 
 beforeEach(async () => {
+  // Sin restos de un "una sola vez" que un test anterior no llegó a gastar.
+  resizeImageFile.mockReset();
+  resizeImageFile.mockImplementation(async () => new Blob(["reducida"], { type: "image/jpeg" }));
   localStorage.clear();
   for (const code of await listProductImageCodes()) await deleteProductImage(code);
   urlCount = 0;
@@ -107,8 +111,42 @@ describe("Productos: fotos en la lista", () => {
     expect(lines[2]).toMatch(/^Por unidad: 150 CUP · US\$0\.19$/);
   });
 
+  it("con foto: 'Cambiar foto' la reemplaza por la nueva", async () => {
+    await putProductImage("P500", new Blob(["vieja"], { type: "image/jpeg" }));
+    render(<InventoryApp />);
+    const before = (await screen.findByAltText("Foto de Parranda 500ml")).getAttribute("src");
+
+    resizeImageFile.mockResolvedValueOnce(new Blob(["nueva-foto"], { type: "image/jpeg" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar foto de Parranda 500ml" }));
+    fireEvent.change(screen.getByLabelText("Foto desde la galería"), { target: { files: [photo()] } });
+
+    await waitFor(() => expect(screen.getByAltText("Foto de Parranda 500ml").getAttribute("src")).not.toBe(before));
+    expect((await getProductImage("P500")).size).toBe("nueva-foto".length);
+    // Sigue habiendo una sola foto por producto.
+    expect(await listProductImageCodes()).toEqual(["P500"]);
+  });
+
+  it("sin foto no hay 'Cambiar foto' (solo 'Agregar foto')", async () => {
+    render(<InventoryApp />);
+    await screen.findByRole("button", { name: "Agregar foto de Parranda 500ml" });
+    expect(screen.queryByRole("button", { name: /Cambiar foto/ })).toBeNull();
+  });
+
+  it("si la foto nueva falla, la anterior se conserva", async () => {
+    await putProductImage("P500", new Blob(["vieja"], { type: "image/jpeg" }));
+    render(<InventoryApp />);
+    await screen.findByAltText("Foto de Parranda 500ml");
+
+    resizeImageFile.mockRejectedValueOnce(new Error("no es imagen"));
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar foto de Parranda 500ml" }));
+    fireEvent.change(screen.getByLabelText("Foto desde la galería"), { target: { files: [new File(["x"], "x.txt")] } });
+
+    expect(await screen.findByText(/No se pudo guardar la foto/)).toBeTruthy();
+    expect(screen.getByAltText("Foto de Parranda 500ml")).toBeTruthy();
+    expect((await getProductImage("P500")).size).toBe("vieja".length);
+  });
+
   it("un error al guardar la foto se avisa y no deja foto a medias", async () => {
-    const { resizeImageFile } = await import("./imageResize");
     resizeImageFile.mockRejectedValueOnce(new Error("no es imagen"));
     render(<InventoryApp />);
     fireEvent.click(await screen.findByRole("button", { name: "Agregar foto de Parranda 500ml" }));
@@ -152,6 +190,17 @@ describe("Productos: fotos en el modo Ajustar", () => {
     await waitFor(async () => expect(await getProductImage("P500")).not.toBeNull());
     expect(await getProductImage("M1500")).toBeNull();
     expect(await within(card).findByAltText("Foto de Parranda 500ml")).toBeTruthy();
+  });
+
+  it("con foto: elegir otra de la galería la reemplaza", async () => {
+    await putProductImage("P500", new Blob(["vieja"], { type: "image/jpeg" }));
+    render(<InventoryApp />);
+    const card = await openEditCard("P500");
+    resizeImageFile.mockResolvedValueOnce(new Blob(["nueva-foto"], { type: "image/jpeg" }));
+    fireEvent.click(await within(card).findByRole("button", { name: "Elegir foto de Parranda 500ml de la galería" }));
+    fireEvent.change(screen.getByLabelText("Foto desde la galería"), { target: { files: [photo()] } });
+
+    await waitFor(async () => expect((await getProductImage("P500")).size).toBe("nueva-foto".length));
   });
 
   it("con foto: 'Quitar foto' la borra", async () => {

@@ -1125,6 +1125,21 @@ export default function ProductsView({
                         {photoUrls[p.code] ? <Share2 size={13} strokeWidth={2} /> : <Camera size={13} strokeWidth={2} />}
                         {photoUrls[p.code] ? "Compartir" : "Agregar foto"}
                       </button>
+                      {photoUrls[p.code] && (
+                        <button
+                          type="button"
+                          onClick={() => openPhotoPicker(p.code, "gallery")}
+                          aria-label={`Cambiar foto de ${p.name}`}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 5, height: 30, padding: "0 12px", borderRadius: 999,
+                            fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+                            border: "1px solid var(--border-strong)", background: "var(--surface-subtle)", color: "var(--text)",
+                          }}
+                        >
+                          <Camera size={13} strokeWidth={2} />
+                          Cambiar
+                        </button>
+                      )}
                     </div>
                   )}
 
