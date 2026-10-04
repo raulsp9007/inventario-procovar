@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Check, Pencil, Trash2, History, ChevronDown, ChevronUp, GripVertical, ReceiptText, X, EyeOff, Eye, Hourglass } from "lucide-react";
+import { Check, Pencil, Trash2, History, ChevronDown, ChevronUp, GripVertical, ReceiptText, X, EyeOff, Eye, Hourglass, Camera, Image as ImageIcon, ImageOff, Share2 } from "lucide-react";
 import { formatDate } from "./dateUtils";
 import { formatCUP, formatUSD, priceToCUP } from "./money";
 import Card from "./Card.jsx";
@@ -8,6 +8,23 @@ import { registryNames } from "./customerRegistry";
 import { unitPrice } from "./productFormats";
 import { getHlBackfill } from "./hlBackfill";
 import { customerLabel } from "./nameLabels";
+import { formatProductForShare, shareProductPhoto } from "./productShare";
+
+// Foto del producto (miniatura) o un recuadro vacío si todavía no tiene.
+function ProductThumb({ url, name, size }) {
+  const box = { flexShrink: 0, width: size, height: size, borderRadius: 9, overflow: "hidden", boxSizing: "border-box" };
+  if (url) {
+    return <img src={url} alt={`Foto de ${name}`} style={{ ...box, objectFit: "cover", border: "1px solid var(--border)" }} />;
+  }
+  return (
+    <div
+      aria-hidden="true"
+      style={{ ...box, border: "1px dashed var(--border-strong)", background: "var(--surface-subtle)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--faintest)" }}
+    >
+      <ImageOff size={Math.round(size * 0.4)} strokeWidth={1.6} />
+    </div>
+  );
+}
 
 // Franja/agarradera de puntos (6, en 2 columnas x 3 filas) -- reemplaza el
 // ícono GripVertical de lucide para calzar con el diseño exacto del
@@ -83,6 +100,7 @@ export default function ProductsView({
   onAddWaitlistEntry,
   onRemoveWaitlistEntry,
   onApplyHlBackfill,
+  productImages,
 }) {
   const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
   const [manualSaleCode, setManualSaleCode] = useState(null);
@@ -94,6 +112,36 @@ export default function ProductsView({
   const [waitQty, setWaitQty] = useState("");
   const [waitError, setWaitError] = useState("");
   const [hlBackfillCode, setHlBackfillCode] = useState(null);
+  // Fotos de productos: dos campos de archivo ocultos y compartidos (cámara y
+  // galería) -- el producto al que va la foto se anota al tocar el botón.
+  const photoUrls = productImages?.urls || {};
+  const [photoError, setPhotoError] = useState("");
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const pendingPhotoCodeRef = useRef(null);
+
+  function openPhotoPicker(code, source) {
+    pendingPhotoCodeRef.current = code;
+    setPhotoError("");
+    (source === "camera" ? cameraInputRef : galleryInputRef).current?.click();
+  }
+
+  async function onPhotoChosen(event) {
+    const file = event.target.files?.[0];
+    const code = pendingPhotoCodeRef.current;
+    event.target.value = "";
+    if (!file || !code) return;
+    const result = await productImages.savePhoto(code, file);
+    if (!result.ok) setPhotoError(result.error);
+  }
+
+  async function sharePhoto(product) {
+    const blob = await productImages.getBlob(product.code);
+    if (!blob) return;
+    const caption = formatProductForShare({ product, price: prices[product.code], formats: productFormats, exchangeRate });
+    await shareProductPhoto({ blob, caption, name: product.name });
+  }
+
   // Ajustador rápido de existencias (modo edición): un número que se suma o
   // resta al stock que ya está en editInputs, en vez de tener que calcular
   // a mano el nuevo total y tipearlo entero. No toca nada hasta "Guardar
@@ -421,7 +469,18 @@ export default function ProductsView({
         )}
       </div>
 
+      {productImages && (
+        <>
+          <input type="file" accept="image/*" capture="environment" hidden aria-label="Foto desde la cámara" ref={cameraInputRef} onChange={onPhotoChosen} />
+          <input type="file" accept="image/*" hidden aria-label="Foto desde la galería" ref={galleryInputRef} onChange={onPhotoChosen} />
+        </>
+      )}
       <div style={{ paddingTop: 12 }}>
+        {photoError && (
+          <div role="alert" style={{ background: "var(--banner-bg)", border: "1px solid var(--border-warn)", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: "var(--orange-text)", marginBottom: 12 }}>
+            {photoError}
+          </div>
+        )}
         <datalist id="waitlist-customers">
           {customerNamesList.map((name) => <option key={name} value={name} />)}
         </datalist>
@@ -625,6 +684,44 @@ export default function ProductsView({
                       <DragDots color="var(--muted)" size={18} />
                     </button>
                   </div>
+
+                  {/* a2) Foto del producto */}
+                  {productImages && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px" }}>
+                      <ProductThumb url={photoUrls[p.code]} name={p.name} size={72} />
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>FOTO</span>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => openPhotoPicker(p.code, "camera")}
+                            aria-label={`Tomar foto de ${p.name}`}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 32, padding: "0 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border-strong)", background: "var(--surface)", color: "var(--text)" }}
+                          >
+                            <Camera size={14} strokeWidth={1.8} /> Cámara
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openPhotoPicker(p.code, "gallery")}
+                            aria-label={`Elegir foto de ${p.name} de la galería`}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 32, padding: "0 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border-strong)", background: "var(--surface)", color: "var(--text)" }}
+                          >
+                            <ImageIcon size={14} strokeWidth={1.8} /> Galería
+                          </button>
+                          {photoUrls[p.code] && (
+                            <button
+                              type="button"
+                              onClick={() => productImages.removePhoto(p.code)}
+                              aria-label={`Quitar foto de ${p.name}`}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 32, padding: "0 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--red)" }}
+                            >
+                              <Trash2 size={14} strokeWidth={1.8} /> Quitar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* b) Bloque STOCK ACTUAL */}
                   <div style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px 12px" }}>
@@ -925,7 +1022,7 @@ export default function ProductsView({
                 }}
               >
                 <div style={{ width: 4, flexShrink: 0, background: p.color }} />
-                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: isVentaOpen || isWaitOpen ? "column" : "row" }}>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: isVentaOpen || isWaitOpen || productImages ? "column" : "row" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0 10px 12px", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -1009,6 +1106,27 @@ export default function ProductsView({
                       <ReceiptText size={16} strokeWidth={1.7} />
                     </button>
                   </div>
+
+                  {productImages && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 0 10px 12px" }}>
+                      {photoUrls[p.code] && <ProductThumb url={photoUrls[p.code]} name={p.name} size={44} />}
+                      <button
+                        type="button"
+                        onClick={() => (photoUrls[p.code] ? sharePhoto(p) : openPhotoPicker(p.code, "gallery"))}
+                        aria-label={photoUrls[p.code] ? `Compartir ${p.name}` : `Agregar foto de ${p.name}`}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 5, height: 30, padding: "0 12px", borderRadius: 999,
+                          fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+                          border: `1px solid ${photoUrls[p.code] ? "var(--ink)" : "var(--border-strong)"}`,
+                          background: photoUrls[p.code] ? "var(--ink)" : "var(--surface-subtle)",
+                          color: photoUrls[p.code] ? "var(--cream)" : "var(--text)",
+                        }}
+                      >
+                        {photoUrls[p.code] ? <Share2 size={13} strokeWidth={2} /> : <Camera size={13} strokeWidth={2} />}
+                        {photoUrls[p.code] ? "Compartir" : "Agregar foto"}
+                      </button>
+                    </div>
+                  )}
 
                   {isVentaOpen && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 12px", borderTop: "1px dashed var(--border)", background: "var(--surface-subtle)" }}>

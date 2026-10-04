@@ -16,6 +16,7 @@ import Settings from "./Settings.jsx";
 import PulseNumber from "./PulseNumber.jsx";
 import BackupCard from "./BackupCard.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
+import { useProductImages } from "./useProductImages.js";
 import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, BACKUP_REMINDER_DAYS, lowStockThresholdFor } from "./useInventoryStore.js";
 
 export default function InventoryApp() {
@@ -83,6 +84,7 @@ export default function InventoryApp() {
     confirmOrder, deleteOrder, editOrder, markOrderSent,
     updateCustomer, restoreCustomerData, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
   } = useInventoryStore();
+  const productImages = useProductImages();
 
   // Cierre de ventas: pasada la hora, aviso de lo que quedó pendiente hoy en
   // todas las pestañas menos Pedidos (ahí ya está el detalle).
@@ -244,6 +246,7 @@ export default function InventoryApp() {
         {view === "stock" && (
           <ProductsView
             products={products}
+            productImages={productImages}
             productFormats={productFormats}
             activeProducts={activeProducts}
             archivedProducts={archivedProducts}
