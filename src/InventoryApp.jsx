@@ -76,7 +76,7 @@ export default function InventoryApp() {
     view, setView, theme, toggleTheme,
     currentPersistedState, persist,
     handleImportFileChange, confirmImport,
-    todaysMovements, mananaMovements,
+    todaysMovements, mananaMovements, mananaFacturados,
     activeProducts, archivedProducts, totalStock, todaysUnitsSold,
     movementsNearCap,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
@@ -338,6 +338,7 @@ export default function InventoryApp() {
             exchangeRate={exchangeRate}
             todaysMovements={todaysMovements}
             mananaMovements={mananaMovements}
+            mananaFacturados={mananaFacturados}
             whatsappPhone={whatsappPhone}
             supervisorPhone={supervisorPhone}
             senderName={senderName}

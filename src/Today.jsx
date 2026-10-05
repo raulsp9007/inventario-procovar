@@ -4,6 +4,10 @@ import Banner from "./Banner.jsx";
 
 // `movements` ya viene filtrado por el llamador (InventoryApp.jsx) según qué
 // pedidos le tocan a esta pestaña -- este componente solo resume/muestra.
+// `billedMovements` (solo pendingMode): ventas de mañana que YA se marcaron
+// Facturado -- quedan comprometidas (el stock ya bajó), así que no entran en
+// `movements` (pendientes) ni en el resumen de hoy (su fecha es mañana). Sin
+// esto esas unidades no se veían en ningún resumen: acá se muestran aparte.
 // `pendingMode` (pestaña Mañana): lo que llega mezcla dos cosas -- pedidos
 // de HOY sin enviar todavía (ya comprometidos, stock/ingreso ya aplicados,
 // solo falta despacharlos) y reservas para mañana sin comprometer (esas sí
@@ -13,6 +17,7 @@ export default function Today({
   products, movements, stock, allOrders = [], showPrices, exchangeRate,
   title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
   pendingMode = false,
+  billedMovements = [],
   dailyHlGoal = null,
   onProductClick = null,
 }) {
@@ -20,6 +25,8 @@ export default function Today({
   const todaysSentSales = pendingMode ? todaysSales : todaysSales.filter((m) => m.sent);
   const todaysPendingSales = pendingMode ? [] : todaysSales.filter((m) => !m.sent);
   const unitsSold = todaysSentSales.reduce((sum, m) => sum + m.qty, 0);
+  const billedSales = pendingMode ? billedMovements.filter((m) => m.type === "venta") : [];
+  const billedUnits = billedSales.reduce((sum, m) => sum + m.qty, 0);
   const dayRevenue = todaysSentSales.reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
   const dayRevenueUSD = convertToUSD(dayRevenue, exchangeRate);
   const hlSoldToday = totalHlSold(todaysSentSales, products);
@@ -37,6 +44,7 @@ export default function Today({
       product: p,
       soldToday: todaysSentSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
       pendingToday: todaysPendingSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
+      billedTomorrow: billedSales.filter((m) => m.code === p.code).reduce((sum, m) => sum + m.qty, 0),
       stockLeft: stock[p.code] || 0,
     }))
     // disponibleLibre = stockLeft menos lo reservado en pedidos de mañana
@@ -51,7 +59,7 @@ export default function Today({
   // Solo se muestran productos con alguna actividad hoy (vendido o
   // pendiente sin enviar) -- uno sin movimientos no aporta nada al resumen,
   // solo ruido en la lista.
-  const rows = allRows.filter((row) => row.soldToday > 0 || row.pendingToday > 0);
+  const rows = allRows.filter((row) => row.soldToday > 0 || row.pendingToday > 0 || row.billedTomorrow > 0);
 
   return (
     <div>
@@ -69,6 +77,11 @@ export default function Today({
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>{pendingMode ? "UNIDADES PENDIENTES" : "UNIDADES VENDIDAS"}</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{unitsSold}</div>
+          {billedUnits > 0 && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+              {`${billedUnits} facturada${billedUnits === 1 ? "" : "s"} · ${unitsSold + billedUnits} en total`}
+            </div>
+          )}
         </div>
 
         {showPrices && (
@@ -122,6 +135,11 @@ export default function Today({
                 <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
                   {soldLabel}: <span style={{ fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{row.soldToday}</span>
                 </span>
+                {row.billedTomorrow > 0 && (
+                  <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                    Facturado: <span style={{ fontWeight: 700, color: "var(--green)", fontVariantNumeric: "tabular-nums" }}>{row.billedTomorrow}</span>
+                  </span>
+                )}
                 {row.pendingToday > 0 && (
                   <span style={{ fontSize: 12.5, color: "var(--accent-orange-soft-text)" }}>
                     Pendiente: <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{row.pendingToday}</span>

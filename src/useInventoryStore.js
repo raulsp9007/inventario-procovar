@@ -496,7 +496,7 @@ export function useInventoryStore() {
   // Los domingos no se despacha: el "mañana" relevante es el próximo día
   // hábil (un sábado, eso es el lunes -- ver nextBusinessDayStr).
   const nextBizDayCal = nextBusinessDayStr(todayCal);
-  const { todaysMovements, mananaMovements } = useMemo(() => {
+  const { todaysMovements, mananaMovements, mananaFacturados } = useMemo(() => {
     const todaysMovements = movements.filter((m) => {
       if (m.date !== todayCal) return false;
       return m.type !== "venta" || isCommittedMovement(m);
@@ -507,7 +507,11 @@ export function useInventoryStore() {
       if (m.date === nextBizDayCal) return !isCommittedMovement(m);
       return false;
     });
-    return { todaysMovements, mananaMovements };
+    // Ventas del próximo día hábil que ya se facturaron (comprometidas): no
+    // son pendientes ni son de hoy, pero el resumen pendiente las muestra
+    // aparte para que el total de mañana esté completo.
+    const mananaFacturados = movements.filter((m) => m.type === "venta" && m.date === nextBizDayCal && isCommittedMovement(m));
+    return { todaysMovements, mananaMovements, mananaFacturados };
   }, [movements, todayCal, nextBizDayCal]);
 
   // Aviso temprano antes de llegar al tope -- así hay tiempo de exportar un
@@ -1214,7 +1218,7 @@ export function useInventoryStore() {
     view, setView, theme, toggleTheme,
     currentPersistedState, persist,
     handleImportFileChange, confirmImport,
-    todaysMovements, mananaMovements,
+    todaysMovements, mananaMovements, mananaFacturados,
     activeProducts, archivedProducts, totalStock, todaysUnitsSold,
     movementsNearCap,
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
