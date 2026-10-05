@@ -38,9 +38,13 @@ export function totalRevenueInRange(movements, start, end) {
     .reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
 }
 
-export function totalHlSold(movements, products) {
+// Por defecto solo cuenta ventas comprometidas (lo realmente vendido). Con
+// `includeUncommitted` suma también las reservas de mañana sin facturar: lo usa
+// el resumen pendiente, donde justo lo que interesa es lo que todavía no se
+// compromete.
+export function totalHlSold(movements, products, { includeUncommitted = false } = {}) {
   return movements
-    .filter((m) => m.type === "venta" && isCommittedMovement(m))
+    .filter((m) => m.type === "venta" && (includeUncommitted || isCommittedMovement(m)))
     .reduce((sum, m) => {
       if (m.unitHl != null) return sum + m.qty * m.unitHl;
       const product = products.find((p) => p.code === m.code);

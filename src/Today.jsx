@@ -29,7 +29,9 @@ export default function Today({
   const billedUnits = billedSales.reduce((sum, m) => sum + m.qty, 0);
   const dayRevenue = todaysSentSales.reduce((sum, m) => sum + m.qty * (m.unitPrice || 0), 0);
   const dayRevenueUSD = convertToUSD(dayRevenue, exchangeRate);
-  const hlSoldToday = totalHlSold(todaysSentSales, products);
+  // En el resumen pendiente las reservas de mañana no están comprometidas: sin
+  // includeUncommitted el HL pendiente daba siempre 0.00.
+  const hlSoldToday = totalHlSold(todaysSentSales, products, { includeUncommitted: pendingMode });
   // % contra la meta diaria (Productos) -- solo tiene sentido con lo
   // realmente vendido/comprometido, no con lo pendiente sin enviar todavía.
   // Solo con una meta numérica positiva: un respaldo importado con otro tipo
