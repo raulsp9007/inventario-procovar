@@ -8,3 +8,12 @@ export function leaveAnimationMs() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return 0;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : LEAVE_ANIMATION_MS;
 }
+
+// Cuánto tarda en llenarse un indicador de meta (GoalRing). Misma regla: 0 =
+// sin animación (reducir movimiento, o sin matchMedia como en los tests).
+export const FILL_ANIMATION_MS = 1100;
+
+export function fillAnimationMs() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return 0;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : FILL_ANIMATION_MS;
+}

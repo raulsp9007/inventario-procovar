@@ -46,14 +46,26 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("Productos: metas de venta", () => {
-  it("tiene los tres campos y guarda cada uno", async () => {
+describe("Productos: metas de venta (anillos)", () => {
+  const BLISTERS = "Blísteres diarios (cerveza y malta)";
+  const HL = "HL diarios (cerveza y malta)";
+  const GENERAL = "Meta general (hL)";
+
+  async function setGoal(label, value) {
+    const open = screen.queryByRole("button", { name: `Fijar meta de ${label}` }) || screen.getByRole("button", { name: `Cambiar meta de ${label}` });
+    fireEvent.click(open);
+    const input = screen.getByLabelText(label);
+    fireEvent.change(input, { target: { value } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  it("tiene los tres indicadores y guarda cada meta", async () => {
     seed({ extra: { goalProductsMigrated: true } });
     render(<InventoryApp />);
-    const blisters = await screen.findByLabelText("Blísteres diarios (cerveza y malta)");
-    fireEvent.change(blisters, { target: { value: "200" } });
-    fireEvent.change(screen.getByLabelText("HL diarios (cerveza y malta)"), { target: { value: "13.7" } });
-    fireEvent.change(screen.getByLabelText("Meta general (hL)"), { target: { value: "500" } });
+    await screen.findByRole("img", { name: /^Blísteres diarios/ });
+    await setGoal(BLISTERS, "200");
+    await setGoal(HL, "13.7");
+    await setGoal(GENERAL, "500");
 
     await waitFor(() => {
       expect(stored().dailyBlisterGoal).toBe(200);
@@ -62,25 +74,24 @@ describe("Productos: metas de venta", () => {
     });
   });
 
-  it("vaciar un campo quita la meta", async () => {
+  it("vaciar la meta la quita", async () => {
     seed({ extra: { goalProductsMigrated: true, dailyBlisterGoal: 200 } });
     render(<InventoryApp />);
-    const blisters = await screen.findByLabelText("Blísteres diarios (cerveza y malta)");
-    expect(blisters.value).toBe("200");
-    fireEvent.change(blisters, { target: { value: "" } });
+    await screen.findByRole("img", { name: /^Blísteres diarios/ });
+    await setGoal(BLISTERS, "");
     await waitFor(() => expect(stored().dailyBlisterGoal).toBeNull());
   });
 
-  it("muestra el avance de hoy solo con los productos marcados", async () => {
+  it("el avance de hoy cuenta solo los productos marcados", async () => {
     seed({
       products: baseProducts.map((p) => (p.code === "VODKA" ? p : { ...p, inGoals: true })),
       movements: [sale(1, "P500", 30, 0.005), sale(2, "M1500", 10, 0.015), sale(3, "VODKA", 99, 0.005)],
       extra: { goalProductsMigrated: true, dailyBlisterGoal: 200, dailyHlGoal: 4 },
     });
     render(<InventoryApp />);
-    // 30 + 10 = 40 blísteres de 200 (20%); HL = 0.15 + 0.15 = 0.30 de 4 (8%); el vodka no cuenta.
-    expect(await screen.findByText("Hoy: 40 de 200 blísteres (20%)")).toBeTruthy();
-    expect(screen.getByText("Hoy: 0.30 de 4 hL (8%)")).toBeTruthy();
+    // 30 + 10 = 40 blísteres de 200 (20%); HL = 0.15 + 0.15 = 0.3 de 4 (8%); el vodka no cuenta.
+    expect(await screen.findByRole("img", { name: `${BLISTERS}: 40 de 200 (20%)` })).toBeTruthy();
+    expect(screen.getByRole("img", { name: `${HL}: 0.3 de 4 (8%)` })).toBeTruthy();
   });
 
   it("sin meta cargada igual muestra lo vendido hoy", async () => {
@@ -90,13 +101,19 @@ describe("Productos: metas de venta", () => {
       extra: { goalProductsMigrated: true },
     });
     render(<InventoryApp />);
-    expect(await screen.findByText("Hoy: 7 blísteres")).toBeTruthy();
+    expect(await screen.findByRole("img", { name: `${BLISTERS}: 7 sin meta` })).toBeTruthy();
   });
 
   it("la meta general muestra lo vendido en total contra la meta", async () => {
     seed({ extra: { goalProductsMigrated: true, hlGoal: 200, cumulativeHl: 50 } });
     render(<InventoryApp />);
-    expect(await screen.findByText("Vendido: 50.00 hL de 200 hL (25%)")).toBeTruthy();
+    expect(await screen.findByRole("img", { name: `${GENERAL}: 50 de 200 (25%)` })).toBeTruthy();
+  });
+
+  it("sin productos marcados avisa cómo marcarlos", async () => {
+    seed({ extra: { goalProductsMigrated: true } });
+    render(<InventoryApp />);
+    expect(await screen.findByText(/Marca en Ajustar los productos de cerveza y malta/)).toBeTruthy();
   });
 });
 
@@ -104,7 +121,7 @@ describe("Productos: qué cuenta como cerveza o malta", () => {
   it("al cargar datos viejos marca los P/M en Sixpack y lo guarda", async () => {
     seed(); // sin goalProductsMigrated
     render(<InventoryApp />);
-    await screen.findByLabelText("Blísteres diarios (cerveza y malta)");
+    await screen.findByRole("img", { name: /^Blísteres diarios/ });
     await waitFor(() => expect(stored().goalProductsMigrated).toBe(true));
     const byCode = Object.fromEntries(stored().products.map((p) => [p.code, p.inGoals]));
     expect(byCode.P500).toBe(true);
@@ -115,7 +132,7 @@ describe("Productos: qué cuenta como cerveza o malta", () => {
   it("no pisa lo que ya elegiste: con la migración hecha no vuelve a marcar nada", async () => {
     seed({ extra: { goalProductsMigrated: true } });
     render(<InventoryApp />);
-    await screen.findByLabelText("Blísteres diarios (cerveza y malta)");
+    await screen.findByRole("img", { name: /^Blísteres diarios/ });
     expect(stored().products.some((p) => p.inGoals)).toBe(false);
   });
 

@@ -10,6 +10,7 @@ import { getHlBackfill } from "./hlBackfill";
 import { customerLabel } from "./nameLabels";
 import { formatProductForShare, shareProductPhoto } from "./productShare";
 import { goalTotals, isGoalProduct } from "./goals";
+import GoalRing from "./GoalRing.jsx";
 
 // Foto del producto (miniatura) o un recuadro vacío si todavía no tiene.
 function ProductThumb({ url, name, size }) {
@@ -115,9 +116,6 @@ export default function ProductsView({
   const [manualSaleCode, setManualSaleCode] = useState(null);
   const [manualSaleQty, setManualSaleQty] = useState("");
   const [rateInput, setRateInput] = useState(() => (exchangeRate != null ? String(exchangeRate) : ""));
-  const [dailyHlGoalInput, setDailyHlGoalInput] = useState(() => (dailyHlGoal != null ? String(dailyHlGoal) : ""));
-  const [dailyBlisterGoalInput, setDailyBlisterGoalInput] = useState(() => (dailyBlisterGoal != null ? String(dailyBlisterGoal) : ""));
-  const [hlGoalInput, setHlGoalInput] = useState(() => (hlGoal != null ? String(hlGoal) : ""));
   // Avance de hoy contra las metas: lo vendido (enviado) de hoy, solo de los
   // productos marcados como cerveza o malta (igual que el resumen de Pedidos).
   const goalProductCount = products.filter((p) => !p.archived && isGoalProduct(p)).length;
@@ -502,91 +500,45 @@ export default function ProductsView({
           {customerNamesList.map((name) => <option key={name} value={name} />)}
         </datalist>
         {!editMode && (
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Metas de venta</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-              Referencia para Pedidos y los resúmenes. Los blísteres (sixpacks) y los HL diarios cuentan solo los productos marcados como «Cerveza o malta» en Ajustar.
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 12px 12px", marginBottom: 14 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4, padding: "0 4px" }}>Metas de venta</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8, padding: "0 4px" }}>
+              Los anillos se llenan con lo vendido hoy. Los blísteres (sixpacks) y los HL diarios cuentan solo los productos marcados como «Cerveza o malta» en Ajustar. Toca la meta para cambiarla.
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span>Blísteres diarios (cerveza y malta)</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    aria-label="Blísteres diarios (cerveza y malta)"
-                    value={dailyBlisterGoalInput}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      setDailyBlisterGoalInput(raw);
-                      const val = parseInt(raw, 10);
-                      onDailyBlisterGoalChange(isNaN(val) || val <= 0 ? null : val);
-                    }}
-                    placeholder="blísteres"
-                    style={{ width: 90, border: "1px solid var(--border)", borderRadius: 7, padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums" }}
-                  />
-                </label>
-                {goalProductCount > 0 && (
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                    {dailyBlisterGoal > 0
-                      ? `Hoy: ${goalToday.blisters} de ${dailyBlisterGoal} blísteres (${Math.round((goalToday.blisters / dailyBlisterGoal) * 100)}%)`
-                      : `Hoy: ${goalToday.blisters} blísteres`}
-                  </div>
-                )}
-              </div>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span>HL diarios (cerveza y malta)</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    aria-label="HL diarios (cerveza y malta)"
-                    value={dailyHlGoalInput}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      setDailyHlGoalInput(raw);
-                      const val = parseFloat(raw);
-                      onDailyHlGoalChange(isNaN(val) || val <= 0 ? null : val);
-                    }}
-                    placeholder="hL"
-                    style={{ width: 90, border: "1px solid var(--border)", borderRadius: 7, padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums" }}
-                  />
-                </label>
-                {goalProductCount > 0 && (
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                    {dailyHlGoal > 0
-                      ? `Hoy: ${goalToday.hl.toFixed(2)} de ${dailyHlGoal} hL (${Math.round((goalToday.hl / dailyHlGoal) * 100)}%)`
-                      : `Hoy: ${goalToday.hl.toFixed(2)} hL`}
-                  </div>
-                )}
-              </div>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span>Meta general (hL)</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    aria-label="Meta general (hL)"
-                    value={hlGoalInput}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      setHlGoalInput(raw);
-                      const val = parseFloat(raw);
-                      onHlGoalChange(isNaN(val) || val <= 0 ? null : val);
-                    }}
-                    placeholder="hL"
-                    style={{ width: 90, border: "1px solid var(--border)", borderRadius: 7, padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums" }}
-                  />
-                </label>
-                {hlGoal > 0 && (
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                    {`Vendido: ${(cumulativeHl || 0).toFixed(2)} hL de ${hlGoal} hL (${Math.round(((cumulativeHl || 0) / hlGoal) * 100)}%)`}
-                  </div>
-                )}
-              </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <GoalRing
+                label="Blísteres diarios (cerveza y malta)"
+                lines={["Blísteres", "diarios"]}
+                value={goalToday.blisters}
+                goal={dailyBlisterGoal}
+                decimals={0}
+                color="var(--orange)"
+                parseGoal={(raw) => parseInt(raw, 10)}
+                onGoalChange={onDailyBlisterGoalChange}
+              />
+              <GoalRing
+                label="HL diarios (cerveza y malta)"
+                lines={["HL diarios", "cerveza y malta"]}
+                value={goalToday.hl}
+                goal={dailyHlGoal}
+                decimals={1}
+                color="var(--green)"
+                parseGoal={(raw) => parseFloat(raw)}
+                onGoalChange={onDailyHlGoalChange}
+              />
+              <GoalRing
+                label="Meta general (hL)"
+                lines={["Meta general", "en hL"]}
+                value={cumulativeHl || 0}
+                goal={hlGoal}
+                decimals={hlGoal > 0 && hlGoal < 100 ? 1 : 0}
+                color="var(--call-blue)"
+                parseGoal={(raw) => parseFloat(raw)}
+                onGoalChange={onHlGoalChange}
+              />
             </div>
             {goalProductCount === 0 && (
-              <div style={{ fontSize: 12, color: "var(--orange-text)", marginTop: 12 }}>
+              <div style={{ fontSize: 12, color: "var(--orange-text)", marginTop: 10, padding: "0 4px" }}>
                 Marca en Ajustar los productos de cerveza y malta para ver el avance de hoy.
               </div>
             )}
