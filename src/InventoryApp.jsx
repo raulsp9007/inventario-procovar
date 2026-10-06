@@ -51,7 +51,7 @@ export default function InventoryApp() {
   const {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
-    showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
+    showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal, dailyBlisterGoal, setDailyBlisterGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
     customers, deleteCustomer,
     productFormats, saveProductFormat, deleteProductFormat, editProductFormat,
@@ -69,6 +69,7 @@ export default function InventoryApp() {
     editLowStockInputs, setEditLowStockInputs,
     editReserveInputs, setEditReserveInputs,
     editFormatInputs, setEditFormatInputs,
+    editGoalInputs, setEditGoalInputs,
     editColorInputs, setEditColorInputs,
     newProductName, setNewProductName, newProductHl, setNewProductHl,
     showArchived, setShowArchived, showLowStockList, setShowLowStockList,
@@ -279,6 +280,20 @@ export default function InventoryApp() {
             setEditReserveInputs={setEditReserveInputs}
             editFormatInputs={editFormatInputs}
             setEditFormatInputs={setEditFormatInputs}
+            editGoalInputs={editGoalInputs}
+            setEditGoalInputs={setEditGoalInputs}
+            todaysMovements={todaysMovements}
+            cumulativeHl={cumulativeHl}
+            hlGoal={hlGoal}
+            onHlGoalChange={(next) => {
+              setHlGoal(next);
+              persist({ ...currentPersistedState, hlGoal: next });
+            }}
+            dailyBlisterGoal={dailyBlisterGoal}
+            onDailyBlisterGoalChange={(next) => {
+              setDailyBlisterGoal(next);
+              persist({ ...currentPersistedState, dailyBlisterGoal: next });
+            }}
             editColorInputs={editColorInputs}
             setEditColorInputs={setEditColorInputs}
             newProductName={newProductName}
@@ -359,6 +374,7 @@ export default function InventoryApp() {
             onSelectCustomer={(name, { edit = false } = {}) => { setCustomerToOpen({ name, edit }); setView("clientes"); }}
             cierreVentasHour={cierreVentasHour}
             dailyHlGoal={dailyHlGoal}
+            dailyBlisterGoal={dailyBlisterGoal}
             prefill={orderPrefill}
             onPrefillConsumed={() => setOrderPrefill(null)}
             reviewPending={reviewPending}

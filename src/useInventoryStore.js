@@ -4,6 +4,7 @@ import { todayStr, nextBusinessDayStr, daysSince } from "./dateUtils";
 import { isCommittedMovement, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, fixSundayScheduledOrders } from "./orderHelpers";
 import { toCubanPhone } from "./customerHelpers";
 import { totalHlSold, priceToCUP } from "./money";
+import { applyDefaultGoalProducts } from "./goals";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 import { getHlBackfill, isHlBackfillable } from "./hlBackfill";
@@ -103,6 +104,8 @@ export function useInventoryStore() {
   const [showPrices, setShowPrices] = useState(true);
   const [hlGoal, setHlGoal] = useState(null);
   const [dailyHlGoal, setDailyHlGoal] = useState(null);
+  // Meta diaria de blísteres (sixpacks) de cerveza y malta -- ver goals.js.
+  const [dailyBlisterGoal, setDailyBlisterGoal] = useState(null);
   // Lista de espera: clientes que quieren X unidades de un producto cuando
   // llegue la próxima entrada. Independiente del stock y de los pedidos --
   // no aparta unidades. [{ id, code, customerName, qty, createdAt }]
@@ -148,6 +151,7 @@ export function useInventoryStore() {
   const [editLowStockInputs, setEditLowStockInputs] = useState({});
   const [editReserveInputs, setEditReserveInputs] = useState({});
   const [editFormatInputs, setEditFormatInputs] = useState({});
+  const [editGoalInputs, setEditGoalInputs] = useState({});
   const [editColorInputs, setEditColorInputs] = useState({});
   const [newProductName, setNewProductName] = useState("");
   const [newProductHl, setNewProductHl] = useState("");
@@ -193,11 +197,14 @@ export function useInventoryStore() {
   }
   const currentPersistedState = {
     stock, movements, lastAdjustedAt, products,
-    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, waitlist, customers, productFormats, whatsappPhone,
+    prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, dailyBlisterGoal, waitlist, customers, productFormats, whatsappPhone,
     whatsappContactName, supervisorPhone, supervisorContactName, cierreVentasHour,
     senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
     // Marca de que la numeración de pedidos ya es por día (ver applyPersistedData).
     orderSeqPerDay: true,
+    // Marca de que ya se hizo la migración de "Cerveza o malta" (goals.js):
+    // con ella, lo que se marque o desmarque a mano no se vuelve a pisar.
+    goalProductsMigrated: true,
   };
 
   const persist = useCallback(async (nextState) => {
@@ -245,7 +252,11 @@ export function useInventoryStore() {
     // gratis si no encuentra nada (ver fixSundayScheduledOrders).
     const loadedMovements = fixSundayScheduledOrders(renumberedMovements);
     const sundayScheduleFixed = loadedMovements !== renumberedMovements;
-    const loadedProducts = parsed.products || DEFAULT_PRODUCTS;
+    // Migración única: marca como "Cerveza o malta" los P/M en Sixpack (ver
+    // goals.js). Con la bandera puesta no se toca lo que ya se eligió.
+    const migratedGoalProducts = !parsed.goalProductsMigrated;
+    const baseProducts = parsed.products || DEFAULT_PRODUCTS;
+    const loadedProducts = migratedGoalProducts ? applyDefaultGoalProducts(baseProducts) : baseProducts;
     const nextStock = parsed.stock || {};
     const nextLastAdjustedAt = parsed.lastAdjustedAt || {};
     const nextCumulativeRevenue = parsed.cumulativeRevenue || 0;
@@ -264,6 +275,7 @@ export function useInventoryStore() {
     const nextShowPrices = parsed.showPrices ?? true;
     const nextHlGoal = parsed.hlGoal ?? null;
     const nextDailyHlGoal = parsed.dailyHlGoal ?? null;
+    const nextDailyBlisterGoal = parsed.dailyBlisterGoal ?? null;
     const nextWaitlist = Array.isArray(parsed.waitlist) ? parsed.waitlist : [];
     // Migración única: datos de antes del registro de clientes -- se arma
     // desde los movimientos que ya hay (negocio y teléfono más recientes).
@@ -306,6 +318,7 @@ export function useInventoryStore() {
     setShowPrices(nextShowPrices);
     setHlGoal(nextHlGoal);
     setDailyHlGoal(nextDailyHlGoal);
+    setDailyBlisterGoal(nextDailyBlisterGoal);
     setWaitlist(nextWaitlist);
     setCustomers(nextCustomers);
     setProductFormats(nextProductFormats);
@@ -319,13 +332,13 @@ export function useInventoryStore() {
     setSendBusinessName(nextSendBusinessName);
     setLastBackupAt(nextLastBackupAt);
 
-    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats || sundayScheduleFixed) {
+    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats || sundayScheduleFixed || migratedGoalProducts) {
       persist({
         stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
         cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
-        dailyHlGoal: nextDailyHlGoal, waitlist: nextWaitlist, customers: nextCustomers, productFormats: nextProductFormats, orderSeqPerDay: true,
+        dailyHlGoal: nextDailyHlGoal, dailyBlisterGoal: nextDailyBlisterGoal, goalProductsMigrated: true, waitlist: nextWaitlist, customers: nextCustomers, productFormats: nextProductFormats, orderSeqPerDay: true,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName,
         supervisorPhone: nextSupervisorPhone, supervisorContactName: nextSupervisorContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
@@ -550,6 +563,7 @@ export function useInventoryStore() {
     const lowStockInputs = {};
     const reserveInputs = {};
     const formatInputs = {};
+    const goalInputs = {};
     const colorInputs = {};
     activeProducts.forEach((p) => {
       inputs[p.code] = String(stock[p.code] || 0);
@@ -559,6 +573,7 @@ export function useInventoryStore() {
       lowStockInputs[p.code] = p.lowStockThreshold != null ? String(p.lowStockThreshold) : "";
       reserveInputs[p.code] = p.reserveQty != null ? String(p.reserveQty) : "";
       formatInputs[p.code] = p.format || "";
+      goalInputs[p.code] = !!p.inGoals;
       colorInputs[p.code] = p.color || "#8A8574";
     });
     setEditInputs(inputs);
@@ -568,6 +583,7 @@ export function useInventoryStore() {
     setEditLowStockInputs(lowStockInputs);
     setEditReserveInputs(reserveInputs);
     setEditFormatInputs(formatInputs);
+    setEditGoalInputs(goalInputs);
     setEditColorInputs(colorInputs);
     setEditMode(true);
   }
@@ -641,6 +657,8 @@ export function useInventoryStore() {
       else delete nextP.reserveQty;
       if (editFormatInputs[p.code]) nextP.format = editFormatInputs[p.code];
       else delete nextP.format;
+      if (editGoalInputs[p.code]) nextP.inGoals = true;
+      else delete nextP.inGoals;
       if (editColorInputs[p.code]) nextP.color = editColorInputs[p.code];
       return nextP;
     });
@@ -1193,7 +1211,7 @@ export function useInventoryStore() {
   return {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
-    showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal,
+    showPrices, setShowPrices, hlGoal, setHlGoal, dailyHlGoal, setDailyHlGoal, dailyBlisterGoal, setDailyBlisterGoal,
     waitlist, addWaitlistEntry, removeWaitlistEntry, restockAlerts, dismissRestockAlert,
     customers, deleteCustomer,
     productFormats, saveProductFormat, deleteProductFormat, editProductFormat,
@@ -1211,6 +1229,7 @@ export function useInventoryStore() {
     editLowStockInputs, setEditLowStockInputs,
     editReserveInputs, setEditReserveInputs,
     editFormatInputs, setEditFormatInputs,
+    editGoalInputs, setEditGoalInputs,
     editColorInputs, setEditColorInputs,
     newProductName, setNewProductName, newProductHl, setNewProductHl,
     showArchived, setShowArchived,

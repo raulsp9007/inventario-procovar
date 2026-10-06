@@ -1,6 +1,7 @@
 import { formatCUP, formatUSD, convertToUSD, totalHlSold } from "./money";
 import { reservedForTomorrow } from "./orderHelpers.js";
 import Banner from "./Banner.jsx";
+import { goalTotals, isGoalProduct } from "./goals";
 
 // `movements` ya viene filtrado por el llamador (InventoryApp.jsx) según qué
 // pedidos le tocan a esta pestaña -- este componente solo resume/muestra.
@@ -18,6 +19,7 @@ export default function Today({
   title = "HOY", ordersLabel = "PEDIDOS DE HOY", soldLabel = "Vendido hoy",
   pendingMode = false,
   billedMovements = [],
+  blisterGoal = null,
   dailyHlGoal = null,
   onProductClick = null,
 }) {
@@ -31,7 +33,16 @@ export default function Today({
   const dayRevenueUSD = convertToUSD(dayRevenue, exchangeRate);
   // En el resumen pendiente las reservas de mañana no están comprometidas: sin
   // includeUncommitted el HL pendiente daba siempre 0.00.
-  const hlSoldToday = totalHlSold(todaysSentSales, products, { includeUncommitted: pendingMode });
+  // Con productos marcados como cerveza o malta (goals.js), el HL de hoy y los
+  // blísteres cuentan solo esos; sin ninguno marcado queda como siempre.
+  const goalProductCount = products.filter((p) => !p.archived && isGoalProduct(p)).length;
+  const useGoalProducts = !pendingMode && goalProductCount > 0;
+  const goalSums = useGoalProducts ? goalTotals(todaysSentSales, products) : null;
+  const hlSoldToday = useGoalProducts
+    ? goalSums.hl
+    : totalHlSold(todaysSentSales, products, { includeUncommitted: pendingMode });
+  const hasBlisterGoal = typeof blisterGoal === "number" && Number.isFinite(blisterGoal) && blisterGoal > 0;
+  const blisterPct = useGoalProducts && hasBlisterGoal ? Math.round((goalSums.blisters / blisterGoal) * 100) : null;
   // % contra la meta diaria (Productos) -- solo tiene sentido con lo
   // realmente vendido/comprometido, no con lo pendiente sin enviar todavía.
   // Solo con una meta numérica positiva: un respaldo importado con otro tipo
@@ -101,8 +112,18 @@ export default function Today({
           <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{ordersToday}</div>
         </div>
 
+        {useGoalProducts && (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>BLÍSTERES</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{goalSums.blisters}</div>
+            {blisterPct !== null && (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{blisterPct}% de la meta diaria</div>
+            )}
+          </div>
+        )}
+
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>HL {pendingMode ? "PENDIENTES" : "VENDIDOS"}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>HL {pendingMode ? "PENDIENTES" : useGoalProducts ? "CERVEZA Y MALTA" : "VENDIDOS"}</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{hlSoldToday.toFixed(2)}</div>
           {dailyHlPct !== null && (
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{dailyHlPct}% de la meta diaria</div>
