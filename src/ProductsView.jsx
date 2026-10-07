@@ -428,9 +428,14 @@ export default function ProductsView({
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
             <div style={{ fontSize: 15, letterSpacing: "0.1em", color: "var(--text)", fontWeight: 700 }}>PRODUCTOS</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5, height: 32, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", boxSizing: "border-box" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <label htmlFor="exchange-rate-input" style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.04em", color: "var(--text-muted)" }}>
+                Tasa de conversión
+              </label>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5, height: 32, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", boxSizing: "border-box" }}>
                 1$ =
                 <input
+                  id="exchange-rate-input"
                   type="number"
                   inputMode="decimal"
                   value={rateInput}
@@ -448,7 +453,8 @@ export default function ProductsView({
                   }}
                 />
                 CUP
-              </label>
+              </div>
+              </div>
               <button
                 onClick={onToggleEditMode}
                 style={{
