@@ -1,4 +1,5 @@
 import { isCommittedMovement } from "./orderHelpers";
+import { hlPerFormat } from "./hl";
 
 // Cada venta guarda el HL por unidad que tenía el producto AL VENDERLA
 // (unitHl), igual que el precio. Las ventas hechas antes de definirle HL al
@@ -8,12 +9,13 @@ export function isHlBackfillable(m, code) {
   return m.code === code && m.type === "venta" && (m.unitHl == null || m.unitHl === 0);
 }
 
-// Qué se rellenaría con el HL por unidad GUARDADO del producto. null si el
+// Qué se rellenaría con el HL del formato completo del producto (HL por unidad
+// x unidades del formato, ver hl.js). null si el
 // producto no tiene HL o no hay ventas por rellenar. `units`/`hlAdded` solo
 // cuentan lo comprometido (lo que ya suma a HL vendidos y al acumulado); un
 // pedido de mañana sin enviar también se rellena, pero todavía no suma HL.
-export function getHlBackfill(movements, products, code) {
-  const hl = products.find((p) => p.code === code)?.hl;
+export function getHlBackfill(movements, products, code, formats) {
+  const hl = hlPerFormat(products.find((p) => p.code === code), formats);
   if (!(hl > 0)) return null;
   let count = 0;
   let units = 0;

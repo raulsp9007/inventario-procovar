@@ -1,3 +1,6 @@
+import { getMonthStartStr } from "./dateUtils";
+import { totalHlSold } from "./money";
+
 // Metas de venta de cerveza y malta. Solo cuentan los productos marcados como
 // "Cerveza o malta" (`inGoals`): el resto (vodka, refrescos, aceite, arroz...)
 // no entra ni en los blísteres ni en el HL de las metas diarias. Un blíster
@@ -37,4 +40,16 @@ export function defaultGoalProductCodes(products) {
 export function applyDefaultGoalProducts(products) {
   const codes = new Set(defaultGoalProductCodes(products));
   return products.map((p) => (codes.has(p.code) ? { ...p, inGoals: true } : p));
+}
+
+// HL vendido en el mes en curso (del día 1 hasta hoy), para la meta general:
+// esa meta se acumula por mes y vuelve a cero al empezar el siguiente. Misma
+// regla que el día: solo ventas ya enviadas (Facturado) y solo los productos
+// marcados como cerveza o malta; sin ninguno marcado cuenta todo lo que
+// tenga HL, igual que el resumen de hoy.
+export function monthHl(movements, products, today) {
+  const start = getMonthStartStr(today);
+  const inMonth = movements.filter((m) => m.type === "venta" && m.sent && m.date >= start && m.date <= today);
+  const anyGoalProduct = products.some((p) => !p.archived && isGoalProduct(p));
+  return anyGoalProduct ? goalTotals(inMonth, products).hl : totalHlSold(inMonth, products);
 }

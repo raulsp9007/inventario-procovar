@@ -9,7 +9,9 @@ import { unitPrice } from "./productFormats";
 import { getHlBackfill } from "./hlBackfill";
 import { customerLabel } from "./nameLabels";
 import { formatProductForShare, shareProductPhoto } from "./productShare";
-import { goalTotals, isGoalProduct } from "./goals";
+import { goalTotals, isGoalProduct, monthHl } from "./goals";
+import { todayStr } from "./dateUtils";
+import { formatUnits, hlPerFormat } from "./hl";
 import GoalRing from "./GoalRing.jsx";
 
 // Foto del producto (miniatura) o un recuadro vacío si todavía no tiene.
@@ -107,7 +109,6 @@ export default function ProductsView({
   onDailyBlisterGoalChange,
   hlGoal,
   onHlGoalChange,
-  cumulativeHl,
   todaysMovements = [],
   editGoalInputs = {},
   setEditGoalInputs,
@@ -120,6 +121,8 @@ export default function ProductsView({
   // productos marcados como cerveza o malta (igual que el resumen de Pedidos).
   const goalProductCount = products.filter((p) => !p.archived && isGoalProduct(p)).length;
   const goalToday = goalTotals(todaysMovements.filter((m) => m.sent), products);
+  // La meta general se acumula por mes: HL vendido del día 1 hasta hoy.
+  const goalMonthHl = monthHl(movements, products, todayStr());
   const [waitPanelCode, setWaitPanelCode] = useState(null);
   const [waitName, setWaitName] = useState("");
   const [waitQty, setWaitQty] = useState("");
@@ -503,7 +506,7 @@ export default function ProductsView({
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 12px 12px", marginBottom: 14 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4, padding: "0 4px" }}>Metas de venta</div>
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8, padding: "0 4px" }}>
-              Los anillos se llenan con lo vendido hoy. Los blísteres (sixpacks) y los HL diarios cuentan solo los productos marcados como «Cerveza o malta» en Ajustar. Toca la meta para cambiarla.
+              Los anillos se llenan con lo vendido: blísteres (sixpacks) y HL diarios, con las ventas de hoy; la meta general, con las del mes. Cuentan solo los productos marcados como «Cerveza o malta» en Ajustar. Toca la meta para cambiarla.
             </div>
             <div style={{ display: "flex", gap: 4 }}>
               <GoalRing
@@ -527,9 +530,9 @@ export default function ProductsView({
                 onGoalChange={onDailyHlGoalChange}
               />
               <GoalRing
-                label="Meta general (hL)"
-                lines={["Meta general", "en hL"]}
-                value={cumulativeHl || 0}
+                label="Meta general del mes (hL)"
+                lines={["Meta del mes", "en hL"]}
+                value={goalMonthHl}
                 goal={hlGoal}
                 decimals={hlGoal > 0 && hlGoal < 100 ? 1 : 0}
                 color="var(--call-blue)"
@@ -929,7 +932,18 @@ export default function ProductsView({
                       />
                     </div>
                     {(() => {
-                      const info = getHlBackfill(movements, products, p.code);
+                      const typedHl = parseFloat(editHlInputs[p.code]);
+                      const formatCode = editFormatInputs[p.code];
+                      const units = formatUnits({ format: formatCode }, productFormats);
+                      if (!(typedHl > 0) || units <= 1) return null;
+                      return (
+                        <div style={{ fontSize: 11.5, color: "var(--faint)", textAlign: "right", paddingBottom: 6 }}>
+                          Un {formatCode} ({units} uds) = {hlPerFormat({ hl: typedHl, format: formatCode }, productFormats)} hL
+                        </div>
+                      );
+                    })()}
+                    {(() => {
+                      const info = getHlBackfill(movements, products, p.code, productFormats);
                       const typedHl = parseFloat(editHlInputs[p.code]);
                       const unsavedHl = Number.isFinite(typedHl) && typedHl > 0 && typedHl !== p.hl;
                       if (!info) {
@@ -945,7 +959,7 @@ export default function ProductsView({
                           {open ? (
                             <div style={{ background: "var(--surface-subtle)", border: "1px solid var(--border-strong)", borderRadius: 9, padding: "9px 10px" }}>
                               <div style={{ fontSize: 12.5, color: "var(--text)", marginBottom: 8 }}>
-                                {info.count} venta{info.count === 1 ? "" : "s"} sin HL · {info.units} uds · <b>+{info.hlAdded} hL</b> a {info.hl} hL por unidad. ¿Aplicar?
+                                {info.count} venta{info.count === 1 ? "" : "s"} sin HL · {info.units} uds · <b>+{info.hlAdded} hL</b> a {info.hl} hL por {p.format || "unidad"}. ¿Aplicar?
                               </div>
                               <div style={{ display: "flex", gap: 8 }}>
                                 <button

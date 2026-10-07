@@ -14,9 +14,9 @@ const baseProducts = [
   { code: "VODKA", name: "Vodka", short: "Vodka", color: "#6B4C9A", hl: 0.005, format: "Sixpack" },
 ];
 
-function sale(id, code, qty, hl) {
+function sale(id, code, qty, hl, date = "2026-09-21") {
   return {
-    id: `m-${id}`, code, type: "venta", qty, unitPrice: 100, unitHl: hl, date: "2026-09-21",
+    id: `m-${id}`, code, type: "venta", qty, unitPrice: 100, unitHl: hl, date,
     timestamp: `2026-09-21T0${id}:00:00.000Z`, orderId: `o${id}`, orderSeq: id, customerName: `Cliente ${id}`,
     businessName: "", customerPhone: "5353551234", isDelivery: false, note: "",
     bucket: "hoy", sent: true, confirmed: false, sentToCustomer: false,
@@ -29,6 +29,8 @@ function seed({ view = "stock", products = baseProducts, movements = [], extra =
     products, movements, customers: [], orderSeqPerDay: true, lastBackupAt: new Date().toISOString(),
     stock: { P500: 400, M1500: 100, VODKA: 50 }, prices: { P500: 1, M1500: 1, VODKA: 1 }, pricesAreUsd: true, exchangeRate: 100,
     productFormats: [{ code: "Sixpack", units: 6 }],
+    // Estos datos ya tienen el HL del formato completo en cada venta.
+    hlPerFormatMigrated: true,
     ...extra,
   }));
 }
@@ -49,7 +51,7 @@ afterEach(() => {
 describe("Productos: metas de venta (anillos)", () => {
   const BLISTERS = "Blísteres diarios (cerveza y malta)";
   const HL = "HL diarios (cerveza y malta)";
-  const GENERAL = "Meta general (hL)";
+  const GENERAL = "Meta general del mes (hL)";
 
   async function setGoal(label, value) {
     const open = screen.queryByRole("button", { name: `Fijar meta de ${label}` }) || screen.getByRole("button", { name: `Cambiar meta de ${label}` });
@@ -104,10 +106,31 @@ describe("Productos: metas de venta (anillos)", () => {
     expect(await screen.findByRole("img", { name: `${BLISTERS}: 7 sin meta` })).toBeTruthy();
   });
 
-  it("la meta general muestra lo vendido en total contra la meta", async () => {
-    seed({ extra: { goalProductsMigrated: true, hlGoal: 200, cumulativeHl: 50 } });
+  it("la meta general cuenta lo vendido en el mes (no el acumulado de siempre)", async () => {
+    seed({
+      products: baseProducts.map((p) => (p.code === "VODKA" ? p : { ...p, inGoals: true })),
+      movements: [
+        sale(1, "P500", 10, 0.03, "2026-09-05"), // 0.3 hL, este mes
+        sale(2, "M1500", 10, 0.09, "2026-09-21"), // 0.9 hL, hoy
+        sale(3, "P500", 500, 0.03, "2026-08-31"), // mes anterior: no cuenta
+        sale(4, "VODKA", 500, 0.03, "2026-09-10"), // no es cerveza ni malta: no cuenta
+      ],
+      extra: { goalProductsMigrated: true, hlGoal: 10, cumulativeHl: 999 },
+    });
     render(<InventoryApp />);
-    expect(await screen.findByRole("img", { name: `${GENERAL}: 50 de 200 (25%)` })).toBeTruthy();
+    // 0.3 + 0.9 = 1.2 de 10 (12%); el acumulado de 999 ya no se usa.
+    expect(await screen.findByRole("img", { name: `${GENERAL}: 1.2 de 10 (12%)` })).toBeTruthy();
+  });
+
+  it("al empezar un mes nuevo la meta general vuelve a cero", async () => {
+    vi.setSystemTime(new Date("2026-10-01T09:00:00"));
+    seed({
+      products: baseProducts.map((p) => (p.code === "VODKA" ? p : { ...p, inGoals: true })),
+      movements: [sale(1, "P500", 100, 0.03, "2026-09-30")],
+      extra: { goalProductsMigrated: true, hlGoal: 10 },
+    });
+    render(<InventoryApp />);
+    expect(await screen.findByRole("img", { name: `${GENERAL}: 0.0 de 10 (0%)` })).toBeTruthy();
   });
 
   it("sin productos marcados avisa cómo marcarlos", async () => {
@@ -210,5 +233,25 @@ describe("Pedidos > Resumen de hoy: blísteres y HL de cerveza y malta", () => {
     const label = await screen.findByText("HL VENDIDOS");
     expect(within(label.parentElement).getByText("0.65")).toBeTruthy();
     expect(screen.queryByText("BLÍSTERES")).toBeNull();
+  });
+});
+
+describe("Resumen semanal: hectolitros del mes", () => {
+  it("muestra el HL del mes contra la meta general", async () => {
+    seed({
+      view: "resumen",
+      products: baseProducts.map((p) => (p.code === "VODKA" ? p : { ...p, inGoals: true })),
+      movements: [
+        sale(1, "P500", 10, 0.03, "2026-09-05"),
+        sale(2, "M1500", 10, 0.09, "2026-09-21"),
+        sale(3, "P500", 500, 0.03, "2026-08-31"),
+      ],
+      extra: { goalProductsMigrated: true, hlGoal: 10, cumulativeHl: 999 },
+    });
+    render(<InventoryApp />);
+    expect(await screen.findByText(/Vendido este mes:/)).toBeTruthy();
+    expect(screen.getByText(/de 10 hL \(12%\)/)).toBeTruthy();
+    // El HL del mes aparece arriba y en la línea de la meta.
+    expect(screen.getAllByText("1.20 hL")).toHaveLength(2);
   });
 });

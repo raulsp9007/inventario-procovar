@@ -283,7 +283,6 @@ export default function InventoryApp() {
             editGoalInputs={editGoalInputs}
             setEditGoalInputs={setEditGoalInputs}
             todaysMovements={todaysMovements}
-            cumulativeHl={cumulativeHl}
             hlGoal={hlGoal}
             onHlGoalChange={(next) => {
               setHlGoal(next);

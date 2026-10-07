@@ -4,6 +4,7 @@ import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange
 import { getCustomerSalesTotals, getCustomerStats } from "./customerHelpers";
 import { isCommittedMovement } from "./orderHelpers";
 import { customerLabel, businessLabel } from "./nameLabels";
+import { monthHl } from "./goals";
 
 export default function WeeklySummary({
   products,
@@ -32,7 +33,9 @@ export default function WeeklySummary({
   const commissionUSD = convertToUSD(commissionCUP, exchangeRate);
   const [commissionInput, setCommissionInput] = useState(() => (commissionPercent ? String(commissionPercent) : ""));
   const [hlGoalInput, setHlGoalInput] = useState(() => (hlGoal != null ? String(hlGoal) : ""));
-  const hlSold = cumulativeHl || 0;
+  // La meta de HL es mensual: se compara con lo vendido del día 1 hasta hoy
+  // (solo cerveza y malta si hay productos marcados), no con el acumulado.
+  const hlSold = monthHl(movements, products, today);
   const hlPct = hlGoal != null && hlGoal > 0 ? Math.round((hlSold / hlGoal) * 100) : null;
   const activeProducts = products.filter((p) => !p.archived);
   // Con datos de ventas ya calculados abajo por producto, se filtran los
@@ -247,14 +250,14 @@ export default function WeeklySummary({
 
       <div style={{ marginTop: 16, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>HECTOLITROS</span>
+          <span style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>HECTOLITROS DEL MES</span>
           <span style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
             {hlSold.toFixed(2)} hL
           </span>
         </div>
 
         <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-          Meta HL
+          Meta del mes
           <input
             type="number"
             inputMode="decimal"
@@ -276,7 +279,7 @@ export default function WeeklySummary({
 
         {hlGoal != null && (
           <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            Vendido: <span style={{ fontWeight: 700, color: "var(--text)" }}>{hlSold.toFixed(2)} hL</span> de {hlGoal} hL ({hlPct}%)
+            Vendido este mes: <span style={{ fontWeight: 700, color: "var(--text)" }}>{hlSold.toFixed(2)} hL</span> de {hlGoal} hL ({hlPct}%)
           </div>
         )}
       </div>

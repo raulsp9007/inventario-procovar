@@ -5,6 +5,7 @@ import { isCommittedMovement, computeScheduledTransition, nextOrderSeq, renumber
 import { toCubanPhone } from "./customerHelpers";
 import { totalHlSold, priceToCUP } from "./money";
 import { applyDefaultGoalProducts } from "./goals";
+import { hlPerFormat, migrateHlToFormat } from "./hl";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 import { getHlBackfill, isHlBackfillable } from "./hlBackfill";
@@ -205,6 +206,8 @@ export function useInventoryStore() {
     // Marca de que ya se hizo la migración de "Cerveza o malta" (goals.js):
     // con ella, lo que se marque o desmarque a mano no se vuelve a pisar.
     goalProductsMigrated: true,
+    // Marca de que el HL de cada venta ya es el del formato completo (hl.js).
+    hlPerFormatMigrated: true,
   };
 
   const persist = useCallback(async (nextState) => {
@@ -303,10 +306,19 @@ export function useInventoryStore() {
     const migratedHl = parsed.cumulativeHl == null;
     // Migración: dato guardado (o backup) de antes de este campo — se siembra una sola vez
     // desde el HL ya vendido (derivado del historial), para no perder lo que ya se contó.
-    const nextCumulativeHl = migratedHl ? totalHlSold(loadedMovements, loadedProducts) : parsed.cumulativeHl;
+    // Migración única del historial al HL del formato completo (hl.js): cada
+    // venta guardada antes tiene el HL de UNA unidad; se multiplica por las
+    // unidades de su formato y el acumulado cambia por la diferencia. Un
+    // respaldo viejo importado (sin la bandera) pasa por lo mismo.
+    const migratedHlFormat = !parsed.hlPerFormatMigrated;
+    const hlMigration = migratedHlFormat ? migrateHlToFormat(loadedMovements, loadedProducts, nextProductFormats) : null;
+    const finalMovements = hlMigration ? hlMigration.movements : loadedMovements;
+    const nextCumulativeHl = migratedHl
+      ? totalHlSold(finalMovements, loadedProducts)
+      : parsed.cumulativeHl + (hlMigration ? hlMigration.hlDelta : 0);
 
     setStock(nextStock);
-    setMovements(loadedMovements);
+    setMovements(finalMovements);
     setLastAdjustedAt(nextLastAdjustedAt);
     setProducts(loadedProducts);
     setPrices(nextPrices);
@@ -332,13 +344,13 @@ export function useInventoryStore() {
     setSendBusinessName(nextSendBusinessName);
     setLastBackupAt(nextLastBackupAt);
 
-    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats || sundayScheduleFixed || migratedGoalProducts) {
+    if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats || sundayScheduleFixed || migratedGoalProducts || migratedHlFormat) {
       persist({
-        stock: nextStock, movements: loadedMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
+        stock: nextStock, movements: finalMovements, lastAdjustedAt: nextLastAdjustedAt, products: loadedProducts,
         prices: nextPrices, pricesAreUsd: migratedPricesToUsd ? true : (parsed.pricesAreUsd ?? false),
         cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl,
         exchangeRate: nextExchangeRate, commissionPercent: nextCommissionPercent, showPrices: nextShowPrices, hlGoal: nextHlGoal,
-        dailyHlGoal: nextDailyHlGoal, dailyBlisterGoal: nextDailyBlisterGoal, goalProductsMigrated: true, waitlist: nextWaitlist, customers: nextCustomers, productFormats: nextProductFormats, orderSeqPerDay: true,
+        dailyHlGoal: nextDailyHlGoal, dailyBlisterGoal: nextDailyBlisterGoal, goalProductsMigrated: true, hlPerFormatMigrated: true, waitlist: nextWaitlist, customers: nextCustomers, productFormats: nextProductFormats, orderSeqPerDay: true,
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName,
         supervisorPhone: nextSupervisorPhone, supervisorContactName: nextSupervisorContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
@@ -690,7 +702,7 @@ export function useInventoryStore() {
   // no tenía HL por unidad (ver hlBackfill.js), con el valor guardado hoy, y
   // ajusta el acumulado por la diferencia. Solo toca ventas con unitHl en 0.
   function applyHlBackfill(code) {
-    const info = getHlBackfill(movements, products, code);
+    const info = getHlBackfill(movements, products, code, productFormats);
     if (!info) return;
     const nextMovements = movements.map((m) => (isHlBackfillable(m, code) ? { ...m, unitHl: info.hl } : m));
     const nextCumulativeHl = cumulativeHl + info.hlAdded;
@@ -813,7 +825,7 @@ export function useInventoryStore() {
   function registerManualSale(code, qty) {
     const unitPrice = priceToCUP(prices[code], exchangeRate);
     const product = products.find((p) => p.code === code);
-    const unitHl = product?.hl || 0;
+    const unitHl = hlPerFormat(product, productFormats);
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const orderSeq = nextOrderSeq(movements, todayStr());
     const movement = makeMovement(code, "venta", qty, {
@@ -856,7 +868,7 @@ export function useInventoryStore() {
     lines.forEach(({ code, qty }) => {
       const unitPrice = priceToCUP(prices[code], exchangeRate);
       const product = products.find((p) => p.code === code);
-      const unitHl = product?.hl || 0;
+      const unitHl = hlPerFormat(product, productFormats);
       newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone ? toCubanPhone(customerPhone) : "", isDelivery, note, bucket, date }));
       if (committed) {
         nextStock[code] = (nextStock[code] || 0) - qty;
@@ -967,7 +979,7 @@ export function useInventoryStore() {
     lines.forEach(({ code, qty }) => {
       const unitPrice = priceToCUP(prices[code], exchangeRate);
       const product = products.find((p) => p.code === code);
-      const unitHl = product?.hl || 0;
+      const unitHl = hlPerFormat(product, productFormats);
       newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone ? toCubanPhone(customerPhone) : "", isDelivery, note, bucket, date, sent: nextSent, timestamp: originalMovements[0].timestamp }));
       if (willBeCommitted) {
         nextStock[code] = (nextStock[code] || 0) - qty;
