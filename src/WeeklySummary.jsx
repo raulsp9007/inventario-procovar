@@ -159,10 +159,6 @@ export default function WeeklySummary({
             <span style={{ color: "var(--text-muted)" }}>Total semana actual</span>
             <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(weekTotal)}</span>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 16px", fontSize: 14 }}>
-            <span style={{ color: "var(--text-muted)" }}>Total {monthName}</span>
-            <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(monthTotal)}</span>
-          </div>
 
           {weeklyBreakdown.length > 0 && (
             <div>
@@ -207,7 +203,7 @@ export default function WeeklySummary({
           </div>
         )}
         <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: -6, marginBottom: 10 }}>
-          {monthName}. Se reinicia el día 1 de cada mes.
+          {monthName.charAt(0).toUpperCase() + monthName.slice(1)}. Se reinicia el día 1 de cada mes.
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 8 }}>

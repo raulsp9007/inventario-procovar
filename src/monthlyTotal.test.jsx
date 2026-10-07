@@ -76,6 +76,15 @@ describe("Resumen: total general acumulado del mes", () => {
     expect(card().getByText("0 CUP")).toBeTruthy();
   });
 
+  it("el total del mes sale una sola vez: no hay fila repetida «Total <mes>»", async () => {
+    seed();
+    render(<InventoryApp />);
+    await screen.findByText("TOTAL GENERAL ACUMULADO");
+    expect(screen.queryByText(/^Total septiembre de 2026$/i)).toBeNull();
+    expect(screen.getAllByText("1500 CUP")).toHaveLength(1);
+    expect(screen.getByText("Total semana actual")).toBeTruthy();
+  });
+
   it("la comisión se calcula sobre el total del mes", async () => {
     seed({ commissionPercent: 10 });
     render(<InventoryApp />);

@@ -980,7 +980,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
             <div style={{ flexShrink: 0, textAlign: "right" }}>
               {showPrices && (
                 <div style={{ display: "flex", alignItems: "baseline", gap: 3, justifyContent: "flex-end" }}>
-                  <span style={{ fontSize: 19, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{totalNumber}</span>
+                  <span style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{totalNumber}</span>
                   <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)" }}>{totalUnit}</span>
                 </div>
               )}
