@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Trash2, Receipt, UserCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff } from "lucide-react";
 import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
-import { formatCUP } from "./money";
+import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness } from "./customerRegistry";
@@ -939,6 +939,8 @@ export default function Orders({ products, movements, customers, stock, prices, 
     const statusColor = isDeleting ? "var(--red)" : allStepsDone ? "var(--green)" : "var(--orange-2)";
     const totalStr = formatCUP(orderTotal(order));
     const [totalNumber, totalUnit] = totalStr.split(" ");
+    // Sin tasa cargada no hay USD que mostrar (igual que en el mensaje de WhatsApp).
+    const totalUsd = convertToUSD(orderTotal(order), exchangeRate);
     return (
       <div
         key={order.orderId}
@@ -978,8 +980,13 @@ export default function Orders({ products, movements, customers, stock, prices, 
             <div style={{ flexShrink: 0, textAlign: "right" }}>
               {showPrices && (
                 <div style={{ display: "flex", alignItems: "baseline", gap: 3, justifyContent: "flex-end" }}>
-                  <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{totalNumber}</span>
+                  <span style={{ fontSize: 19, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{totalNumber}</span>
                   <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)" }}>{totalUnit}</span>
+                </div>
+              )}
+              {showPrices && totalUsd != null && (
+                <div style={{ fontSize: 12, fontWeight: 500, color: "var(--faint)", fontVariantNumeric: "tabular-nums", marginTop: 1 }}>
+                  {formatUSD(totalUsd)}
                 </div>
               )}
               {showDate && (
