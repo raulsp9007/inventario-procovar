@@ -3,6 +3,8 @@ import { getWeekStartStr, getPreviousWeekRangeStr, getMonthStartStr, todayStr, f
 import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange, monthWeeklyBreakdown } from "./money";
 import { getCustomerSalesTotals, getCustomerStats } from "./customerHelpers";
 import { isCommittedMovement } from "./orderHelpers";
+import AnimatedNumber from "./AnimatedNumber.jsx";
+import { riseStyle } from "./motion.js";
 import { customerLabel, businessLabel } from "./nameLabels";
 
 export default function WeeklySummary({
@@ -79,7 +81,9 @@ export default function WeeklySummary({
           return (
             <div
               key={p.code}
+              className="rise"
               style={{
+                ...riseStyle(i),
                 padding: "12px 16px", fontSize: 14,
                 borderTop: i === 0 ? "none" : "1px solid var(--divider)",
               }}
@@ -101,10 +105,10 @@ export default function WeeklySummary({
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 8 }}>
                 <div style={{ height: 6, borderRadius: 3, background: "var(--divider)", overflow: "hidden" }}>
-                  <div style={{ width: `${(current / maxUnits) * 100}%`, height: "100%", background: p.color }} />
+                  <div className="bargrow" style={{ ...riseStyle(i), width: `${(current / maxUnits) * 100}%`, height: "100%", background: p.color }} />
                 </div>
                 <div style={{ height: 6, borderRadius: 3, background: "var(--divider)", overflow: "hidden" }}>
-                  <div style={{ width: `${(previous / maxUnits) * 100}%`, height: "100%", background: "var(--border-strong)" }} />
+                  <div className="bargrow" style={{ ...riseStyle(i), width: `${(previous / maxUnits) * 100}%`, height: "100%", background: "var(--border-strong)" }} />
                 </div>
               </div>
             </div>
@@ -126,7 +130,9 @@ export default function WeeklySummary({
             {topCustomers.map((c, i) => (
               <div
                 key={c.customerName}
+                className="rise"
                 style={{
+                  ...riseStyle(i),
                   display: "flex", justifyContent: "space-between", alignItems: "center",
                   gap: 8, padding: "10px 16px", fontSize: 13.5,
                   borderTop: i === 0 ? "none" : "1px solid var(--divider)",
@@ -157,7 +163,7 @@ export default function WeeklySummary({
         <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
           <div style={{ display: "flex", justifyContent: "space-between", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 16px", fontSize: 14 }}>
             <span style={{ color: "var(--text-muted)" }}>Total semana actual</span>
-            <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(weekTotal)}</span>
+            <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><AnimatedNumber value={weekTotal} format={formatCUP} decimals={2} /></span>
           </div>
 
           {weeklyBreakdown.length > 0 && (
@@ -169,7 +175,9 @@ export default function WeeklySummary({
                 {weeklyBreakdown.map((w, i) => (
                   <div
                     key={w.weekStart}
+                    className="rise"
                     style={{
+                      ...riseStyle(i),
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                       padding: "10px 16px", fontSize: 13.5,
                       borderTop: i === 0 ? "none" : "1px solid var(--divider)",
@@ -192,8 +200,8 @@ export default function WeeklySummary({
           <span style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>TOTAL GENERAL ACUMULADO</span>
           {showPrices && (
             <span style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
-              {formatCUP(monthTotal)}
-              {cumulativeUSD !== null && <span style={{ color: "var(--text-muted)", fontWeight: 500, fontSize: 13 }}> · {formatUSD(cumulativeUSD)}</span>}
+              <AnimatedNumber value={monthTotal} format={formatCUP} decimals={2} />
+              {cumulativeUSD !== null && <span style={{ color: "var(--text-muted)", fontWeight: 500, fontSize: 13 }}> · <AnimatedNumber value={cumulativeUSD} format={formatUSD} decimals={2} /></span>}
             </span>
           )}
         </div>

@@ -17,3 +17,19 @@ export function fillAnimationMs() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return 0;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : FILL_ANIMATION_MS;
 }
+
+// Cuánto se resalta un pedido recién creado (.orderenter en theme.css).
+export const ENTER_ANIMATION_MS = 1400;
+
+export function enterAnimationMs() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return 0;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ENTER_ANIMATION_MS;
+}
+
+// Entrada escalonada (.rise en theme.css): cada tarjeta se retrasa un poco más
+// que la anterior; con tope, para que una lista larga no tarde en aparecer.
+export const RISE_MAX_INDEX = 8;
+
+export function riseStyle(index) {
+  return { "--i": Math.min(index, RISE_MAX_INDEX) };
+}

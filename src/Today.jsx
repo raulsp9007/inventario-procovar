@@ -1,6 +1,7 @@
 import { formatCUP, formatUSD, convertToUSD, totalHlSold } from "./money";
 import { reservedForTomorrow } from "./orderHelpers.js";
 import Banner from "./Banner.jsx";
+import AnimatedNumber from "./AnimatedNumber.jsx";
 import { goalTotals, isGoalProduct } from "./goals";
 
 // `movements` ya viene filtrado por el llamador (InventoryApp.jsx) según qué
@@ -89,7 +90,7 @@ export default function Today({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>{pendingMode ? "UNIDADES PENDIENTES" : "UNIDADES VENDIDAS"}</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{unitsSold}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><AnimatedNumber value={unitsSold} /></div>
           {billedUnits > 0 && (
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
               {`${billedUnits} facturada${billedUnits === 1 ? "" : "s"} · ${unitsSold + billedUnits} en total`}
@@ -100,7 +101,7 @@ export default function Today({
         {showPrices && (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
             <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>{pendingMode ? "INGRESO PENDIENTE" : "INGRESO DEL DÍA"}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatCUP(dayRevenue)}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><AnimatedNumber value={dayRevenue} format={formatCUP} decimals={2} /></div>
             {dayRevenueUSD !== null && (
               <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{formatUSD(dayRevenueUSD)}</div>
             )}
@@ -109,13 +110,13 @@ export default function Today({
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>{ordersLabel}</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{ordersToday}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><AnimatedNumber value={ordersToday} /></div>
         </div>
 
         {useGoalProducts && (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
             <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>BLÍSTERES</div>
-            <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{goalSums.blisters}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><AnimatedNumber value={goalSums.blisters} /></div>
             {blisterPct !== null && (
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{blisterPct}% de la meta diaria</div>
             )}
@@ -124,7 +125,7 @@ export default function Today({
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>HL {pendingMode ? "PENDIENTES" : useGoalProducts ? "CERVEZA Y MALTA" : "VENDIDOS"}</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{hlSoldToday.toFixed(2)}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><AnimatedNumber value={hlSoldToday} decimals={2} format={(n) => n.toFixed(2)} /></div>
           {dailyHlPct !== null && (
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{dailyHlPct}% de la meta diaria</div>
           )}
@@ -144,6 +145,7 @@ export default function Today({
             <div
               key={row.product.code}
               onClick={onProductClick ? () => onProductClick(row.product.code) : undefined}
+              className={onProductClick ? "pressable" : undefined}
               style={{
                 display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
                 gap: 6, padding: "12px 16px", fontSize: 14, cursor: onProductClick ? "pointer" : "default",

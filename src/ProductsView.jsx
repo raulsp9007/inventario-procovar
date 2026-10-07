@@ -13,6 +13,7 @@ import { goalTotals, isGoalProduct, monthHl } from "./goals";
 import { todayStr } from "./dateUtils";
 import { formatUnits, hlPerFormat } from "./hl";
 import GoalRing from "./GoalRing.jsx";
+import { riseStyle } from "./motion.js";
 
 // Foto del producto (miniatura) o un recuadro vacío si todavía no tiene.
 function ProductThumb({ url, name, size }) {
@@ -593,7 +594,7 @@ export default function ProductsView({
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: editMode ? 10 : 8 }}>
-          {displayedProducts.map((p) => {
+          {displayedProducts.map((p, cardIndex) => {
             const qty = stock[p.code] || 0;
             const isLow = qty <= lowStockThresholdFor(p);
             const lastMovement = movements.find((m) => m.code === p.code);
@@ -618,7 +619,7 @@ export default function ProductsView({
                 <div
                   key={p.code}
                   data-product-code={p.code}
-                  className="rowfade"
+                  className="rowfade pressable"
                   onClick={() => setExpandedEditCode(p.code)}
                   style={{
                     background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12,
@@ -1077,8 +1078,9 @@ export default function ProductsView({
               <div
                 key={p.code}
                 data-product-code={p.code}
-                className="rowfade"
+                className="rise"
                 style={{
+                  ...riseStyle(cardIndex),
                   display: "flex", alignItems: "stretch", background: "var(--surface)",
                   border: `1px solid ${isDragging ? "var(--border-strong)" : isLow ? "var(--border-warn)" : "var(--border)"}`,
                   borderRadius: 12, overflow: "hidden",

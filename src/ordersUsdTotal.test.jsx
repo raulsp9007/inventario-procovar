@@ -52,14 +52,14 @@ describe("Pedidos: total en dólares bajo el total en CUP", () => {
   it("muestra el total de cada pedido en USD con la tasa de cambio", async () => {
     seed();
     render(<InventoryApp />);
-    expect(await screen.findByText("US$8.00")).toBeTruthy();  // 800 CUP / 100
-    expect(screen.getByText("US$1.50")).toBeTruthy();         // 150 CUP / 100
+    expect(await screen.findByText("8.00 US$")).toBeTruthy();  // 800 CUP / 100
+    expect(screen.getByText("1.50 US$")).toBeTruthy();         // 150 CUP / 100
   });
 
   it("va debajo del total en CUP", async () => {
     seed();
     render(<InventoryApp />);
-    const usd = await screen.findByText("US$8.00");
+    const usd = await screen.findByText("8.00 US$");
     const cup = screen.getByText("800");
     expect(cup.compareDocumentPosition(usd) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(usd.parentElement).toBe(cup.parentElement.parentElement); // misma columna del total

@@ -149,11 +149,11 @@ export default function InventoryApp() {
           <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 11, color: "var(--on-ink-subtitle)", letterSpacing: "0.06em" }}>UNIDADES TOTALES</div>
-              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><PulseNumber value={totalStock} /></div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><PulseNumber value={totalStock} countUp /></div>
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 11, color: "var(--on-ink-subtitle)", letterSpacing: "0.06em" }}>VENDIDO HOY</div>
-              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--on-ink-accent)" }}><PulseNumber value={todaysUnitsSold} /></div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--on-ink-accent)" }}><PulseNumber value={todaysUnitsSold} countUp /></div>
             </div>
           </div>
         </div>

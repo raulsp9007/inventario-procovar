@@ -118,8 +118,8 @@
 
   --text: #F0EDE4;
   --text-muted: #ABA492;
-  --text-faint: #8C8672;
-  --text-faint-2: #6E6857;
+  --text-faint: #9E9885;
+  --text-faint-2: #827C6A;
 
   --ink: #3A3E2F;
   --cream: #F7F4EC;
@@ -135,7 +135,7 @@
   --banner-error-bg: #3A211C;
   --error-border: #6B342C;
 
-  --on-ink-subtitle: #9AA890;
+  --on-ink-subtitle: #A3B198;
   --on-ink-label: #B7C9A8;
   --on-ink-accent: #E3B463;
 
@@ -153,7 +153,7 @@
   --hairline: #34372B;
   --border-edit: #4A4D3E;
   --ink-2: #4A4E3E;
-  --faintest: #6E6857;
+  --faintest: #827C6A;
   --orange-2: #DB9F5C;
   --orange-text-2: #D9B98A;
   --banner-bg: #3A2E18;
@@ -163,7 +163,7 @@
   --danger-border: #6B342C;
   --warn-tint: #332A18;
   --muted: #ABA492;
-  --faint: #8C8672;
+  --faint: #9E9885;
   --green: #6FBE8A;
   --orange: #E0954A;
   --orange-text: #E0B96A;
@@ -203,14 +203,42 @@
 @keyframes expandIn { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 700px; } }
 .expandin { overflow: hidden; animation: expandIn 0.22s ease-out; }
 
+/* Entrada escalonada: cada tarjeta sube y aparece con un retraso de 40 ms por
+   posición (--i, con tope en motion.js). Solo "backwards": durante el retraso
+   queda en el estado inicial y al terminar no deja ningún transform puesto
+   (un transform fijo crearía un bloque contenedor para los modales con
+   position:fixed de adentro). */
+@keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.rise { animation: riseIn 0.28s ease-out backwards; animation-delay: calc(var(--i, 0) * 40ms); }
+
+/* Pedido recién creado: además de entrar como las demás, el borde queda
+   resaltado un rato. Es una segunda animación en la lista, así que al
+   quitarse esta la de entrada (ya terminada) no se repite. */
+@keyframes orderGlow {
+  from { box-shadow: 0 0 0 2px var(--orange); }
+  to   { box-shadow: 0 0 0 0 transparent; }
+}
+.rise.orderenter {
+  animation-name: riseIn, orderGlow;
+  animation-duration: 0.28s, 1.4s;
+  animation-timing-function: ease-out, ease-out;
+  animation-delay: calc(var(--i, 0) * 40ms), 0s;
+  animation-fill-mode: backwards, none;
+}
+
+/* Barras de Resumen: crecen desde la izquierda. */
+@keyframes barGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.bargrow { transform-origin: left center; animation: barGrow 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards; animation-delay: calc(var(--i, 0) * 40ms + 120ms); }
+
 /* Efecto de presión en los botones. Un transform inline (p. ej. el menú
    radial) gana sobre esto, así que no los afecta. */
-button { transition: transform 0.1s ease; }
-button:active:not(:disabled) { transform: scale(0.97); }
+button, [role="button"], .pressable { transition: transform 0.1s ease; }
+button:active:not(:disabled), [role="button"]:active, .pressable:active { transform: scale(0.97); }
+.pressable:active { transform: scale(0.985); }
 
 @media (prefers-reduced-motion: reduce) {
-  .viewfade, .orderleave, .numpulse, .steppop, .expandin { animation: none; }
+  .viewfade, .orderleave, .numpulse, .steppop, .expandin, .rise, .rise.orderenter, .bargrow { animation: none; }
   .orderleave { opacity: 0; max-height: 0; }
-  button { transition: none; }
-  button:active:not(:disabled) { transform: none; }
+  button, [role="button"], .pressable { transition: none; }
+  button:active:not(:disabled), [role="button"]:active, .pressable:active { transform: none; }
 }

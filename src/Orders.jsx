@@ -12,7 +12,8 @@ import CierreDeVentasBanner from "./CierreDeVentasBanner.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import { customerLabel, businessLabel } from "./nameLabels";
 import PulseNumber from "./PulseNumber.jsx";
-import { leaveAnimationMs } from "./motion";
+import { leaveAnimationMs, riseStyle } from "./motion";
+import useEnteringIds from "./useEnteringIds";
 
 const PAST_ORDERS_DAYS = 14;
 const FILTERS_STORAGE_KEY = "procovar-pedidos-filtros";
@@ -273,6 +274,11 @@ export default function Orders({ products, movements, customers, stock, prices, 
   // lista unos 260 ms con la clase .orderleave y recién después se "esconden"
   // (pendingDeletes/pendingPostpones) con su Deshacer de 5 s de siempre.
   const [leavingIds, setLeavingIds] = useState(() => new Set());
+  // Pedidos recién creados (no los que ya estaban al abrir la pestaña): entran
+  // con .orderenter un rato. Se miran los ids crudos de los movimientos para que
+  // deshacer un borrado no cuente como pedido nuevo.
+  const movementOrderIds = useMemo(() => [...new Set(movements.filter((m) => m.type === "venta" && m.orderId).map((m) => m.orderId))], [movements]);
+  const enteringIds = useEnteringIds(movementOrderIds);
 
   function leaveThen(orders, commit) {
     const ms = leaveAnimationMs();
@@ -944,8 +950,9 @@ export default function Orders({ products, movements, customers, stock, prices, 
     return (
       <div
         key={order.orderId}
-        className={leavingIds.has(order.orderId) ? "orderleave" : undefined}
+        className={leavingIds.has(order.orderId) ? "orderleave" : enteringIds.has(order.orderId) ? "rise orderenter" : "rise"}
         style={{
+          ...riseStyle(i),
           display: "flex", alignItems: "stretch", background: "var(--surface)",
           border: `1px solid ${isDeleting ? "var(--danger-border)" : "var(--border)"}`,
           borderRadius: 12, overflow: "hidden",
@@ -986,7 +993,7 @@ export default function Orders({ products, movements, customers, stock, prices, 
               )}
               {showPrices && totalUsd != null && (
                 <div style={{ fontSize: 12, fontWeight: 500, color: "var(--faint)", fontVariantNumeric: "tabular-nums", marginTop: 1 }}>
-                  {formatUSD(totalUsd)}
+                  {formatUSD(totalUsd).replace("US$", "")} US$
                 </div>
               )}
               {showDate && (
