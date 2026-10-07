@@ -236,22 +236,17 @@ describe("Pedidos > Resumen de hoy: blísteres y HL de cerveza y malta", () => {
   });
 });
 
-describe("Resumen semanal: hectolitros del mes", () => {
-  it("muestra el HL del mes contra la meta general", async () => {
+describe("Resumen semanal: sin tarjeta de hectolitros", () => {
+  it("no muestra la tarjeta de HL del mes: esa cuenta vive en Productos", async () => {
     seed({
       view: "resumen",
       products: baseProducts.map((p) => (p.code === "VODKA" ? p : { ...p, inGoals: true })),
-      movements: [
-        sale(1, "P500", 10, 0.03, "2026-09-05"),
-        sale(2, "M1500", 10, 0.09, "2026-09-21"),
-        sale(3, "P500", 500, 0.03, "2026-08-31"),
-      ],
-      extra: { goalProductsMigrated: true, hlGoal: 10, cumulativeHl: 999 },
+      movements: [sale(1, "P500", 10, 0.03, "2026-09-05")],
+      extra: { goalProductsMigrated: true, hlGoal: 10 },
     });
     render(<InventoryApp />);
-    expect(await screen.findByText(/Vendido este mes:/)).toBeTruthy();
-    expect(screen.getByText(/de 10 hL \(12%\)/)).toBeTruthy();
-    // El HL del mes aparece arriba y en la línea de la meta.
-    expect(screen.getAllByText("1.20 hL")).toHaveLength(2);
+    expect(await screen.findByText(/TOTAL GENERAL ACUMULADO/)).toBeTruthy();
+    expect(screen.queryByText("HECTOLITROS DEL MES")).toBeNull();
+    expect(screen.queryByText(/Vendido este mes:/)).toBeNull();
   });
 });

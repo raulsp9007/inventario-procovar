@@ -324,7 +324,6 @@ export default function InventoryApp() {
           <WeeklySummary
             products={products}
             movements={movements}
-            cumulativeRevenue={cumulativeRevenue}
             cumulativeHl={cumulativeHl}
             exchangeRate={exchangeRate}
             commissionPercent={commissionPercent}
@@ -332,11 +331,6 @@ export default function InventoryApp() {
             onCommissionPercentChange={(next) => {
               setCommissionPercent(next);
               persist({ ...currentPersistedState, commissionPercent: next });
-            }}
-            hlGoal={hlGoal}
-            onHlGoalChange={(next) => {
-              setHlGoal(next);
-              persist({ ...currentPersistedState, hlGoal: next });
             }}
           />
         )}

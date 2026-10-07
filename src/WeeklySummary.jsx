@@ -4,19 +4,15 @@ import { formatCUP, formatUSD, convertToUSD, revenueInRange, totalRevenueInRange
 import { getCustomerSalesTotals, getCustomerStats } from "./customerHelpers";
 import { isCommittedMovement } from "./orderHelpers";
 import { customerLabel, businessLabel } from "./nameLabels";
-import { monthHl } from "./goals";
 
 export default function WeeklySummary({
   products,
   movements,
-  cumulativeRevenue,
   cumulativeHl,
   exchangeRate,
   commissionPercent,
   showPrices,
   onCommissionPercentChange,
-  hlGoal,
-  onHlGoalChange,
 }) {
   const weekStart = getWeekStartStr();
   // Cada venta cuenta en su fecha real: pasado el cierre de ventas los pedidos
@@ -28,15 +24,12 @@ export default function WeeklySummary({
   const monthTotal = totalRevenueInRange(movements, monthStart, today);
   const monthName = new Date(monthStart + "T00:00:00").toLocaleDateString("es-ES", { month: "long", year: "numeric" });
   const weeklyBreakdown = monthWeeklyBreakdown(movements, monthStart, today);
-  const cumulativeUSD = convertToUSD(cumulativeRevenue, exchangeRate);
-  const commissionCUP = (cumulativeRevenue * (commissionPercent || 0)) / 100;
+  // El total general se reinicia el día 1 de cada mes: es lo vendido del día 1
+  // hasta hoy, y la comisión se calcula sobre eso.
+  const cumulativeUSD = convertToUSD(monthTotal, exchangeRate);
+  const commissionCUP = (monthTotal * (commissionPercent || 0)) / 100;
   const commissionUSD = convertToUSD(commissionCUP, exchangeRate);
   const [commissionInput, setCommissionInput] = useState(() => (commissionPercent ? String(commissionPercent) : ""));
-  const [hlGoalInput, setHlGoalInput] = useState(() => (hlGoal != null ? String(hlGoal) : ""));
-  // La meta de HL es mensual: se compara con lo vendido del día 1 hasta hoy
-  // (solo cerveza y malta si hay productos marcados), no con el acumulado.
-  const hlSold = monthHl(movements, products, today);
-  const hlPct = hlGoal != null && hlGoal > 0 ? Math.round((hlSold / hlGoal) * 100) : null;
   const activeProducts = products.filter((p) => !p.archived);
   // Con datos de ventas ya calculados abajo por producto, se filtran los
   // que no tuvieron actividad ni esta semana ni la anterior -- mismo criterio
@@ -203,16 +196,19 @@ export default function WeeklySummary({
           <span style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>TOTAL GENERAL ACUMULADO</span>
           {showPrices && (
             <span style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
-              {formatCUP(cumulativeRevenue)}
+              {formatCUP(monthTotal)}
               {cumulativeUSD !== null && <span style={{ color: "var(--text-muted)", fontWeight: 500, fontSize: 13 }}> · {formatUSD(cumulativeUSD)}</span>}
             </span>
           )}
         </div>
         {showPrices && cumulativeUSD !== null && (
           <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: -6, marginBottom: 8 }}>
-            El USD es estimado con la tasa actual sobre todo el histórico -- no refleja la tasa de cada venta.
+            El USD es estimado con la tasa actual -- no refleja la tasa de cada venta.
           </div>
         )}
+        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: -6, marginBottom: 10 }}>
+          {monthName}. Se reinicia el día 1 de cada mes.
+        </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 8 }}>
           <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
@@ -244,42 +240,6 @@ export default function WeeklySummary({
               {commissionUSD !== null ? formatUSD(commissionUSD) : formatCUP(commissionCUP)}
             </span>
             {commissionUSD === null && <span> (definí la tasa USD en Productos para verla en dólares)</span>}
-          </div>
-        )}
-      </div>
-
-      <div style={{ marginTop: 16, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ fontSize: 12, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 }}>HECTOLITROS DEL MES</span>
-          <span style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
-            {hlSold.toFixed(2)} hL
-          </span>
-        </div>
-
-        <label style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-          Meta del mes
-          <input
-            type="number"
-            inputMode="decimal"
-            value={hlGoalInput}
-            onChange={(e) => {
-              const raw = e.target.value;
-              setHlGoalInput(raw);
-              const val = parseFloat(raw);
-              onHlGoalChange(isNaN(val) || val <= 0 ? null : val);
-            }}
-            placeholder="meta"
-            style={{
-              width: 90, border: "1px solid var(--border)", borderRadius: 7,
-              padding: "6px 8px", fontSize: 13, fontVariantNumeric: "tabular-nums",
-            }}
-          />
-          hL
-        </label>
-
-        {hlGoal != null && (
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            Vendido este mes: <span style={{ fontWeight: 700, color: "var(--text)" }}>{hlSold.toFixed(2)} hL</span> de {hlGoal} hL ({hlPct}%)
           </div>
         )}
       </div>
