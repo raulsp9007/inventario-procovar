@@ -328,8 +328,9 @@ export default function ProductsView({
   const visibleProducts = !editMode && hideZeroStock
     ? lowStockFiltered.filter((p) => (stock[p.code] || 0) > 0 || hasWaiters(p.code))
     : lowStockFiltered;
-  // El arrastre también vale en la vista simple, no solo en modo edición --
-  // dragOrder siempre es una permutación de TODOS los activos (hacen falta
+  // Mover productos solo se puede en modo Ajustar (la vista normal no tiene
+  // agarraderas, para no arrastrar sin querer al hacer scroll). dragOrder
+  // siempre es una permutación de TODOS los activos (hacen falta
   // todos para reorderActiveProducts), así que acá se filtra de nuevo por
   // "ocultar en 0" / filtro de stock bajo para no mostrar durante el
   // arrastre algo que la vista ya tenía escondido.
@@ -607,11 +608,6 @@ export default function ProductsView({
               .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
             const waitersQty = waiters.reduce((sum, w) => sum + w.qty, 0);
 
-            const handleDots = isDragging
-              ? { bg: "var(--ink)", dots: "var(--cream)", border: "var(--hairline)" }
-              : isLow
-                ? { bg: "var(--warn-tint)", dots: "var(--orange-2)", border: "var(--border-warn)" }
-                : { bg: "var(--surface-subtle)", dots: "var(--faintest)", border: "var(--hairline)" };
 
             if (editMode && !isExpanded) {
               // Fila compacta: swatch + nombre (input subrayado) + stock + agarradera.
@@ -1336,22 +1332,6 @@ export default function ProductsView({
                     </div>
                   )}
                 </div>
-                <button
-                  onPointerDown={(e) => handleHandlePointerDown(e, p.code)}
-                  onPointerMove={handleDragMove}
-                  onPointerUp={handleDragEnd}
-                  onPointerCancel={handleDragEnd}
-                  onLostPointerCapture={handleDragEnd}
-                  title="Arrastrar para reordenar"
-                  aria-label="Arrastrar para reordenar"
-                  style={{
-                    flexShrink: 0, width: 28, border: "none", borderLeft: `1px solid ${handleDots.border}`,
-                    background: handleDots.bg, display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "grab", touchAction: "none", padding: 0,
-                  }}
-                >
-                  <DragDots color={handleDots.dots} size={16} />
-                </button>
               </div>
             );
           })}
