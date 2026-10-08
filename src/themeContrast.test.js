@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 
 const css = readFileSync("src/theme.css", "utf8");
 
-// Modo oscuro: los textos secundarios tienen que leerse (contraste WCAG) sobre
-// los fondos donde se usan. Texto de lectura >= 4.5; lo decorativo (números de
-// orden, separadores con texto) >= 3.
+// Los textos secundarios tienen que leerse (contraste WCAG >= 4.5) sobre los
+// fondos donde se usan, en modo oscuro y en claro. Los niveles "tenue" y "muy
+// tenue" también llevan texto de verdad (fechas, números de pedido, pies), así
+// que cumplen el mismo mínimo.
 
 function block(selector) {
   const start = css.indexOf(selector);
@@ -31,7 +32,7 @@ const dark = block('\n[data-theme="dark"] {');
 const BACKGROUNDS = ["bg", "surface", "panel-alt"];
 
 describe("modo oscuro: contraste de textos secundarios", () => {
-  for (const token of ["text-muted", "text-faint", "muted", "faint"]) {
+  for (const token of ["text-muted", "text-faint", "muted", "faint", "text-faint-2", "faintest"]) {
     for (const bg of BACKGROUNDS) {
       it(`--${token} sobre --${bg} llega a 4.5`, () => {
         expect(contrast(dark[token], dark[bg])).toBeGreaterThanOrEqual(4.5);
@@ -39,21 +40,48 @@ describe("modo oscuro: contraste de textos secundarios", () => {
     }
   }
 
-  for (const token of ["text-faint-2", "faintest"]) {
-    for (const bg of BACKGROUNDS) {
-      it(`--${token} (decorativo) sobre --${bg} llega a 3`, () => {
-        expect(contrast(dark[token], dark[bg])).toBeGreaterThanOrEqual(3);
-      });
+  it("el texto secundario también se lee sobre la pista del selector (Hoy / Para mañana) y los separadores", () => {
+    for (const token of ["text-muted", "muted"]) {
+      expect(contrast(dark[token], dark["segment-track"])).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(dark[token], dark.divider)).toBeGreaterThanOrEqual(4.5);
     }
-  }
+  });
 
   it("los textos de la cabecera oscura (sobre --ink) llegan a 4.5", () => {
     expect(contrast(dark["on-ink-subtitle"], dark.ink)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(dark["on-ink-label"], dark.ink)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("la jerarquía se mantiene: muted más claro que faint, y faint más claro que faintest", () => {
+  it("la jerarquía se mantiene: el secundario es más claro que el tenue", () => {
     expect(luminance(dark.muted)).toBeGreaterThan(luminance(dark.faint));
-    expect(luminance(dark.faint)).toBeGreaterThan(luminance(dark.faintest));
+    expect(luminance(dark.faint)).toBeGreaterThanOrEqual(luminance(dark.faintest));
+  });
+});
+
+// Modo claro: mismo criterio, sobre los fondos de la app (incluidos los
+// avisos y las etiquetas, que son los más oscuros).
+const light = block(":root {");
+const LIGHT_BACKGROUNDS = ["bg", "surface", "panel-alt", "banner-bg", "chip-bg"];
+
+describe("modo claro: contraste de textos secundarios", () => {
+  for (const token of ["text-muted", "muted", "text-faint", "faint", "text-faint-2", "faintest"]) {
+    for (const bg of LIGHT_BACKGROUNDS) {
+      it(`--${token} sobre --${bg} llega a 4.5`, () => {
+        expect(contrast(light[token], light[bg])).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+
+  for (const token of ["orange", "accent-orange-text", "orange-2", "accent-orange-soft-text", "call-blue"]) {
+    for (const bg of LIGHT_BACKGROUNDS) {
+      it(`el acento --${token} sobre --${bg} llega a 4.5`, () => {
+        expect(contrast(light[token], light[bg])).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+
+  it("la jerarquía se mantiene: texto, secundario y tenue cada vez más claros", () => {
+    expect(luminance(light.text)).toBeLessThan(luminance(light.muted));
+    expect(luminance(light.muted)).toBeLessThan(luminance(light.faint));
   });
 });

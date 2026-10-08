@@ -49,16 +49,16 @@
   --border-warn: #E9CFA0;
 
   --text: #22261F;
-  --text-muted: #8A8574;
-  --text-faint: #9A9484;
-  --text-faint-2: #B4AF9E;
+  --text-muted: #605B4C;
+  --text-faint: #716C5B;
+  --text-faint-2: #716C5B;
 
   --ink: #22261F;
   --cream: #F7F4EC;
   --on-accent: #FFFFFF;
 
-  --accent-orange-text: #B4661E;
-  --accent-orange-soft-text: #B57A2E;
+  --accent-orange-text: #A65A14;
+  --accent-orange-soft-text: #966019;
   --accent-green-text: #3C6E4A;
   --warning-text: #8A5A1E;
   --error-text: #8A2E1E;
@@ -72,7 +72,7 @@
   --on-ink-accent: #E3B463;
 
   --whatsapp: #25D366;
-  --call-blue: #1A73E8;
+  --call-blue: #1A66C8;
   --danger: #B4291E;
 
   /* Rediseño Productos (design_handoff_productos) */
@@ -82,8 +82,8 @@
   --hairline: #F0ECE0;
   --border-edit: #D2CBB6;
   --ink-2: #2C302A;
-  --faintest: #B9B3A2;
-  --orange-2: #B57A2E;
+  --faintest: #716C5B;
+  --orange-2: #966019;
   --orange-text-2: #5E4A2B;
   --banner-bg: #FBEFE0;
   --chip-bg: #FFF8EE;
@@ -94,10 +94,10 @@
   /* Alias cortos usados por el handoff de diseño -- mismos valores que sus
      equivalentes de siempre (--text-muted, --text-faint, etc), para no
      tener que reescribir el resto de la app ni duplicar la paleta. */
-  --muted: #8A8574;
-  --faint: #9A9484;
+  --muted: #605B4C;
+  --faint: #716C5B;
   --green: #3C6E4A;
-  --orange: #B4661E;
+  --orange: #A65A14;
   --orange-text: #8A5A1E;
   --red: #B4291E;
 
@@ -117,9 +117,9 @@
   --border-warn: #5C4E2E;
 
   --text: #F0EDE4;
-  --text-muted: #ABA492;
+  --text-muted: #B3AC9A;
   --text-faint: #9E9885;
-  --text-faint-2: #827C6A;
+  --text-faint-2: #9E9885;
 
   --ink: #3A3E2F;
   --cream: #F7F4EC;
@@ -153,7 +153,7 @@
   --hairline: #34372B;
   --border-edit: #4A4D3E;
   --ink-2: #4A4E3E;
-  --faintest: #827C6A;
+  --faintest: #9E9885;
   --orange-2: #DB9F5C;
   --orange-text-2: #D9B98A;
   --banner-bg: #3A2E18;
@@ -162,7 +162,7 @@
   --danger-bg: #3A211C;
   --danger-border: #6B342C;
   --warn-tint: #332A18;
-  --muted: #ABA492;
+  --muted: #B3AC9A;
   --faint: #9E9885;
   --green: #6FBE8A;
   --orange: #E0954A;

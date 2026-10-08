@@ -337,6 +337,7 @@ export default function InventoryApp() {
 
         {view === "pedidos" && (
           <Orders
+            theme={theme}
             products={products}
             movements={movements}
             customers={customers}
