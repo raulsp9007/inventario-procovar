@@ -1,6 +1,19 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { execSync } from "node:child_process";
+
+// Commit con el que se construye la app (7 caracteres): en GitHub Actions viene
+// en GITHUB_SHA; en local se pide a git. Se muestra en Configuración para saber
+// qué versión se tiene. "dev" si no hay forma de saberlo.
+function appVersion() {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
+  try {
+    return execSync("git rev-parse --short=7 HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || "dev";
+  } catch {
+    return "dev";
+  }
+}
 
 export default defineConfig(({ mode, isPreview }) => {
   // Both `vite build` and `vite preview` report mode "production"; only `vite dev`
@@ -10,6 +23,9 @@ export default defineConfig(({ mode, isPreview }) => {
 
   return {
     base,
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion()),
+    },
     server: {
       port: Number(process.env.PORT) || 5173,
     },

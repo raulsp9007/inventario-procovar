@@ -25,6 +25,20 @@ describe("ConnectionStatus", () => {
     expect(onUpdate).toHaveBeenCalledTimes(1);
   });
 
+  it("muestra la versión de la app cuando se conoce, en cualquier estado", () => {
+    const { rerender } = render(<ConnectionStatus offline={false} updateAvailable={false} lastOnlineAt={null} version="abc1234" />);
+    expect(screen.getByText("Versión abc1234")).toBeTruthy();
+    rerender(<ConnectionStatus offline updateAvailable={false} lastOnlineAt={null} version="abc1234" />);
+    expect(screen.getByText("Versión abc1234")).toBeTruthy();
+    rerender(<ConnectionStatus offline={false} updateAvailable lastOnlineAt={null} version="abc1234" />);
+    expect(screen.getByText("Versión abc1234")).toBeTruthy();
+  });
+
+  it("sin versión no dibuja la línea", () => {
+    render(<ConnectionStatus offline={false} updateAvailable={false} lastOnlineAt={null} />);
+    expect(screen.queryByText(/^Versión/)).toBeNull();
+  });
+
   it("sin actualización pendiente no hay botón de actualizar", () => {
     render(<ConnectionStatus offline={false} updateAvailable={false} lastOnlineAt={null} onUpdate={() => {}} />);
     expect(screen.queryByRole("button", { name: "Actualizar ahora" })).toBeNull();

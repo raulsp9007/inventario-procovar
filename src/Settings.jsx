@@ -3,6 +3,7 @@ import { Sun, Moon, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { COPYRIGHT_NOTICE, LICENSE_SUMMARY } from "./legal.js";
 import { formatHour12 } from "./dateUtils.js";
 import { usePwaStatus, applyUpdate } from "./pwaStatus.js";
+import { APP_VERSION } from "./appVersion.js";
 import ConnectionStatus from "./ConnectionStatus.jsx";
 import ProductFormatsCard from "./ProductFormatsCard.jsx";
 import WhatsappContactCard from "./WhatsappContactCard.jsx";
@@ -69,7 +70,7 @@ export default function Settings({
         CONFIGURACIÓN
       </div>
 
-      <ConnectionStatus offline={pwaStatus.offline} updateAvailable={pwaStatus.updateAvailable} lastOnlineAt={pwaStatus.lastOnlineAt} onUpdate={applyUpdate} />
+      <ConnectionStatus offline={pwaStatus.offline} updateAvailable={pwaStatus.updateAvailable} lastOnlineAt={pwaStatus.lastOnlineAt} onUpdate={applyUpdate} version={APP_VERSION} />
 
       {topSlot}
 

@@ -5,7 +5,7 @@ import { formatDateTime } from "./dateUtils";
 // ahora" (si se pasa onUpdate) la aplica -- sirve aunque se haya cerrado la
 // barra de arriba. Prioridad: sin conexión > hay actualización esperando > al
 // día -- son excluyentes entre sí, siempre se muestra uno solo.
-export default function ConnectionStatus({ offline, updateAvailable, lastOnlineAt, onUpdate }) {
+export default function ConnectionStatus({ offline, updateAvailable, lastOnlineAt, onUpdate, version }) {
   const variant = offline ? "offline" : updateAvailable ? "update" : "ok";
   const copy = {
     offline: {
@@ -38,6 +38,7 @@ export default function ConnectionStatus({ offline, updateAvailable, lastOnlineA
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{copy.title}</div>
         {copy.subtitle && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{copy.subtitle}</div>}
+        {version && <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>Versión {version}</div>}
       </div>
       {variant === "update" && onUpdate && (
         <button
