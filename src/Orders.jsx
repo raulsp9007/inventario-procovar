@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { Trash2, Receipt, UserCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff } from "lucide-react";
 import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD } from "./money";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, formatOrdersSummaryForSupervisor, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness } from "./customerRegistry";
 import { productChipColors } from "./colorUtils";
@@ -1227,6 +1227,18 @@ export default function Orders({ products, movements, customers, stock, prices, 
     );
   }
 
+  // Resumen de los pedidos de hoy para el supervisor: todos los del día, sin
+  // importar los filtros de la lista (esos solo cambian lo que se ve).
+  function sendSupervisorSummary() {
+    const todays = allOrders.filter(belongsToToday);
+    if (todays.length === 0) {
+      onError("No hay pedidos hoy para enviar.");
+      return;
+    }
+    const text = formatOrdersSummaryForSupervisor(todays, products, { date: today, senderName });
+    window.open(`https://wa.me/${supervisorPhone || ""}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  }
+
   const toasts = [
     ...Array.from(pendingDeletes.entries()).map(([orderId, { customerName: n }]) => ({
       key: `del-${orderId}`, message: `Pedido de ${n} eliminado.`, onUndo: () => undoDelete(orderId),
@@ -1405,6 +1417,22 @@ export default function Orders({ products, movements, customers, stock, prices, 
           </button>
         ))}
       </div>
+
+      {activeSection === "hoy" && (
+        <button
+          type="button"
+          onClick={sendSupervisorSummary}
+          aria-label="Enviar resumen al supervisor"
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", height: 40,
+            marginBottom: 12, borderRadius: 12, border: "1px solid var(--border-strong)", background: "var(--surface)",
+            color: "var(--text)", fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          <UserCheck size={16} strokeWidth={2} />
+          Enviar resumen al supervisor
+        </button>
+      )}
 
       {activeSection === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
         <CierreDeVentasBanner

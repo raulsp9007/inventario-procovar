@@ -142,6 +142,37 @@ export function formatOrderForWhatsApp(order, products, { senderName, sendSender
   return lines.join("\n");
 }
 
+const WEEKDAYS_SHORT = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const MONTHS_SHORT = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// "lun 21 sep" -- fecha corta para el título del resumen al supervisor.
+function formatShortDay(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return `${WEEKDAYS_SHORT[d.getDay()]} ${String(d.getDate()).padStart(2, "0")} ${MONTHS_SHORT[d.getMonth()]}`;
+}
+
+// Resumen de los pedidos del día para el supervisor (WhatsApp): por pedido,
+// solo el cliente (con su negocio si lo tiene) y los productos con su
+// cantidad. A propósito sin precios, estados ni teléfonos. *...* = negrita de
+// WhatsApp; 🛵 marca los domicilios.
+export function formatOrdersSummaryForSupervisor(orders, products, { date, senderName } = {}) {
+  const count = `${orders.length} ${orders.length === 1 ? "pedido" : "pedidos"}`;
+  const gestor = senderName && senderName.trim() ? senderName.trim() : "";
+  const lines = [`*Pedidos del día · ${formatShortDay(date)}*`, gestor ? `Gestor: ${gestor} · ${count}` : count, ""];
+  orders.forEach((order, i) => {
+    const business = (order.businessName || "").trim();
+    lines.push(`${i + 1}. *${order.customerName}*${business ? ` (${business})` : ""}${order.isDelivery ? " 🛵" : ""}`);
+    lines.push("    " + order.lines.map((l) => {
+      const product = products.find((p) => p.code === l.code);
+      return `${product ? product.short || product.name : l.code} ×${l.qty}`;
+    }).join(" · "));
+    lines.push("");
+  });
+  if (orders.some((o) => o.isDelivery)) lines.push("🛵 = domicilio");
+  else lines.pop();
+  return lines.join("\n");
+}
+
 // Copia del pedido para mandarle directo al cliente (a su propio teléfono,
 // no al contacto de negocio configurado) -- a propósito NO lleva nombre del
 // negocio, remitente ni nota interna: solo lo que el cliente necesita ver
