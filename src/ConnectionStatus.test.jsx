@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import ConnectionStatus from "./ConnectionStatus";
 
 describe("ConnectionStatus", () => {
@@ -16,10 +16,18 @@ describe("ConnectionStatus", () => {
     expect(screen.getByText("Usando la última versión guardada.")).toBeTruthy();
   });
 
-  it("con conexión y actualización pendiente: avisa sin pedir acción", () => {
-    render(<ConnectionStatus offline={false} updateAvailable lastOnlineAt="2026-09-20T10:00:00.000Z" />);
+  it("con conexión y actualización pendiente: avisa y deja actualizar cuando se quiera", () => {
+    const onUpdate = vi.fn();
+    render(<ConnectionStatus offline={false} updateAvailable lastOnlineAt="2026-09-20T10:00:00.000Z" onUpdate={onUpdate} />);
     expect(screen.getByText("Hay una versión nueva")).toBeTruthy();
-    expect(screen.getByText("Se aplica sola al volver a abrir la app.")).toBeTruthy();
+    expect(screen.getByText("Actualiza cuando termines lo que haces.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar ahora" }));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin actualización pendiente no hay botón de actualizar", () => {
+    render(<ConnectionStatus offline={false} updateAvailable={false} lastOnlineAt={null} onUpdate={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Actualizar ahora" })).toBeNull();
   });
 
   it("al día: sin conexión pendiente ni actualización, con la última conexión si se conoce", () => {

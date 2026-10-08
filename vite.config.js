@@ -20,10 +20,14 @@ export default defineConfig(({ mode, isPreview }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: "autoUpdate",
+        // "prompt": la versión nueva se descarga pero NO se activa sola ni
+        // recarga la app (autoUpdate lo hacía y podía tirar un formulario a
+        // medias). En su lugar avisa (barra arriba + Configuración) y se aplica
+        // al tocar "Actualizar".
+        registerType: "prompt",
         // El registro lo hace a mano src/pwaStatus.js (vía virtual:pwa-register),
         // no el script que el plugin inyectaría solo -- así se puede exponer el
-        // aviso de "hay una versión nueva" en Configuración.
+        // aviso de "hay una versión nueva".
         injectRegister: false,
         includeAssets: ["icon-192.png", "icon-512.png"],
         workbox: {

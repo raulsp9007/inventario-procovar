@@ -14,9 +14,17 @@ function initialOnline() {
   }
 }
 
+// Cada cuánto se busca una versión nueva con la app abierta, y el mínimo entre
+// dos búsquedas (al volver al primer plano varias veces seguidas).
+const UPDATE_CHECK_EVERY_MS = 60 * 60 * 1000;
+const UPDATE_CHECK_MIN_GAP_MS = 60 * 1000;
+
 let state = {
   offline: !initialOnline(),
   updateAvailable: false,
+  // El aviso de versión nueva se puede cerrar con la ×; vuelve solo si llega
+  // una versión todavía más nueva.
+  updateDismissed: false,
   // Última vez que se confirmó conexión -- no "última vez que se revisó
   // el servidor", que no tenemos manera de saber sin backend. Sirve para
   // decirle al usuario desde cuándo viene usando la copia guardada.
@@ -30,6 +38,40 @@ function setState(patch) {
 }
 
 let started = false;
+let updateSW = null;
+let lastCheckAt = 0;
+
+// Busca una versión nueva (no hace nada sin conexión ni sin registro del
+// service worker). Un fallo de red no es un error: se reintenta en la
+// próxima ocasión.
+function checkForUpdate(registration) {
+  if (!registration || !initialOnline()) return;
+  const now = Date.now();
+  if (now - lastCheckAt < UPDATE_CHECK_MIN_GAP_MS) return;
+  lastCheckAt = now;
+  Promise.resolve(registration.update()).catch(() => {});
+}
+
+// Con la app abierta: busca una versión nueva cada hora y cada vez que vuelve
+// al primer plano (al desbloquear el teléfono o volver desde WhatsApp).
+function watchForUpdates(registration) {
+  if (!registration) return;
+  setInterval(() => checkForUpdate(registration), UPDATE_CHECK_EVERY_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForUpdate(registration);
+  });
+}
+
+// Aplica la versión nueva (la que ya está descargada y esperando) y recarga.
+// Los datos de pedidos y stock se guardan aparte: no se tocan.
+export function applyUpdate() {
+  if (updateSW) updateSW(true);
+}
+
+// Cierra el aviso de versión nueva hasta que llegue otra todavía más nueva.
+export function dismissUpdate() {
+  setState({ updateDismissed: true });
+}
 
 // Se llama una sola vez al arrancar la app (ver main.jsx). Si el navegador
 // no soporta service worker, o el entorno no tiene el plugin de PWA (ej.
@@ -43,10 +85,13 @@ export function initPwaStatus() {
   window.addEventListener("offline", () => setState({ offline: true }));
 
   try {
-    registerSW({
+    updateSW = registerSW({
       immediate: true,
       onNeedRefresh() {
-        setState({ updateAvailable: true });
+        setState({ updateAvailable: true, updateDismissed: false });
+      },
+      onRegisteredSW(_swUrl, registration) {
+        watchForUpdates(registration);
       },
     });
   } catch {
@@ -73,7 +118,9 @@ export function usePwaStatus() {
 // Solo para tests: vuelve al estado inicial y desregistra todo, así un test
 // no arrastra el estado (ni el "started") del anterior.
 export function resetPwaStatusForTests() {
-  state = { offline: !initialOnline(), updateAvailable: false, lastOnlineAt: initialOnline() ? new Date().toISOString() : null };
+  state = { offline: !initialOnline(), updateAvailable: false, updateDismissed: false, lastOnlineAt: initialOnline() ? new Date().toISOString() : null };
   listeners.clear();
   started = false;
+  updateSW = null;
+  lastCheckAt = 0;
 }

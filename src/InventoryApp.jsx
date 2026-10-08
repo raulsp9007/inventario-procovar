@@ -14,6 +14,8 @@ import Portfolio from "./Portfolio.jsx";
 import Customers from "./Customers.jsx";
 import Settings from "./Settings.jsx";
 import PulseNumber from "./PulseNumber.jsx";
+import UpdateBanner from "./UpdateBanner.jsx";
+import { usePwaStatus, applyUpdate, dismissUpdate } from "./pwaStatus.js";
 import BackupCard from "./BackupCard.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import { useProductImages } from "./useProductImages.js";
@@ -85,6 +87,7 @@ export default function InventoryApp() {
     confirmOrder, deleteOrder, editOrder, markOrderSent,
     updateCustomer, restoreCustomerData, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
   } = useInventoryStore();
+  const pwaStatus = usePwaStatus();
   const productImages = useProductImages();
 
   // Cierre de ventas: pasada la hora, aviso de lo que quedó pendiente hoy en
@@ -124,6 +127,10 @@ export default function InventoryApp() {
         .rowfade { animation: fadeIn 0.25s ease; }
         @keyframes toastIn { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
+
+      {pwaStatus.updateAvailable && !pwaStatus.updateDismissed && (
+        <UpdateBanner onUpdate={applyUpdate} onDismiss={dismissUpdate} />
+      )}
 
       <RadialNav view={view} setView={setView} />
 
