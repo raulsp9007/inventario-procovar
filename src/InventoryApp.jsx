@@ -15,6 +15,9 @@ import Customers from "./Customers.jsx";
 import Settings from "./Settings.jsx";
 import PulseNumber from "./PulseNumber.jsx";
 import UpdateBanner from "./UpdateBanner.jsx";
+import CierreDelDia from "./CierreDelDia.jsx";
+import { buildClosingSummary } from "./closing.js";
+import { sendSupervisorSummary } from "./supervisorSummary.js";
 import { usePwaStatus, applyUpdate, dismissUpdate } from "./pwaStatus.js";
 import BackupCard from "./BackupCard.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
@@ -88,6 +91,7 @@ export default function InventoryApp() {
     updateCustomer, restoreCustomerData, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
   } = useInventoryStore();
   const pwaStatus = usePwaStatus();
+  const [cierreOpen, setCierreOpen] = useState(false);
   const productImages = useProductImages();
 
   // Cierre de ventas: pasada la hora, aviso de lo que quedó pendiente hoy en
@@ -133,6 +137,23 @@ export default function InventoryApp() {
       )}
 
       <RadialNav view={view} setView={setView} />
+
+      {cierreOpen && (
+        <CierreDelDia
+          summary={buildClosingSummary({
+            movements, products, stock, today: todayCal, dailyBlisterGoal, dailyHlGoal, hlGoal, exchangeRate, lastBackupAt,
+          })}
+          today={todayCal}
+          onClose={() => setCierreOpen(false)}
+          onGo={(nextView) => { setView(nextView); setCierreOpen(false); }}
+          onShareBackup={handleShareBackup}
+          onSendSummary={() => sendSupervisorSummary({
+            orders: groupAllOrders(movements).filter((o) => o.date === todayCal),
+            products, today: todayCal, senderName, supervisorPhone,
+            onError: (message) => { setError(message); setTimeout(() => setError(""), 3000); },
+          })}
+        />
+      )}
 
       {saveState !== "idle" && (
         <div
@@ -344,6 +365,7 @@ export default function InventoryApp() {
 
         {view === "pedidos" && (
           <Orders
+            onOpenCierre={() => setCierreOpen(true)}
             theme={theme}
             products={products}
             movements={movements}

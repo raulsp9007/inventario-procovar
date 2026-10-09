@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, UserCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff } from "lucide-react";
+import { Trash2, Receipt, UserCheck, ClipboardCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff } from "lucide-react";
 import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD } from "./money";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, formatOrdersSummaryForSupervisor, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
+import { sendSupervisorSummary } from "./supervisorSummary";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness } from "./customerRegistry";
 import { productChipColors } from "./colorUtils";
@@ -204,7 +205,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed }) {
+export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -1229,14 +1230,8 @@ export default function Orders({ theme, products, movements, customers, stock, p
 
   // Resumen de los pedidos de hoy para el supervisor: todos los del día, sin
   // importar los filtros de la lista (esos solo cambian lo que se ve).
-  function sendSupervisorSummary() {
-    const todays = allOrders.filter(belongsToToday);
-    if (todays.length === 0) {
-      onError("No hay pedidos hoy para enviar.");
-      return;
-    }
-    const text = formatOrdersSummaryForSupervisor(todays, products, { date: today, senderName });
-    window.open(`https://wa.me/${supervisorPhone || ""}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  function sendTodaySummary() {
+    sendSupervisorSummary({ orders: allOrders.filter(belongsToToday), products, today, senderName, supervisorPhone, onError });
   }
 
   const toasts = [
@@ -1419,19 +1414,27 @@ export default function Orders({ theme, products, movements, customers, stock, p
       </div>
 
       {activeSection === "hoy" && (
-        <button
-          type="button"
-          onClick={sendSupervisorSummary}
-          aria-label="Enviar resumen al supervisor"
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", height: 40,
-            marginBottom: 12, borderRadius: 12, border: "1px solid var(--border-strong)", background: "var(--surface)",
-            color: "var(--text)", fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
-          }}
-        >
-          <UserCheck size={16} strokeWidth={2} />
-          Enviar resumen al supervisor
-        </button>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {[
+            { key: "summary", label: "Enviar resumen al supervisor", text: "Enviar resumen", Icon: UserCheck, onClick: sendTodaySummary },
+            { key: "cierre", label: "Cierre del día", text: "Cierre del día", Icon: ClipboardCheck, onClick: onOpenCierre },
+          ].map(({ key, label, text, Icon, onClick }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={onClick}
+              aria-label={label}
+              style={{
+                flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, height: 40,
+                borderRadius: 12, border: "1px solid var(--border-strong)", background: "var(--surface)",
+                color: "var(--text)", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "0 6px",
+              }}
+            >
+              <Icon size={16} strokeWidth={2} style={{ flexShrink: 0 }} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       {activeSection === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
