@@ -53,6 +53,9 @@ export default function InventoryApp() {
   // Cliente tocado desde Pedidos ({ name, edit }): Customers lo consume al
   // montarse (expande su ficha, o abre su edición si edit) y lo limpia.
   const [customerToOpen, setCustomerToOpen] = useState(null);
+  // Pedido al que ir desde el listado de pendientes del cierre del día: Orders
+  // lo consume al montarse (muestra y se desplaza hasta ese pedido) y lo limpia.
+  const [orderToFocus, setOrderToFocus] = useState(null);
   const {
     products, stock, movements, lastAdjustedAt, prices,
     cumulativeRevenue, cumulativeHl, exchangeRate, setExchangeRate, commissionPercent, setCommissionPercent,
@@ -67,6 +70,7 @@ export default function InventoryApp() {
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
     sendBusinessName, setSendBusinessNameSetting,
+    showRecommendations, setShowRecommendationsSetting,
     lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
@@ -145,7 +149,7 @@ export default function InventoryApp() {
           })}
           today={todayCal}
           onClose={() => setCierreOpen(false)}
-          onGo={(nextView) => { setView(nextView); setCierreOpen(false); }}
+          onGo={(nextView, { orderId } = {}) => { setOrderToFocus(orderId || null); setView(nextView); setCierreOpen(false); }}
           onShareBackup={handleShareBackup}
           onSendSummary={() => sendSupervisorSummary({
             orders: groupAllOrders(movements).filter((o) => o.date === todayCal),
@@ -402,6 +406,9 @@ export default function InventoryApp() {
             onPrefillConsumed={() => setOrderPrefill(null)}
             reviewPending={reviewPending}
             onReviewPendingConsumed={() => setReviewPending(false)}
+            showRecommendations={showRecommendations}
+            focusOrderId={orderToFocus}
+            onFocusOrderConsumed={() => setOrderToFocus(null)}
           />
         )}
 
@@ -485,6 +492,8 @@ export default function InventoryApp() {
             commissionPercent={commissionPercent}
             hlGoal={hlGoal}
             sendBusinessName={sendBusinessName}
+            showRecommendations={showRecommendations}
+            onShowRecommendationsChange={setShowRecommendationsSetting}
             productFormats={productFormats}
             products={products}
             onSaveProductFormat={saveProductFormat}

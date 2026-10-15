@@ -140,6 +140,8 @@ export function useInventoryStore() {
   const [senderName, setSenderName] = useState("");
   const [sendSenderName, setSendSenderName] = useState(false);
   const [sendBusinessName, setSendBusinessName] = useState(true);
+  // Recomendaciones de compra (Pedidos): se pueden apagar desde Configuración.
+  const [showRecommendations, setShowRecommendations] = useState(true);
   const [lastBackupAt, setLastBackupAt] = useState(null);
   const [pricesAreUsd, setPricesAreUsd] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -200,7 +202,7 @@ export function useInventoryStore() {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, dailyBlisterGoal, waitlist, customers, productFormats, whatsappPhone,
     whatsappContactName, supervisorPhone, supervisorContactName, cierreVentasHour,
-    senderName, sendSenderName, sendBusinessName, lastBackupAt, pricesAreUsd,
+    senderName, sendSenderName, sendBusinessName, showRecommendations, lastBackupAt, pricesAreUsd,
     // Marca de que la numeración de pedidos ya es por día (ver applyPersistedData).
     orderSeqPerDay: true,
     // Marca de que ya se hizo la migración de "Cerveza o malta" (goals.js):
@@ -302,6 +304,7 @@ export function useInventoryStore() {
     const nextSenderName = parsed.senderName || "";
     const nextSendSenderName = parsed.sendSenderName ?? false;
     const nextSendBusinessName = parsed.sendBusinessName ?? true;
+    const nextShowRecommendations = parsed.showRecommendations ?? true;
     const nextLastBackupAt = parsed.lastBackupAt ?? null;
     const migratedHl = parsed.cumulativeHl == null;
     // Migración: dato guardado (o backup) de antes de este campo — se siembra una sola vez
@@ -342,6 +345,7 @@ export function useInventoryStore() {
     setSenderName(nextSenderName);
     setSendSenderName(nextSendSenderName);
     setSendBusinessName(nextSendBusinessName);
+    setShowRecommendations(nextShowRecommendations);
     setLastBackupAt(nextLastBackupAt);
 
     if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats || sundayScheduleFixed || migratedGoalProducts || migratedHlFormat) {
@@ -354,6 +358,7 @@ export function useInventoryStore() {
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName,
         supervisorPhone: nextSupervisorPhone, supervisorContactName: nextSupervisorContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
+        showRecommendations: nextShowRecommendations,
         lastBackupAt: nextLastBackupAt,
       });
     }
@@ -1214,6 +1219,11 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, sendBusinessName: next });
   }
 
+  function setShowRecommendationsSetting(next) {
+    setShowRecommendations(next);
+    persist({ ...currentPersistedState, showRecommendations: next });
+  }
+
   function markBackupDone() {
     const next = new Date().toISOString();
     setLastBackupAt(next);
@@ -1234,6 +1244,7 @@ export function useInventoryStore() {
     cierreVentasHour, setCierreVentasHour,
     senderName, setSenderName, sendSenderName, setSendSenderName,
     sendBusinessName, setSendBusinessNameSetting,
+    showRecommendations, setShowRecommendationsSetting,
     lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 
 // Pedidos > Hoy > "Cierre del día": pantalla de repaso antes de cerrar el día
 // (pedidos pendientes, metas, ventas, stock para mañana y respaldo), con el
@@ -161,6 +161,65 @@ describe("Cierre del día: con pendientes", () => {
     expect(text).toContain("*Pedidos del día · lun 21 sep*");
     expect(text).toContain("*Marta*");
     expect(text).not.toContain("*Luis*"); // la reserva de mañana no es de hoy
+  });
+});
+
+describe("Cierre del día: ir al pedido pendiente", () => {
+  let scrolled;
+
+  beforeEach(() => {
+    scrolled = [];
+    Element.prototype.scrollIntoView = vi.fn(function scrollIntoView() { scrolled.push(this); });
+  });
+
+  it("tocar el nombre va a Pedidos y se desplaza hasta ese pedido", async () => {
+    seed();
+    const dialog = await openCierre();
+    fireEvent.click(within(dialog).getByText(/Marta/));
+    await waitFor(() => expect(scrolled).toHaveLength(1));
+    expect(scrolled[0].textContent).toContain("Marta");
+    expect(scrolled[0].textContent).not.toContain("Beto");
+    expect(screen.queryByRole("dialog", { name: "Cierre del día" })).toBeNull();
+  });
+
+  it("deja el pedido resaltado un momento y luego lo suelta", async () => {
+    seed();
+    const dialog = await openCierre();
+    fireEvent.click(within(dialog).getByText(/Marta/));
+    await waitFor(() => expect(scrolled).toHaveLength(1));
+    expect(scrolled[0].className).toContain("orderenter");
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(scrolled[0].className).not.toContain("orderenter");
+  });
+
+  it("si un filtro lo escondía, lo quita para que el pedido se vea", async () => {
+    seed();
+    localStorage.setItem("procovar-pedidos-filtros", JSON.stringify({ filterProductCode: "P500" })); // Marta pidió P1500
+    const dialog = await openCierre();
+    fireEvent.click(within(dialog).getByText(/Marta/));
+    await waitFor(() => expect(scrolled).toHaveLength(1));
+    expect(scrolled[0].textContent).toContain("Marta");
+  });
+
+  it("pasado el cierre de ventas también cae en Hoy, donde está el pedido", async () => {
+    seed(PENDING_MOVEMENTS, { cierreVentasHour: 14 }); // son las 15:00
+    const { default: InventoryApp } = await import("./InventoryApp");
+    render(<InventoryApp />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Hoy/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cierre del día" }));
+    const dialog = await screen.findByRole("dialog", { name: "Cierre del día" });
+    fireEvent.click(within(dialog).getByText(/Marta/));
+    await waitFor(() => expect(scrolled).toHaveLength(1));
+    expect(scrolled[0].textContent).toContain("Marta");
+  });
+
+  it("el botón Ver solo lleva a Pedidos, sin desplazarse a ningún pedido", async () => {
+    seed();
+    const dialog = await openCierre();
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Ver" })[0]);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Cierre del día" })).toBeNull());
+    expect(screen.getByRole("button", { name: "Pedidos" }).getAttribute("aria-current")).toBe("page");
+    expect(scrolled).toHaveLength(0);
   });
 });
 

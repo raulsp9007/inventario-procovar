@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Check, Info, AlertTriangle, ChevronDown, History, Contact, Lock } from "lucide-react";
+import { X, Check, Info, AlertTriangle, ChevronDown, History, Contact, Lock, Lightbulb } from "lucide-react";
 import { nextBusinessDayStr, formatDateShort, formatDate } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
 import { productChipColors } from "./colorUtils";
@@ -43,6 +43,7 @@ export default function OrderFormModal({
   pendingQty, onPendingQtyChange, onAddDraftLine,
   onConfirmOrder,
   pendingReserveConfirm, onConfirmUseReserve, onCancelReserveConfirm,
+  suggestion, onUseSuggestion,
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [phonePickerError, setPhonePickerError] = useState("");
@@ -385,6 +386,39 @@ export default function OrderFormModal({
               </button>
             )}
           </div>
+
+          {/* SUGERENCIA: lo de siempre del cliente (recommendations.js) */}
+          {suggestion && draftLines.length === 0 && (
+            <div
+              aria-label={`Sugerencia para ${customerName.trim()}`}
+              style={{ flexShrink: 0, background: "var(--surface)", border: "1px dashed var(--orange)", borderRadius: 12, padding: "10px 12px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <Lightbulb size={15} strokeWidth={2.2} color="var(--orange)" />
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "var(--orange)" }}>LO DE SIEMPRE</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {suggestion.lines.map((l) => (
+                  <span key={l.code} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, borderRadius: 999, padding: "3px 10px", background: "var(--chip-bg)", border: `1px solid ${l.lacks ? "var(--orange)" : "var(--border-warn)"}`, color: "var(--orange-text)" }}>
+                      {`${l.short} ×${l.qty}`}
+                    </span>
+                    {l.lacks && <span style={{ fontSize: 11, color: "var(--orange)" }}>quedan {l.stock}</span>}
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
+                Compra {suggestion.lines[0].short} en {suggestion.lines[0].boughtIn} de sus últimos {suggestion.lines[0].of} pedidos.
+              </div>
+              <button
+                type="button"
+                onClick={onUseSuggestion}
+                style={{ width: "100%", height: 38, marginTop: 10, borderRadius: 9, border: "none", background: "var(--ink)", color: "var(--cream)", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}
+              >
+                Usar sugerencia
+              </button>
+            </div>
+          )}
 
           {/* EN EL PEDIDO */}
           {draftLines.length > 0 && (

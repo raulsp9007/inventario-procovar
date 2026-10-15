@@ -144,7 +144,7 @@ export default function CierreDelDia({ summary, today, onClose, onGo, onShareBac
                 <button
                   key={o.orderId}
                   type="button"
-                  onClick={() => onGo("pedidos")}
+                  onClick={() => onGo("pedidos", { orderId: o.orderId })}
                   style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", borderTop: "1px solid var(--divider)", padding: "8px 0", fontSize: 13.5, fontFamily: "inherit", cursor: "pointer", color: "var(--text)" }}
                 >
                   <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

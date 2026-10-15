@@ -20,6 +20,7 @@ export default function Settings({
   theme, onToggleTheme,
   showPrices, onToggleShowPrices,
   commissionPercent, hlGoal, sendBusinessName,
+  showRecommendations, onShowRecommendationsChange,
   productFormats, products, onSaveProductFormat, onDeleteProductFormat, onEditProductFormat,
   topSlot,
 }) {
@@ -179,6 +180,21 @@ export default function Settings({
             Guardado: {senderName}
           </div>
         )}
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Recomendaciones de compra</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          En Pedidos: a qué clientes les toca comprar según su historial, y "lo de siempre" al armar un pedido. Apagado, solo se ocultan; el historial no se toca.
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={showRecommendations !== false}
+            onChange={(e) => onShowRecommendationsChange && onShowRecommendationsChange(e.target.checked)}
+          />
+          Mostrar recomendaciones de compra
+        </label>
       </div>
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>

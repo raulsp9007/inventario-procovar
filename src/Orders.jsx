@@ -3,6 +3,8 @@ import { Trash2, Receipt, UserCheck, ClipboardCheck, Pencil, ChevronDown, Check,
 import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { sendSupervisorSummary } from "./supervisorSummary";
+import ReorderSuggestions from "./ReorderSuggestions.jsx";
+import { customersToContact, buildCustomerProfile, availableTypical, formatReorderMessage } from "./recommendations";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness } from "./customerRegistry";
@@ -13,7 +15,7 @@ import CierreDeVentasBanner from "./CierreDeVentasBanner.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import { customerLabel, businessLabel } from "./nameLabels";
 import PulseNumber from "./PulseNumber.jsx";
-import { leaveAnimationMs, riseStyle } from "./motion";
+import { leaveAnimationMs, riseStyle, ENTER_ANIMATION_MS } from "./motion";
 import useEnteringIds from "./useEnteringIds";
 
 const PAST_ORDERS_DAYS = 14;
@@ -205,7 +207,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed }) {
+export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, focusOrderId, onFocusOrderConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -589,6 +591,44 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
 
+  // Recomendaciones (recommendations.js): a quién le toca comprar hoy, y lo de
+  // siempre del cliente que se está escribiendo en el pedido nuevo.
+  // Con el interruptor de Configuración apagado no se calcula nada.
+  const reorderItems = useMemo(
+    () => (showRecommendations ? customersToContact({ movements, products, stock, customers, today }) : []),
+    [showRecommendations, movements, products, stock, customers, today],
+  );
+
+  const formSuggestion = useMemo(() => {
+    const name = customerName.trim();
+    if (!showRecommendations || !modalOpen || editingOrderId || !name) return null;
+    const profile = buildCustomerProfile(movements, name, { today, products });
+    const lines = availableTypical(profile, stock);
+    return lines.length > 0 ? { lines } : null;
+  }, [showRecommendations, modalOpen, editingOrderId, customerName, movements, products, stock, today]);
+
+  function writeToCustomer(item) {
+    const url = `https://wa.me/${toCubanPhone(item.phone)}?text=${encodeURIComponent(formatReorderMessage(item))}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  // Pedido nuevo con el cliente y lo de siempre ya cargado (se puede ajustar).
+  function startSuggestedOrder(item) {
+    resetForm();
+    setDraftBucket(pastCierreDeVentas ? "manana" : "hoy");
+    setCustomerName(item.customerName);
+    const knownCustomer = findRegistryCustomer(customers, item.customerName);
+    setBusinessName(knownCustomer ? knownCustomer.businessName : item.businessName || "");
+    setCustomerPhone(cubanPhoneLocalPart(knownCustomer ? knownCustomer.phone : item.phone || ""));
+    setDraftLines(item.typical.map((l) => ({ code: l.code, qty: String(l.qty) })));
+    setModalOpen(true);
+  }
+
+  function useFormSuggestion() {
+    if (!formSuggestion) return;
+    setDraftLines(formSuggestion.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
+  }
+
   function startEdit(order) {
     setCustomerName(order.customerName);
     setBusinessName(order.businessName || "");
@@ -683,6 +723,37 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     if (onReviewPendingConsumed) onReviewPendingConsumed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewPending]);
+
+  // Pedido al que se pidió ir desde otra pestaña (el listado de pendientes del
+  // cierre del día): se deja a la vista en su lista, sin filtros que lo
+  // escondan, y se desplaza hasta él resaltándolo un momento.
+  const orderRowRefs = useRef({});
+  const [focusedOrderId, setFocusedOrderId] = useState(null);
+
+  // También lo usa el listado de sin confirmar del aviso de cierre de ventas.
+  function focusOrder(orderId) {
+    const order = allOrders.find((o) => o.orderId === orderId);
+    if (!order) return;
+    if (belongsToToday(order)) setActiveSection("hoy");
+    else if (isUpcoming(order)) setActiveSection("manana");
+    clearAllFilters();
+    setFocusedOrderId(order.orderId);
+  }
+
+  useEffect(() => {
+    if (!focusOrderId) return;
+    focusOrder(focusOrderId);
+    if (onFocusOrderConsumed) onFocusOrderConsumed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusOrderId]);
+
+  useEffect(() => {
+    if (!focusedOrderId) return undefined;
+    const row = orderRowRefs.current[focusedOrderId];
+    if (row && typeof row.scrollIntoView === "function") row.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timeoutId = setTimeout(() => setFocusedOrderId(null), ENTER_ANIMATION_MS);
+    return () => clearTimeout(timeoutId);
+  }, [focusedOrderId]);
 
   // "Posponer todos": mismo mecanismo de 2 toques que posponer uno solo, y
   // cada pedido queda con su propio "Deshacer" de 5 s.
@@ -951,7 +1022,8 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     return (
       <div
         key={order.orderId}
-        className={leavingIds.has(order.orderId) ? "orderleave" : enteringIds.has(order.orderId) ? "rise orderenter" : "rise"}
+        ref={(el) => { orderRowRefs.current[order.orderId] = el; }}
+        className={leavingIds.has(order.orderId) ? "orderleave" : (enteringIds.has(order.orderId) || focusedOrderId === order.orderId) ? "rise orderenter" : "rise"}
         style={{
           ...riseStyle(i),
           display: "flex", alignItems: "stretch", background: "var(--surface)",
@@ -1437,6 +1509,10 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         </div>
       )}
 
+      {activeSection === "hoy" && (
+        <ReorderSuggestions items={reorderItems} onWrite={writeToCustomer} onStartOrder={startSuggestedOrder} />
+      )}
+
       {activeSection === "hoy" && pastCierreDeVentas && unconfirmedTodayOrders.length > 0 && (
         <CierreDeVentasBanner
           unconfirmedTodayOrders={unconfirmedTodayOrders}
@@ -1449,6 +1525,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
           onDeleteClick={handleDeleteClick}
           onConfirmClick={(order) => onMarkConfirmed(order.orderId, true)}
           onPostponeAllClick={handlePostponeAllClick}
+          onNameClick={(order) => focusOrder(order.orderId)}
           leavingIds={leavingIds}
         />
       )}
@@ -1669,6 +1746,8 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         pendingQty={pendingQty}
         onPendingQtyChange={setPendingQty}
         onAddDraftLine={addDraftLine}
+        suggestion={formSuggestion}
+        onUseSuggestion={useFormSuggestion}
         onConfirmOrder={confirmOrder}
         pendingReserveConfirm={pendingReserveConfirm}
         onConfirmUseReserve={confirmUseReserve}

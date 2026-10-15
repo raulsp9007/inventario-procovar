@@ -8,7 +8,7 @@ import { customerLabel } from "./nameLabels";
 // la lógica de programar/eliminar siguen en Orders.jsx.
 export default function CierreDeVentasBanner({
   unconfirmedTodayOrders, pending, cierreVentasHour, confirmingPostponeId, confirmingDeleteId, confirmingPostponeAll,
-  onPostponeClick, onDeleteClick, onConfirmClick, onPostponeAllClick, leavingIds,
+  onPostponeClick, onDeleteClick, onConfirmClick, onPostponeAllClick, onNameClick, leavingIds,
 }) {
   const n = unconfirmedTodayOrders.length;
   return (
@@ -42,9 +42,18 @@ export default function CierreDeVentasBanner({
           style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-warn)" }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <button
+              type="button"
+              onClick={() => onNameClick && onNameClick(order)}
+              aria-label={`Ir al pedido de ${order.customerName}`}
+              style={{
+                display: "block", maxWidth: "100%", textAlign: "left", background: "none", border: "none", padding: 0, margin: 0,
+                fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "var(--text)", cursor: "pointer",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
               {customerLabel(order.customerName)}
-            </div>
+            </button>
             {(confirmingPostponeId === order.orderId || confirmingDeleteId === order.orderId) && (
               <div style={{ fontSize: 11, fontWeight: 600, color: confirmingDeleteId === order.orderId ? "var(--red)" : "var(--orange)" }}>
                 ¿Seguro? toca de nuevo
