@@ -61,7 +61,7 @@ describe("Comprobar en el portal (pedido nuevo)", () => {
     expect(await screen.findByRole("button", { name: BUTTON })).toBeTruthy();
   });
 
-  it("tocarlo abre el portal buscando a ese cliente, en otra pestaña", async () => {
+  it("tocarlo abre el portal buscando a ese cliente, en una ventana pequeña", async () => {
     seed("pedidos");
     const input = await openForm();
     fireEvent.change(input, { target: { value: "Ana López" } });
@@ -69,9 +69,21 @@ describe("Comprobar en el portal (pedido nuevo)", () => {
     expect(openSpy).toHaveBeenCalledTimes(1);
     expect(openSpy).toHaveBeenCalledWith(
       "https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana%20L%C3%B3pez",
-      "_blank",
-      "noopener,noreferrer",
+      "procovar-portal",
+      "popup,width=480,height=820",
     );
+  });
+
+  it("otro toque con otro cliente usa la misma ventana (mismo nombre)", async () => {
+    seed("pedidos");
+    const input = await openForm();
+    fireEvent.change(input, { target: { value: "Ana López" } });
+    fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+    fireEvent.change(input, { target: { value: "Beto Ruiz" } });
+    fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+    expect(openSpy).toHaveBeenCalledTimes(2);
+    expect(openSpy.mock.calls[0][1]).toBe(openSpy.mock.calls[1][1]);
+    expect(openSpy.mock.calls[1][0]).toContain("buscar=Beto%20Ruiz");
   });
 
   it("no cambia el pedido que se está armando", async () => {
