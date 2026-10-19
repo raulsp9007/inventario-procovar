@@ -71,6 +71,7 @@ export default function InventoryApp() {
     senderName, setSenderName, sendSenderName, setSendSenderName,
     sendBusinessName, setSendBusinessNameSetting,
     showRecommendations, setShowRecommendationsSetting,
+    showPortalCheck, setShowPortalCheckSetting,
     lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
@@ -407,6 +408,7 @@ export default function InventoryApp() {
             reviewPending={reviewPending}
             onReviewPendingConsumed={() => setReviewPending(false)}
             showRecommendations={showRecommendations}
+            showPortalCheck={showPortalCheck}
             focusOrderId={orderToFocus}
             onFocusOrderConsumed={() => setOrderToFocus(null)}
           />
@@ -494,6 +496,8 @@ export default function InventoryApp() {
             sendBusinessName={sendBusinessName}
             showRecommendations={showRecommendations}
             onShowRecommendationsChange={setShowRecommendationsSetting}
+            showPortalCheck={showPortalCheck}
+            onShowPortalCheckChange={setShowPortalCheckSetting}
             productFormats={productFormats}
             products={products}
             onSaveProductFormat={saveProductFormat}

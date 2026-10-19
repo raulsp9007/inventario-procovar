@@ -4,6 +4,7 @@ import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, 
 import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { sendSupervisorSummary } from "./supervisorSummary";
 import ReorderSuggestions from "./ReorderSuggestions.jsx";
+import { portalSearchUrl } from "./portalLink";
 import { customersToContact, buildCustomerProfile, availableTypical, formatReorderMessage } from "./recommendations";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
@@ -207,7 +208,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, focusOrderId, onFocusOrderConsumed }) {
+export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, focusOrderId, onFocusOrderConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -622,6 +623,12 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     setCustomerPhone(cubanPhoneLocalPart(knownCustomer ? knownCustomer.phone : item.phone || ""));
     setDraftLines(item.typical.map((l) => ({ code: l.code, qty: String(l.qty) })));
     setModalOpen(true);
+  }
+
+  // Abre el portal de pedidos ya buscando al cliente del pedido que se arma.
+  function checkCustomerInPortal() {
+    const url = portalSearchUrl(customerName);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
   }
 
   function useFormSuggestion() {
@@ -1748,6 +1755,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         onAddDraftLine={addDraftLine}
         suggestion={formSuggestion}
         onUseSuggestion={useFormSuggestion}
+        onCheckPortal={showPortalCheck ? checkCustomerInPortal : null}
         onConfirmOrder={confirmOrder}
         pendingReserveConfirm={pendingReserveConfirm}
         onConfirmUseReserve={confirmUseReserve}

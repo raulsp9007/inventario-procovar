@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Check, Info, AlertTriangle, ChevronDown, History, Contact, Lock, Lightbulb } from "lucide-react";
+import { X, Check, Info, AlertTriangle, ChevronDown, History, Contact, Lock, Lightbulb, ExternalLink } from "lucide-react";
 import { nextBusinessDayStr, formatDateShort, formatDate } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
 import { productChipColors } from "./colorUtils";
@@ -43,7 +43,7 @@ export default function OrderFormModal({
   pendingQty, onPendingQtyChange, onAddDraftLine,
   onConfirmOrder,
   pendingReserveConfirm, onConfirmUseReserve, onCancelReserveConfirm,
-  suggestion, onUseSuggestion,
+  suggestion, onUseSuggestion, onCheckPortal,
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [phonePickerError, setPhonePickerError] = useState("");
@@ -164,6 +164,21 @@ export default function OrderFormModal({
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>CLIENTE</span>
               <span style={{ flex: 1 }} />
+              {onCheckPortal && customerName.trim() && (
+                <button
+                  type="button"
+                  onClick={onCheckPortal}
+                  aria-label="Comprobar en el portal"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 10px", borderRadius: 999,
+                    border: "1px solid var(--border-strong)", background: "var(--surface-sunken)", color: "var(--text)",
+                    fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer",
+                  }}
+                >
+                  <ExternalLink size={13} strokeWidth={2.2} />
+                  Comprobar en el portal
+                </button>
+              )}
               {draftBucket === "manana" && (
                 <div style={{ position: "relative", display: "inline-flex" }}>
                   <span style={{ fontSize: 11, fontWeight: 500, color: "var(--faint)", fontVariantNumeric: "tabular-nums" }}>

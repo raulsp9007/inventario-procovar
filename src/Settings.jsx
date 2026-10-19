@@ -21,6 +21,7 @@ export default function Settings({
   showPrices, onToggleShowPrices,
   commissionPercent, hlGoal, sendBusinessName,
   showRecommendations, onShowRecommendationsChange,
+  showPortalCheck, onShowPortalCheckChange,
   productFormats, products, onSaveProductFormat, onDeleteProductFormat, onEditProductFormat,
   topSlot,
 }) {
@@ -194,6 +195,21 @@ export default function Settings({
             onChange={(e) => onShowRecommendationsChange && onShowRecommendationsChange(e.target.checked)}
           />
           Mostrar recomendaciones de compra
+        </label>
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginTop: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Comprobar en el portal</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Al armar un pedido, un botón abre el portal de pedidos (pedidos.procovar.cloud) ya buscando a ese cliente, para ver si ya tiene pedidos. La app no guarda tu usuario ni tu clave: inicias sesión en el navegador.
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={showPortalCheck !== false}
+            onChange={(e) => onShowPortalCheckChange && onShowPortalCheckChange(e.target.checked)}
+          />
+          Mostrar comprobación en el portal
         </label>
       </div>
 
