@@ -20,6 +20,7 @@ import { buildClosingSummary } from "./closing.js";
 import { sendSupervisorSummary } from "./supervisorSummary.js";
 import { usePwaStatus, applyUpdate, dismissUpdate } from "./pwaStatus.js";
 import BackupCard from "./BackupCard.jsx";
+import ProductListCard from "./ProductListCard.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import { useProductImages } from "./useProductImages.js";
 import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, BACKUP_REMINDER_DAYS, lowStockThresholdFor } from "./useInventoryStore.js";
@@ -72,6 +73,7 @@ export default function InventoryApp() {
     sendBusinessName, setSendBusinessNameSetting,
     showRecommendations, setShowRecommendationsSetting,
     showPortalCheck, setShowPortalCheckSetting,
+    applyProductImport,
     lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
@@ -449,6 +451,18 @@ export default function InventoryApp() {
                 onImport={() => fileInputRef.current?.click()}
                 autoCopyAt={autoCopyAt}
                 onRestoreCopy={restorePreviousCopy}
+              />
+            )}
+            productListSlot={(
+              <ProductListCard
+                products={products}
+                prices={prices}
+                stock={stock}
+                productFormats={productFormats}
+                exchangeRate={exchangeRate}
+                onApply={applyProductImport}
+                getPhotoBlob={productImages.getBlob}
+                savePhoto={productImages.savePhoto}
               />
             )}
             whatsappPhone={whatsappPhone}

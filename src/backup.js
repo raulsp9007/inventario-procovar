@@ -59,6 +59,18 @@ export async function shareContactsFile(vcfText) {
   return result;
 }
 
+// Lista de productos (productList.js): mismo criterio, compartir y, si no se
+// puede, descargar. Devuelve "shared", "downloaded" o "cancelled".
+export async function shareProductListFile(list) {
+  const file = new File([JSON.stringify(list)], `procovar-productos-${todayStr()}.json`, { type: "application/json" });
+  const result = await shareFile(file, { title: "Lista de productos Procovar" });
+  if (result === "unsupported") {
+    downloadFile(file);
+    return "downloaded";
+  }
+  return result;
+}
+
 export function parseBackupFile(text) {
   const parsed = JSON.parse(text);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {

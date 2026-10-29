@@ -707,6 +707,41 @@ export function useInventoryStore() {
     });
   }
 
+  // Importación de la lista de productos (productList.js): aplica el plan ya
+  // calculado. Los cambios de cantidad quedan como ajustes en el historial,
+  // igual que al editar el stock a mano, y avisa a los clientes en espera de un
+  // producto que vuelve a tener stock.
+  function applyProductImport(plan) {
+    const now = new Date().toISOString();
+    const nextLastAdjustedAt = { ...lastAdjustedAt };
+    const adjustments = plan.stockDiffs.map(({ code, diff }) => {
+      nextLastAdjustedAt[code] = now;
+      return makeMovement(code, "ajuste", diff);
+    });
+    const nextMovements = [...adjustments, ...movements].slice(0, MOVEMENTS_CAP);
+    const restocked = plan.nextProducts
+      .filter((p) => !p.archived && (stock[p.code] || 0) <= 0 && (plan.nextStock[p.code] || 0) > 0 && waitlist.some((w) => w.code === p.code))
+      .map((p) => ({ code: p.code }));
+    if (restocked.length > 0) {
+      setRestockAlerts((prev) => [...prev.filter((a) => !restocked.some((r) => r.code === a.code)), ...restocked]);
+    }
+    setProducts(plan.nextProducts);
+    setPrices(plan.nextPrices);
+    setStock(plan.nextStock);
+    setProductFormats(plan.nextFormats);
+    setMovements(nextMovements);
+    setLastAdjustedAt(nextLastAdjustedAt);
+    persist({
+      ...currentPersistedState,
+      products: plan.nextProducts,
+      prices: plan.nextPrices,
+      stock: plan.nextStock,
+      productFormats: plan.nextFormats,
+      movements: nextMovements,
+      lastAdjustedAt: nextLastAdjustedAt,
+    });
+  }
+
   // Rellena el HL de las ventas anteriores de un producto que en su momento
   // no tenía HL por unidad (ver hlBackfill.js), con el valor guardado hoy, y
   // ajusta el acumulado por la diferencia. Solo toca ventas con unitHl en 0.
@@ -1255,6 +1290,7 @@ export function useInventoryStore() {
     sendBusinessName, setSendBusinessNameSetting,
     showRecommendations, setShowRecommendationsSetting,
     showPortalCheck, setShowPortalCheckSetting,
+    applyProductImport,
     lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
