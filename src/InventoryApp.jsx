@@ -317,6 +317,18 @@ export default function InventoryApp() {
             setEditFormatInputs={setEditFormatInputs}
             editGoalInputs={editGoalInputs}
             setEditGoalInputs={setEditGoalInputs}
+            listSlot={(
+              <ProductListCard
+                products={products}
+                prices={prices}
+                stock={stock}
+                productFormats={productFormats}
+                exchangeRate={exchangeRate}
+                onApply={applyProductImport}
+                getPhotoBlob={productImages.getBlob}
+                savePhoto={productImages.savePhoto}
+              />
+            )}
             todaysMovements={todaysMovements}
             hlGoal={hlGoal}
             onHlGoalChange={(next) => {
@@ -451,18 +463,6 @@ export default function InventoryApp() {
                 onImport={() => fileInputRef.current?.click()}
                 autoCopyAt={autoCopyAt}
                 onRestoreCopy={restorePreviousCopy}
-              />
-            )}
-            productListSlot={(
-              <ProductListCard
-                products={products}
-                prices={prices}
-                stock={stock}
-                productFormats={productFormats}
-                exchangeRate={exchangeRate}
-                onApply={applyProductImport}
-                getPhotoBlob={productImages.getBlob}
-                savePhoto={productImages.savePhoto}
               />
             )}
             whatsappPhone={whatsappPhone}

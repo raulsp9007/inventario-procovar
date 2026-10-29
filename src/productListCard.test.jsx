@@ -13,7 +13,7 @@ import InventoryApp from "./InventoryApp";
 import { resizeImageFile } from "./imageResize";
 import { putProductImage, listProductImageCodes, deleteProductImage } from "./productImageStore";
 
-// Configuración > "Lista de productos": exportar e importar el catálogo
+// Productos > "Lista de productos": exportar e importar el catálogo
 // eligiendo qué datos mover (nombre siempre; precio USD, cantidad, foto y
 // formato opcionales). Al importar hay vista previa y no se toca nada hasta
 // confirmar.
@@ -26,8 +26,8 @@ const products = [
   { code: "OLD", name: "Viejo", short: "Viejo", color: "#000", archived: true },
 ];
 
-function seed(extra = {}) {
-  localStorage.setItem("procovar-active-tab", "config");
+function seed(extra = {}, tab = "stock") {
+  localStorage.setItem("procovar-active-tab", tab);
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     products, movements: [], customers: [], orderSeqPerDay: true, lastBackupAt: new Date().toISOString(),
     stock: { P500: 100, M330: 40, OLD: 5 }, prices: { P500: 12, M330: 9, OLD: 1 }, pricesAreUsd: true, exchangeRate: 120,
@@ -92,10 +92,23 @@ afterEach(() => {
 });
 
 describe("Lista de productos: tarjeta", () => {
-  it("está en Configuración con Exportar e Importar", async () => {
+  it("está en la pestaña Productos con Exportar e Importar", async () => {
     await openApp();
     expect(screen.getByRole("button", { name: "Exportar lista" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Importar lista" })).toBeTruthy();
+  });
+
+  it("ya no está en Configuración", async () => {
+    seed({}, "config");
+    render(<InventoryApp />);
+    await screen.findByText("CONFIGURACIÓN");
+    expect(screen.queryByText("Lista de productos")).toBeNull();
+  });
+
+  it("en modo Ajustar no se muestra (las ediciones pendientes se pisarían con la importación)", async () => {
+    await openApp();
+    fireEvent.click(screen.getByRole("button", { name: "Ajustar" }));
+    await waitFor(() => expect(screen.queryByText("Lista de productos")).toBeNull());
   });
 });
 

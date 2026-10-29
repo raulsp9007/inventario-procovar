@@ -113,6 +113,7 @@ export default function ProductsView({
   todaysMovements = [],
   editGoalInputs = {},
   setEditGoalInputs,
+  listSlot,
 }) {
   const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
   const [manualSaleCode, setManualSaleCode] = useState(null);
@@ -1426,6 +1427,10 @@ export default function ProductsView({
             )}
           </div>
         )}
+
+        {/* Exportar/importar la lista: no en modo Ajustar, donde hay ediciones
+            sin guardar que una importación pisaría. */}
+        {!editMode && listSlot}
 
         <div style={{ marginTop: 28 }}>
           <button

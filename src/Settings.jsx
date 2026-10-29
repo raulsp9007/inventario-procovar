@@ -23,7 +23,7 @@ export default function Settings({
   showRecommendations, onShowRecommendationsChange,
   showPortalCheck, onShowPortalCheckChange,
   productFormats, products, onSaveProductFormat, onDeleteProductFormat, onEditProductFormat,
-  topSlot, productListSlot,
+  topSlot,
 }) {
   const [nameInput, setNameInput] = useState(senderName || "");
   const [sendChecked, setSendChecked] = useState(!!sendSenderName);
@@ -75,8 +75,6 @@ export default function Settings({
       <ConnectionStatus offline={pwaStatus.offline} updateAvailable={pwaStatus.updateAvailable} lastOnlineAt={pwaStatus.lastOnlineAt} onUpdate={applyUpdate} version={APP_VERSION} />
 
       {topSlot}
-
-      {productListSlot}
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", marginBottom: 14 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>Apariencia</div>
