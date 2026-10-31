@@ -573,6 +573,11 @@ export default function Customers({ products, movements, customers, waitlist, sh
                           Sin teléfono
                         </div>
                       )}
+                      {c.code && (
+                        <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2, fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em" }}>
+                          {`Cód. ${c.code}`}
+                        </div>
+                      )}
                       <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>
                         {buyer
                           ? `${relativeDate(buyer.lastDate)} · ${buyer.times} pedido${buyer.times === 1 ? "" : "s"}`
@@ -598,11 +603,10 @@ export default function Customers({ products, movements, customers, waitlist, sh
 
                 {isExpanded && (
                   <div className="expandin" style={{ background: "var(--surface-subtle)", borderTop: "1px solid var(--hairline)", padding: "12px 14px 14px" }}>
-                    {(c.address || c.clientType || c.consumptionType || c.code) && (
+                    {(c.address || c.clientType || c.consumptionType) && (
                       <div style={{ display: "grid", gap: 3, fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
                         {c.address && <div>{c.address}</div>}
                         {(c.clientType || c.consumptionType) && <div>{[c.clientType, c.consumptionType].filter(Boolean).join(" · ")}</div>}
-                        {c.code && <div style={{ fontSize: 11.5, color: "var(--faint)", fontVariantNumeric: "tabular-nums" }}>{c.code}</div>}
                       </div>
                     )}
                     <div style={{ background: "var(--segment-track)", borderRadius: 9, padding: 3, display: "flex", gap: 2, marginBottom: 12, width: "fit-content" }}>

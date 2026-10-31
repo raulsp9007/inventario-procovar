@@ -150,12 +150,25 @@ describe("Clientes importados: se ven y se buscan", () => {
     await screen.findByText(/Importación aplicada/);
   }
 
-  it("la ficha muestra la dirección, los tipos y el código", async () => {
+  it("la lista muestra el código de cada cliente, sin abrir la ficha", async () => {
+    await importDefault();
+    expect(await screen.findByText("Cód. AB1")).toBeTruthy();
+    expect(screen.getByText("Cód. CD2")).toBeTruthy();
+    expect(screen.getByText("Cód. BETO1")).toBeTruthy(); // el que ya tenía
+  });
+
+  it("un cliente sin código no muestra la línea", async () => {
+    await openCard();
+    // Antes de importar solo Beto tiene código; Ana no.
+    expect(screen.getAllByText(/^Cód\./)).toHaveLength(1);
+    expect(screen.getByText("Cód. BETO1")).toBeTruthy();
+  });
+
+  it("la ficha muestra la dirección y los tipos (el código ya está en la lista)", async () => {
     await importDefault();
     fireEvent.click(await screen.findByText(/Ana López/, { selector: "span" }));
     expect(await screen.findByText("Calle 1, entre 2 y 3")).toBeTruthy();
     expect(screen.getByText("Kiosko · Off-Premise")).toBeTruthy();
-    expect(screen.getByText("AB1")).toBeTruthy();
   });
 
   it("se puede buscar por código o por dirección", async () => {
