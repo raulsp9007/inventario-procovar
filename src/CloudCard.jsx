@@ -12,7 +12,7 @@ const buttonStyle = {
 const pad = (n) => String(n).padStart(2, "0");
 const clock = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 
-export default function CloudCard({ cloud }) {
+export default function CloudCard({ cloud, billToCloud = false, onBillToCloudChange }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -89,6 +89,25 @@ export default function CloudCard({ cloud }) {
           </div>
         </>
       )}
+
+      <div style={{ borderTop: "1px solid var(--divider)", marginTop: 14, paddingTop: 12 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={!!billToCloud}
+            onChange={(e) => onBillToCloudChange && onBillToCloudChange(e.target.checked)}
+          />
+          Facturar a la nube
+        </label>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+          Con esto activado, el botón FACT. de un pedido no manda el WhatsApp a la facturadora: solo lo marca como facturado y el pedido sube a la nube. Los domicilios siguen yendo al supervisor por WhatsApp.
+        </div>
+        {billToCloud && !(cloud.link && cloud.enabled) && (
+          <div style={{ fontSize: 12.5, color: "var(--orange)", marginTop: 6 }}>
+            Enlaza primero con tu código (y deja la sincronización encendida): mientras tanto, FACT. sigue enviando por WhatsApp para que el pedido no se pierda.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

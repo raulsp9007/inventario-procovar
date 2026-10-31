@@ -209,7 +209,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, cloudChips = {}, cloud = null, focusOrderId, onFocusOrderConsumed }) {
+export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, cloudChips = {}, cloud = null, billToCloud = false, focusOrderId, onFocusOrderConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -1241,11 +1241,15 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
                 {/* Pedidos con domicilio van al supervisor(a); el resto, al facturador(a). */}
                 <button
                   onClick={() => {
-                    openOrderWhatsApp(order, products, order.isDelivery ? supervisorPhone : whatsappPhone, senderOptions);
+                    // "Facturar a la nube": el pedido (que no es a domicilio) solo se
+                    // marca facturado; la nube se lo lleva a la facturadora, sin WhatsApp.
+                    if (!(billToCloud && !order.isDelivery)) {
+                      openOrderWhatsApp(order, products, order.isDelivery ? supervisorPhone : whatsappPhone, senderOptions);
+                    }
                     onMarkSent(order.orderId, true);
                   }}
-                  title={order.isDelivery ? "Enviar a supervisor(a)" : "Registrar (negocio)"}
-                  aria-label={order.isDelivery ? "Enviar a supervisor(a)" : "Registrar (negocio)"}
+                  title={order.isDelivery ? "Enviar a supervisor(a)" : billToCloud ? "Facturar a la nube" : "Registrar (negocio)"}
+                  aria-label={order.isDelivery ? "Enviar a supervisor(a)" : billToCloud ? "Facturar a la nube" : "Registrar (negocio)"}
                   style={{
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
                     width: 38, height: 38, borderRadius: 10, flexShrink: 0,
