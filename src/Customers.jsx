@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search, Phone, PhoneOff, Contact, BookUser, Trash2 } from "lucide-react";
+import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search, Phone, PhoneOff, Contact, BookUser, Trash2, Hash } from "lucide-react";
 import { formatDate, todayStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { getCustomerOrders, getCustomerProductHistory, findNearDuplicateCustomerName, getProductBuyers, cubanPhoneLocalPart } from "./customerHelpers";
 import { getRegistryStats, registryNames, buildVcf } from "./customerRegistry";
 import ClientsImportCard from "./ClientsImportCard.jsx";
+import SimilarCustomersCard from "./SimilarCustomersCard.jsx";
 import { shareContactsFile } from "./backup";
 import { customerLabel, businessLabel } from "./nameLabels";
 
@@ -70,7 +71,7 @@ function sortStats(stats, sortBy, buyers) {
 
 const SORT_LABELS = { recent: "Reciente", oldest: "Antiguo", name: "Nombre A-Z", qty: "Más unidades" };
 
-export default function Customers({ products, movements, customers, waitlist, showPrices, sendBusinessName, onToggleSendBusinessName, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData, onImportCustomers, openCustomer, onOpenCustomerConsumed }) {
+export default function Customers({ products, movements, customers, waitlist, showPrices, sendBusinessName, onToggleSendBusinessName, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData, onImportCustomers, onMergeCustomers, openCustomer, onOpenCustomerConsumed }) {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [sortBy, setSortBy] = useState("recent");
@@ -85,6 +86,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
   const [contactsNotice, setContactsNotice] = useState("");
   const [pendingUndo, setPendingUndo] = useState(null); // { message, snapshot, timeoutId } | null
   const [onlyNoPhone, setOnlyNoPhone] = useState(false);
+  const [onlyNoCode, setOnlyNoCode] = useState(false);
   // Qué campo recibe el cursor al abrir la edición: el nombre normalmente, el
   // teléfono cuando se llega desde "Sin tel." de un pedido.
   const [editFocus, setEditFocus] = useState("name");
@@ -217,8 +219,11 @@ export default function Customers({ products, movements, customers, waitlist, sh
   // Clientes sin teléfono (no se les puede llamar ni mandar WhatsApp): el
   // total sale del registro entero, no de lo que deja la búsqueda.
   const noPhoneCount = allStats.filter((c) => !c.phone).length;
+  // Lo mismo con el código del portal: para ver cuáles clientes todavía no lo tienen.
+  const noCodeCount = allStats.filter((c) => !c.code).length;
   const phoneFiltered = onlyNoPhone ? searched.filter((c) => !c.phone) : searched;
-  const filtered = buyers ? phoneFiltered.filter((c) => buyers.has(c.customerName)) : phoneFiltered;
+  const codeFiltered = onlyNoCode ? phoneFiltered.filter((c) => !c.code) : phoneFiltered;
+  const filtered = buyers ? codeFiltered.filter((c) => buyers.has(c.customerName)) : codeFiltered;
   const stats = sortStats(filtered, sortBy, buyers);
   const filteredUnits = buyers ? stats.reduce((sum, c) => sum + buyers.get(c.customerName).qty, 0) : 0;
 
@@ -285,6 +290,10 @@ export default function Customers({ products, movements, customers, waitlist, sh
       )}
 
       {onImportCustomers && <ClientsImportCard customers={customers} onImport={onImportCustomers} />}
+
+      {onMergeCustomers && (
+        <SimilarCustomersCard customers={customers} movements={movements} waitlist={waitlist} onMerge={onMergeCustomers} onRestore={onRestoreCustomerData} />
+      )}
 
       {allStats.length > 0 && (
         <div style={{ background: "var(--surface-subtle)", border: "1px solid var(--border)", borderRadius: 12, display: "flex", alignItems: "stretch", marginBottom: 16 }}>
@@ -361,21 +370,41 @@ export default function Customers({ products, movements, customers, waitlist, sh
             </select>
             <ChevronDown size={14} color="var(--faint)" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
           </div>
-          {(noPhoneCount > 0 || onlyNoPhone) && (
-            <button
-              onClick={() => setOnlyNoPhone((v) => !v)}
-              aria-pressed={onlyNoPhone}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, marginTop: 8, height: 34, padding: "0 12px", borderRadius: 999,
-                fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                border: `1px solid ${onlyNoPhone ? "var(--orange)" : "var(--border)"}`,
-                background: onlyNoPhone ? "var(--banner-bg)" : "var(--surface-subtle)",
-                color: onlyNoPhone ? "var(--orange-text)" : "var(--muted)",
-              }}
-            >
-              <PhoneOff size={14} strokeWidth={2} />
-              {`Sin teléfono · ${noPhoneCount}`}
-            </button>
+          {(noPhoneCount > 0 || onlyNoPhone || noCodeCount > 0 || onlyNoCode) && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+              {(noPhoneCount > 0 || onlyNoPhone) && (
+                <button
+                  onClick={() => setOnlyNoPhone((v) => !v)}
+                  aria-pressed={onlyNoPhone}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, height: 34, padding: "0 12px", borderRadius: 999,
+                    fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    border: `1px solid ${onlyNoPhone ? "var(--orange)" : "var(--border)"}`,
+                    background: onlyNoPhone ? "var(--banner-bg)" : "var(--surface-subtle)",
+                    color: onlyNoPhone ? "var(--orange-text)" : "var(--muted)",
+                  }}
+                >
+                  <PhoneOff size={14} strokeWidth={2} />
+                  {`Sin teléfono · ${noPhoneCount}`}
+                </button>
+              )}
+              {(noCodeCount > 0 || onlyNoCode) && (
+                <button
+                  onClick={() => setOnlyNoCode((v) => !v)}
+                  aria-pressed={onlyNoCode}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, height: 34, padding: "0 12px", borderRadius: 999,
+                    fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    border: `1px solid ${onlyNoCode ? "var(--orange)" : "var(--border)"}`,
+                    background: onlyNoCode ? "var(--banner-bg)" : "var(--surface-subtle)",
+                    color: onlyNoCode ? "var(--orange-text)" : "var(--muted)",
+                  }}
+                >
+                  <Hash size={14} strokeWidth={2} />
+                  {`Sin código · ${noCodeCount}`}
+                </button>
+              )}
+            </div>
           )}
           {buyers && stats.length > 0 && (
             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
@@ -396,7 +425,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
             {search.trim() ? `Ningún cliente coincide con "${search}"` : "Ningún cliente coincide con el filtro"}
           </div>
           <button
-            onClick={() => { setSearch(""); setOnlyNoPhone(false); changeProductFilter(""); }}
+            onClick={() => { setSearch(""); setOnlyNoPhone(false); setOnlyNoCode(false); changeProductFilter(""); }}
             style={{ fontSize: 13, color: "var(--text)", fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 4 }}
           >
             Limpiar filtros

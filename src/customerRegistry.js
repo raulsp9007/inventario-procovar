@@ -101,6 +101,33 @@ export function renameCustomer(customers, oldName, newName, businessName, phone)
   ));
 }
 
+const MERGE_FIELDS = ["businessName", "phone", "code", "address", "clientType", "consumptionType"];
+
+// Fusiona dos clientes: se conserva `keepName` (el nombre que ya usan sus
+// pedidos) y se le completan los datos que le faltaban con los de `dropName`;
+// los pedidos y la lista de espera de `dropName` pasan al conservado, con su
+// negocio y teléfono unificados. Nada se pierde. Si algún nombre no está en el
+// registro, o son el mismo, no cambia nada. No modifica lo que recibe.
+export function mergeCustomerData({ customers, movements, waitlist }, keepName, dropName) {
+  const keep = customers.find((c) => c.name === keepName);
+  const drop = customers.find((c) => c.name === dropName);
+  if (!keep || !drop || keep === drop) return { customers, movements, waitlist };
+
+  const merged = { ...keep };
+  MERGE_FIELDS.forEach((field) => {
+    if (!merged[field] && drop[field]) merged[field] = drop[field];
+  });
+  if (drop.createdAt && (!merged.createdAt || drop.createdAt < merged.createdAt)) merged.createdAt = drop.createdAt;
+
+  return {
+    customers: customers.filter((c) => c !== drop).map((c) => (c === keep ? merged : c)),
+    movements: movements.map((m) => (m.customerName === dropName
+      ? { ...m, customerName: keepName, businessName: merged.businessName || m.businessName || "", customerPhone: merged.phone || m.customerPhone || "" }
+      : m)),
+    waitlist: waitlist.map((w) => (w.customerName === dropName ? { ...w, customerName: keepName } : w)),
+  };
+}
+
 export function removeCustomer(customers, name) {
   return customers.filter((c) => c.name !== name);
 }

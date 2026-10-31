@@ -9,7 +9,7 @@ import { hlPerFormat, migrateHlToFormat } from "./hl";
 import { parseBackupFile } from "./backup";
 import { generateProductCode, nextProductColor } from "./productHelpers";
 import { getHlBackfill, isHlBackfillable } from "./hlBackfill";
-import { buildRegistryFromMovements, upsertCustomer, patchCustomer, renameCustomer, removeCustomer } from "./customerRegistry";
+import { buildRegistryFromMovements, upsertCustomer, patchCustomer, renameCustomer, removeCustomer, mergeCustomerData } from "./customerRegistry";
 import { DEFAULT_PRODUCT_FORMATS, buildInitialProductFormats, upsertProductFormat, removeProductFormat, updateProductFormat } from "./productFormats";
 
 const DEFAULT_PRODUCTS = [
@@ -1221,6 +1221,15 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, movements: snapshotMovements, customers: snapshotCustomers, waitlist: snapshotWaitlist });
   }
 
+  // Fusiona dos clientes (Clientes parecidos): se conserva `keepName`, se
+  // completan sus datos con los de `dropName` y los pedidos del otro pasan a él.
+  function mergeCustomers(keepName, dropName) {
+    const merged = mergeCustomerData({ customers, movements, waitlist }, keepName, dropName);
+    setMovements(merged.movements);
+    setCustomers(merged.customers);
+    setWaitlist(merged.waitlist);
+    persist({ ...currentPersistedState, movements: merged.movements, customers: merged.customers, waitlist: merged.waitlist });
+  }
   // Importación de clientes (clientsImport.js): reemplaza la lista por la que
   // salió del plan ya calculado. No toca pedidos ni movimientos.
   function importCustomers(nextCustomers) {
@@ -1319,6 +1328,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, restoreCustomerData, importCustomers, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
+    updateCustomer, restoreCustomerData, importCustomers, mergeCustomers, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
   };
 }
