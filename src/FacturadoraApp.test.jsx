@@ -252,21 +252,66 @@ describe("facturadora: pedidos de un vendedor", () => {
     expect(screen.queryByText("Marta Gil")).toBeNull(); // ya confirmado: solo en "Todos"
   });
 
-  it("muestra el código y el negocio del cliente para buscarlo en la otra plataforma", async () => {
-    linkStorage();
-    server.sellers[0].orders[0] = order("a", "Ana López", { customerCode: "AB1001", businessName: "Kiosco El Sol" });
-    render(<FacturadoraApp />);
-    await openSeller("Carlos Pérez");
-    expect(await screen.findByText("Cód. AB1001")).toBeTruthy();
-    expect(screen.getByText("Kiosco El Sol")).toBeTruthy();
-  });
+  // Cada pedido: cliente, negocio, código con su botón Comprobar (abre el portal
+  // filtrando por ese código) y el botón de confirmar.
+  describe("la tarjeta del pedido", () => {
+    const withCode = () => {
+      server.sellers[0].orders[0] = order("a", "Ana López", { customerCode: "AB1001", businessName: "Kiosco El Sol" });
+    };
+    const card = () => document.querySelector('[data-order-id="a"]');
 
-  it("un pedido sin código ni negocio no muestra esas líneas", async () => {
-    linkStorage();
-    render(<FacturadoraApp />);
-    await openSeller("Carlos Pérez");
-    await screen.findByText("Ana López");
-    expect(screen.queryByText(/^Cód\./)).toBeNull();
+    it("muestra cliente, negocio y código", async () => {
+      linkStorage();
+      withCode();
+      render(<FacturadoraApp />);
+      await openSeller("Carlos Pérez");
+      await screen.findByText("Ana López");
+      expect(within(card()).getByText("Kiosco El Sol")).toBeTruthy();
+      expect(within(card()).getByText("Código")).toBeTruthy();
+      expect(within(card()).getByText("AB1001")).toBeTruthy();
+    });
+
+    it("junto al código hay un botón Comprobar que abre el portal filtrando por ese código", async () => {
+      linkStorage();
+      withCode();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      render(<FacturadoraApp />);
+      await openSeller("Carlos Pérez");
+      await screen.findByText("Ana López");
+      const button = within(card()).getByRole("button", { name: "Comprobar código AB1001" });
+      expect(button.textContent).toBe("Comprobar");
+      fireEvent.click(button);
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open.mock.calls[0]).toEqual(["https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=AB1001", "procovar-portal"]);
+    });
+
+    it("el botón de confirmar está en la misma tarjeta", async () => {
+      linkStorage();
+      withCode();
+      render(<FacturadoraApp />);
+      await openSeller("Carlos Pérez");
+      await screen.findByText("Ana López");
+      expect(within(card()).getByRole("button", { name: /Confirmar/ })).toBeTruthy();
+    });
+
+    it("un pedido sin código lo dice y Comprobar busca por el nombre del cliente", async () => {
+      linkStorage();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      render(<FacturadoraApp />);
+      await openSeller("Carlos Pérez");
+      await screen.findByText("Ana López");
+      expect(within(card()).getByText("Sin código")).toBeTruthy();
+      fireEvent.click(within(card()).getByRole("button", { name: "Comprobar a Ana López" }));
+      expect(open.mock.calls[0][0]).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana%20L%C3%B3pez");
+    });
+
+    it("sin negocio no se deja una línea vacía", async () => {
+      linkStorage();
+      render(<FacturadoraApp />);
+      await openSeller("Carlos Pérez");
+      await screen.findByText("Ana López");
+      expect(card().querySelectorAll("[data-business]")).toHaveLength(0);
+    });
   });
 
   it("la pestaña Todos incluye los confirmados, con la hora", async () => {

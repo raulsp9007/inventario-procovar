@@ -62,4 +62,20 @@ describe("openPortalSearch", () => {
     openPortalSearch("  ");
     expect(open).not.toHaveBeenCalled();
   });
+
+  // La facturadora trabaja en una computadora: una pestaña normal (sin medidas de
+  // popup), siempre la misma, para ir cambiando de código sin apilar ventanas.
+  it("como pestaña normal: mismo nombre y sin medidas de popup", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    openPortalSearch("AB1001", { popup: false });
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0]).toEqual(["https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=AB1001", "procovar-portal"]);
+  });
+
+  it("también suelta el opener cuando se abre como pestaña", () => {
+    const win = { opener: window };
+    vi.spyOn(window, "open").mockImplementation(() => win);
+    openPortalSearch("AB1001", { popup: false });
+    expect(win.opener).toBeNull();
+  });
 });

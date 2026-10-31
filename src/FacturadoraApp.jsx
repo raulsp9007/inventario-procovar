@@ -3,6 +3,7 @@ import { ChevronLeft, Check, Cloud, CloudOff } from "lucide-react";
 import { useFacturadora } from "./useFacturadora";
 import { formatCUP } from "./money";
 import { formatDate, todayStr } from "./dateUtils";
+import { openPortalSearch } from "./portalLink";
 import { mergeKnownSellers } from "./facturadoraData";
 import { KNOWN_SELLERS } from "./facturadoraSellers";
 
@@ -182,8 +183,22 @@ function OrderCard({ order, today, onConfirm, onUndo }) {
           {order.modified && (
             <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "2px 8px", marginLeft: 6, background: "var(--warn-tint)", border: "1px solid var(--border-warn)", color: "var(--orange)" }}>MODIFICADO</span>
           )}
-          {order.businessName && <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-muted)", overflowWrap: "anywhere" }}>{order.businessName}</div>}
-          {order.customerCode && <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{`Cód. ${order.customerCode}`}</div>}
+          {order.businessName && <div data-business style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-muted)", overflowWrap: "anywhere" }}>{order.businessName}</div>}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, fontWeight: 500 }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{order.customerCode ? "Código" : ""}</span>
+            <span style={{ fontSize: order.customerCode ? 13.5 : 12, fontWeight: order.customerCode ? 700 : 500, color: order.customerCode ? "var(--text)" : "var(--text-muted)", fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>
+              {order.customerCode || "Sin código"}
+            </span>
+            <button
+              type="button"
+              aria-label={order.customerCode ? `Comprobar código ${order.customerCode}` : `Comprobar a ${order.customerName}`}
+              title="Buscar en el portal de pedidos"
+              onClick={() => openPortalSearch(order.customerCode || order.customerName, { popup: false })}
+              style={{ flexShrink: 0, height: 26, padding: "0 10px", borderRadius: 999, border: "1px solid var(--border-strong)", background: "var(--surface-subtle)", color: "var(--text)", fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}
+            >
+              Comprobar
+            </button>
+          </div>
         </div>
         <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>{formatCUP(order.total)}</div>
       </div>

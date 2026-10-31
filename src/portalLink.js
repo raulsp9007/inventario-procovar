@@ -19,10 +19,13 @@ export const PORTAL_WINDOW_FEATURES = "popup,width=480,height=820";
 // No se usa "noopener": crea un grupo de ventanas aparte y la app ya no
 // encontraría la ventana por su nombre para reutilizarla. En su lugar se suelta
 // `opener` justo al abrirla, con el mismo efecto de aislar el portal de la app.
-export function openPortalSearch(customerName) {
-  const url = portalSearchUrl(customerName);
+// `text`: el cliente o su código (el portal busca por lo que se le ponga en `buscar`).
+// `popup: false` abre una pestaña normal (la facturadora trabaja en computadora),
+// también siempre la misma.
+export function openPortalSearch(text, { popup = true } = {}) {
+  const url = portalSearchUrl(text);
   if (!url) return;
-  const win = window.open(url, PORTAL_WINDOW_NAME, PORTAL_WINDOW_FEATURES);
+  const win = popup ? window.open(url, PORTAL_WINDOW_NAME, PORTAL_WINDOW_FEATURES) : window.open(url, PORTAL_WINDOW_NAME);
   if (win) {
     try { win.opener = null; } catch { /* ya aislada */ }
   }
