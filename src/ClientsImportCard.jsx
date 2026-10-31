@@ -37,7 +37,7 @@ const smallButton = {
 };
 const labelStyle = { display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "5px 0", cursor: "pointer" };
 
-export default function ClientsImportCard({ customers, onImport }) {
+export default function ClientsImportCard({ customers, onImport, onImported }) {
   const fileInput = useRef(null);
   const [parsed, setParsed] = useState(null);
   const [mode, setMode] = useState("completar");
@@ -66,9 +66,16 @@ export default function ClientsImportCard({ customers, onImport }) {
 
   function apply() {
     const { nuevos, actualizan } = plan.counts;
-    onImport(plan.nextCustomers);
+    const fusionados = plan.merges.length;
+    onImport(plan.nextCustomers, plan.merges);
+    if (onImported) {
+      const dropped = new Set(plan.merges.map((m) => m.drop));
+      onImported(plan.nextCustomers.filter((c) => !c.code && !dropped.has(c.name)).length); // cuántos quedan sin código
+    }
     const parts = [];
-    if (nuevos > 0) parts.push(`${nuevos} ${plural(nuevos, "nuevo", "nuevos")}`);
+    const soloNuevos = nuevos - fusionados;
+    if (soloNuevos > 0) parts.push(`${soloNuevos} ${plural(soloNuevos, "nuevo", "nuevos")}`);
+    if (fusionados > 0) parts.push(`${fusionados} ${plural(fusionados, "fusionado", "fusionados")}`);
     if (actualizan > 0) {
       const word = mode === "completar" ? plural(actualizan, "completado", "completados") : plural(actualizan, "actualizado", "actualizados");
       parts.push(`${actualizan} ${word}`);
@@ -116,12 +123,17 @@ export default function ClientsImportCard({ customers, onImport }) {
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 6 }}>
             {`${plan.counts.nuevos} ${plural(plan.counts.nuevos, "nuevo", "nuevos")} · ${plan.counts.actualizan} ${plural(plan.counts.actualizan, updateWord[0], updateWord[1])} · ${plan.counts.iguales} sin cambios · ${plan.counts.existentes} ${plural(plan.counts.existentes, "ya existe", "ya existen")}`}
           </div>
+          {plan.merges.length > 0 && (
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 6 }}>
+              {`${plan.merges.length} ${plural(plan.merges.length, "se fusiona", "se fusionan")} con ${plural(plan.merges.length, "uno parecido que no tiene código", "otros parecidos que no tienen código")}`}
+            </div>
+          )}
           <div style={{ display: "grid", gap: 4 }}>
             {plan.rows.filter((r) => r.status !== "igual" && r.status !== "existe").slice(0, MAX_ROWS).map((row) => (
               <div key={row.name} style={{ borderTop: "1px solid var(--divider)", padding: "5px 0 2px" }}>
                 <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</div>
                 <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {row.status === "nuevo" ? "nuevo" : row.changes.map((c) => FIELD_LABELS[c.field]).join(" · ")}
+                  {row.status === "nuevo" ? (row.mergesWith ? `nuevo · se fusiona con ${row.mergesWith}` : "nuevo") : row.changes.map((c) => FIELD_LABELS[c.field]).join(" · ")}
                 </div>
               </div>
             ))}

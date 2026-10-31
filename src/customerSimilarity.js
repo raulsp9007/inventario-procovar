@@ -123,6 +123,11 @@ function compare(x, y) {
   return { confidence, reasons, score };
 }
 
+// Cuánto se parecen dos clientes: { confidence, reasons, score } o null.
+export function compareCustomers(a, b) {
+  return compare(prepare(a), prepare(b));
+}
+
 const ORDER = { alta: 0, media: 1, baja: 2 };
 
 // Pares de clientes que podrían ser el mismo. `distinct`: claves (pairKey) de

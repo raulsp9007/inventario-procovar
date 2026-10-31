@@ -94,6 +94,16 @@ describe("Clientes parecidos: aviso y lista", () => {
     expect(within(pair(panel, "Luis Gil", "Marta Paz")).getByText("Media")).toBeTruthy();
   });
 
+  it("dos clientes con códigos distintos son personas distintas: no se ofrecen para fusionar", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...saved(),
+      customers: [cust("a", "Carlos Pérez", { code: "CP1" }), cust("b", "Carlos Peres", { code: "CP2" }), cust("c", "Ana López"), cust("d", "López Ana")],
+    }));
+    const panel = await openPanel();
+    expect(within(panel).queryByRole("group", { name: "Posible duplicado: Carlos Pérez y Carlos Peres" })).toBeNull();
+    expect(within(panel).getByRole("group", { name: "Posible duplicado: Ana López y López Ana" })).toBeTruthy();
+  });
+
   it("los de confianza baja se muestran solo si se pide", async () => {
     const panel = await openPanel();
     expect(within(panel).queryByRole("group", { name: "Posible duplicado: Rosa y Rosa Díaz" })).toBeNull();
@@ -127,10 +137,10 @@ describe("Clientes parecidos: fusionar", () => {
     expect(within(pair(panel, "Beto Ruiz", "Beto R.")).getByRole("button", { name: "Conservar a Beto Ruiz" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("con código en los dos, se conserva el que tiene más pedidos", async () => {
+  it("con el mismo código en los dos, se conserva el que tiene más pedidos", async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       ...saved(),
-      customers: [cust("c1", "Beto Ruiz", { phone: "5355000001", code: "BT9" }), cust("c2", "Beto R.", { phone: "5355000001", code: "BT1" })],
+      customers: [cust("c1", "Beto Ruiz", { phone: "5355000001", code: "BT1" }), cust("c2", "Beto R.", { phone: "5355000001", code: "BT1" })],
     }));
     const panel = await openPanel();
     expect(within(pair(panel, "Beto Ruiz", "Beto R.")).getByRole("button", { name: "Conservar a Beto Ruiz" }).getAttribute("aria-pressed")).toBe("true");

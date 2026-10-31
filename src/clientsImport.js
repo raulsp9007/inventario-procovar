@@ -1,6 +1,7 @@
 import { parseCsv } from "./csv";
 import { toCubanPhone } from "./customerHelpers";
 import { normalizeProductName as normalizeName } from "./productList";
+import { compareCustomers } from "./customerSimilarity";
 
 // Importar clientes desde un CSV (la lista de clientes del portal). Mapa:
 //   Nombre Contacto → name (la persona; es la llave que une sus pedidos)
@@ -109,10 +110,31 @@ function incomingValue(field, row) {
 // Un cliente existente se reconoce por su código o por su nombre (sin importar
 // mayúsculas ni tildes). Nunca se cambia el nombre de uno existente: es lo que
 // une sus pedidos.
+//
+// Un cliente del archivo (con código) que no existía pero se parece mucho
+// (confianza alta) a uno guardado que todavía no tiene código es la misma persona:
+// va en `merges` ({ keep: nombre del archivo, drop: nombre guardado }) y la
+// tienda los fusiona (mergeCustomerData) para que queden el nombre y el código
+// del archivo. Si hay duda (dos igual de parecidos), no se fusiona.
 export function planClientsImport({ customers, parsed, mode, newId, nowIso }) {
   const nextCustomers = customers.map((c) => ({ ...c }));
   const rows = [];
+  const merges = [];
+  const claimed = new Set();
   const counts = { nuevos: 0, actualizan: 0, iguales: 0, existentes: 0 };
+
+  // El guardado sin código más parecido (alta) a este cliente nuevo; null si no hay o hay empate.
+  function mergeCandidate(created) {
+    if (!created.code) return null;
+    const scored = customers
+      .filter((c) => !c.code && !claimed.has(c.id))
+      .map((c) => ({ c, found: compareCustomers(created, c) }))
+      .filter((x) => x.found && x.found.confidence === "alta")
+      .sort((x, y) => y.found.score - x.found.score);
+    if (scored.length === 0) return null;
+    if (scored.length > 1 && scored[1].found.score === scored[0].found.score) return null;
+    return scored[0].c;
+  }
 
   parsed.rows.forEach((row) => {
     const key = normalizeName(row.name);
@@ -123,9 +145,16 @@ export function planClientsImport({ customers, parsed, mode, newId, nowIso }) {
       ["code", "address", "clientType", "consumptionType"].forEach((field) => {
         if (row[field]) created[field] = row[field];
       });
+      const same = mergeCandidate(created);
       nextCustomers.push(created);
       counts.nuevos += 1;
-      rows.push({ name: row.name, status: "nuevo", changes: [] });
+      if (same) {
+        claimed.add(same.id);
+        merges.push({ keep: created.name, drop: same.name });
+        rows.push({ name: row.name, status: "nuevo", changes: [], mergesWith: same.name });
+      } else {
+        rows.push({ name: row.name, status: "nuevo", changes: [] });
+      }
       return;
     }
 
@@ -154,5 +183,5 @@ export function planClientsImport({ customers, parsed, mode, newId, nowIso }) {
     }
   });
 
-  return { rows, counts, nextCustomers };
+  return { rows, counts, nextCustomers, merges };
 }

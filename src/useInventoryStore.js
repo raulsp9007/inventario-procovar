@@ -1232,9 +1232,19 @@ export function useInventoryStore() {
   }
   // Importación de clientes (clientsImport.js): reemplaza la lista por la que
   // salió del plan ya calculado. No toca pedidos ni movimientos.
-  function importCustomers(nextCustomers) {
-    setCustomers(nextCustomers);
-    persist({ ...currentPersistedState, customers: nextCustomers });
+  // `merges` ({ keep, drop }): clientes que ya estaban sin código y se parecen a
+  // uno del archivo; se fusionan en el del archivo (nombre y código del archivo).
+  function importCustomers(nextCustomers, merges = []) {
+    const next = merges.reduce(
+      (state, { keep, drop }) => mergeCustomerData(state, keep, drop),
+      { customers: nextCustomers, movements, waitlist },
+    );
+    setCustomers(next.customers);
+    if (merges.length > 0) {
+      setMovements(next.movements);
+      setWaitlist(next.waitlist);
+    }
+    persist({ ...currentPersistedState, customers: next.customers, movements: next.movements, waitlist: next.waitlist });
   }
 
   function markOrderConfirmed(orderId, confirmed) {

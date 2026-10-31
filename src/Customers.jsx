@@ -289,7 +289,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
         </div>
       )}
 
-      {onImportCustomers && <ClientsImportCard customers={customers} onImport={onImportCustomers} />}
+      {onImportCustomers && <ClientsImportCard customers={customers} onImport={onImportCustomers} onImported={(withoutCode) => setOnlyNoCode(withoutCode > 0)} />}
 
       {onMergeCustomers && (
         <SimilarCustomersCard customers={customers} movements={movements} waitlist={waitlist} onMerge={onMergeCustomers} onRestore={onRestoreCustomerData} />

@@ -57,7 +57,11 @@ export default function SimilarCustomersCard({ customers, movements, waitlist, o
   const [choice, setChoice] = useState({});
   const [undo, setUndo] = useState(null);
 
-  const pairs = useMemo(() => findSimilarCustomers(customers, { distinct }), [customers, distinct]);
+  // Con dos códigos distintos (del portal) son clientes distintos: no se ofrecen para fusionar.
+  const pairs = useMemo(
+    () => findSimilarCustomers(customers, { distinct }).filter((p) => !(p.a.code && p.b.code && p.a.code !== p.b.code)),
+    [customers, distinct],
+  );
   const ordersByName = useMemo(() => {
     const map = new Map();
     movements.forEach((m) => {

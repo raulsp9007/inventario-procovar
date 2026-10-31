@@ -174,3 +174,68 @@ describe("planClientsImport", () => {
     expect(plan.nextCustomers[0]).toEqual({ id: expect.any(String), name: "Solo Nombre", businessName: "", phone: "", createdAt: NOW });
   });
 });
+
+// Un cliente del archivo (con código) cuyo nombre se parece mucho al de uno que
+// todavía no tiene código es la misma persona: se fusionan y queda el nombre y
+// el código del archivo.
+describe("planClientsImport: fusiona con clientes parecidos que no tienen código", () => {
+  const NOW = "2026-10-31T10:00:00.000Z";
+  let n = 0;
+  const newId = () => `new-${++n}`;
+  const cust = (id, name, extra = {}) => ({ id, name, businessName: "", phone: "", createdAt: "2026-01-01T00:00:00.000Z", ...extra });
+  const plan = (customers, ...lines) => planClientsImport({ customers, parsed: parseClientsCsv(csv(...lines)), mode: "completar", newId, nowIso: NOW });
+
+  it("'Beto Ruiz' sin código y 'Beto R.' del archivo con código: se fusionan, gana el nombre del archivo", () => {
+    const result = plan([cust("c1", "Beto Ruiz", { phone: "5355000001" })], "Cafetería Beto,BT1,Calle 9,Bar,On-Premise,Beto R.,55000001");
+    expect(result.merges).toEqual([{ keep: "Beto R.", drop: "Beto Ruiz" }]);
+    expect(result.nextCustomers.map((c) => c.name)).toEqual(["Beto Ruiz", "Beto R."]); // la fusión de datos y pedidos la hace la tienda
+    expect(result.nextCustomers.find((c) => c.name === "Beto R.")).toMatchObject({ code: "BT1" });
+    expect(result.rows[0]).toMatchObject({ name: "Beto R.", status: "nuevo", mergesWith: "Beto Ruiz" });
+  });
+
+  it("también cuando solo se agregan los nuevos", () => {
+    const result = planClientsImport({
+      customers: [cust("c1", "Beto Ruiz", { phone: "5355000001" })], parsed: parseClientsCsv(csv("Cafetería Beto,BT1,,,,Beto R.,55000001")),
+      mode: "nuevos", newId, nowIso: NOW,
+    });
+    expect(result.merges).toEqual([{ keep: "Beto R.", drop: "Beto Ruiz" }]);
+  });
+
+  it("si el parecido ya tiene código, son clientes distintos: no se fusionan", () => {
+    const result = plan([cust("c1", "Beto Ruiz", { phone: "5355000001", code: "BT9" })], "Cafetería Beto,BT1,,,,Beto R.,55000001");
+    expect(result.merges).toEqual([]);
+  });
+
+  it("solo con confianza alta: un parecido débil ('Ana' y 'Ana López') no se fusiona", () => {
+    const result = plan([cust("c1", "Ana")], "Kiosco Sol,AB1,,,,Ana López,");
+    expect(result.merges).toEqual([]);
+  });
+
+  it("si la fila del archivo no trae código, no hay a quién darle prioridad: no se fusiona", () => {
+    const result = plan([cust("c1", "Beto Ruiz", { phone: "5355000001" })], "Cafetería Beto,,,,,Beto R.,55000001");
+    expect(result.merges).toEqual([]);
+  });
+
+  it("si dos clientes sin código parecen igual de buenos, no adivina: no se fusiona", () => {
+    const result = plan(
+      [cust("c1", "Beto Ruiz", { phone: "5355000001" }), cust("c2", "Beto Ruiz", { phone: "5355000001", id: "c2" })],
+      "Cafetería Beto,BT1,,,,Beto R.,55000001",
+    );
+    expect(result.merges).toEqual([]);
+  });
+
+  it("un cliente sin código se fusiona con una sola fila: la siguiente parecida queda aparte", () => {
+    const result = plan(
+      [cust("c1", "Beto Ruiz", { phone: "5355000001" })],
+      "Cafetería Beto,BT1,,,,Beto R.,55000001",
+      "Bar Beto,BT2,,,,Beto Ruiz Pérez,55000001",
+    );
+    expect(result.merges).toHaveLength(1);
+  });
+
+  it("un cliente de la lista con el mismo nombre del archivo no se trata como fusión (ya se reconoce por nombre)", () => {
+    const result = plan([cust("c1", "Beto Ruiz")], "Cafetería Beto,BT1,,,,Beto Ruiz,");
+    expect(result.merges).toEqual([]);
+    expect(result.nextCustomers).toHaveLength(1);
+  });
+});
