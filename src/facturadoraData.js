@@ -34,6 +34,35 @@ export function overlayOps(sellers, queue, nowIso) {
 
 export const totalPending = (sellers) => sellers.reduce((sum, s) => sum + s.pending, 0);
 
+const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
+const keyOf = (text) => String(text || "").normalize("NFD").replace(DIACRITICS, "").toLowerCase().replace(/\s+/g, " ").trim();
+const collator = new Intl.Collator("es", { sensitivity: "base" });
+
+// Los vendedores que se muestran: los actuales (`known`, solo nombres) siempre, con
+// o sin pedidos, más cualquier otro que traiga el buzón, por orden alfabético
+// (sin importar tildes). El del buzón se reconoce por nombre, también si trae
+// apellido ("Raúl Salgado" es "Raul"). No modifica lo que recibe.
+export function mergeKnownSellers(sellers, known) {
+  const used = new Set();
+  const list = [];
+  known.forEach((name) => {
+    const key = keyOf(name);
+    const found = sellers.find((s, i) => {
+      if (used.has(i)) return false;
+      const sellerKey = keyOf(s.name);
+      return sellerKey === key || sellerKey.startsWith(`${key} `);
+    });
+    if (found) {
+      used.add(sellers.indexOf(found));
+      list.push(found);
+    } else {
+      list.push({ id: `actual-${key.replace(/[^a-z0-9]+/g, "-")}`, name, pending: 0, confirmed: 0, orders: [] });
+    }
+  });
+  sellers.forEach((s, i) => { if (!used.has(i)) list.push(s); });
+  return list.sort((a, b) => collator.compare(a.name, b.name));
+}
+
 // Suma una operación a la cola: confirmar y deshacer lo mismo antes de que salga
 // se compensan; lo demás se agrega al final.
 export function mergeFactOps(queue, op) {

@@ -29,7 +29,9 @@ Necesitas una cuenta gratuita de Cloudflare. Todo desde la carpeta `worker/`:
 4. **Crear la tabla:** `npx wrangler d1 execute procovar-buzon --remote --file=schema.sql`
    (la primera vez; el esquema ya incluye `customer_code` y `business_name`).
 5. **Generar los códigos** (uno por persona):
-   `node scripts/provision.mjs --vendedores "Nombre 1,Nombre 2,..." --facturadora "Facturadora"`
+   `node scripts/provision.mjs --vendedores "Lorenzo,Leodanis,Melisa,Niurka,Raul,Eddy" --facturadora "Facturadora"`
+   (usa estos nombres tal cual: la página de la facturadora los une por nombre con su lista
+   de vendedores, `src/facturadoraSellers.js`; si cambia alguien, edita esa lista también).
    Guarda los códigos en `worker/.usuarios.secret.json` (no se sube a git) e imprime el
    secreto `USERS`.
 6. **Guardar el secreto:** `npx wrangler secret put USERS` y pega el JSON del paso 5.

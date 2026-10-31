@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { overlayOps, totalPending, mergeFactOps } from "./facturadoraData";
+import { overlayOps, totalPending, mergeFactOps, mergeKnownSellers } from "./facturadoraData";
 
 // Datos de la app de la facturadora: lo que ve ya incluye sus 👍 pendientes de
 // enviar (para que al confirmar sin internet el pedido se vea confirmado).
@@ -50,6 +50,49 @@ describe("overlayOps", () => {
     base[0].pending = 1; base[0].confirmed = 2;
     const out = overlayOps(base, [{ kind: "confirm", ids: ["a"] }], NOW);
     expect(out[0].orders[0]).toMatchObject({ confirmedBy: "vendedor", confirmedAt: "2026-10-30T09:00:00.000Z" });
+  });
+});
+
+// La página muestra siempre a los vendedores actuales, por orden alfabético.
+describe("mergeKnownSellers", () => {
+  const KNOWN = ["Lorenzo", "Leodanis", "Melisa", "Niurka", "Raul", "Eddy"];
+  const seller = (id, name, pending = 0, confirmed = 0) => ({ id, name, pending, confirmed, orders: [] });
+  const names = (list) => list.map((s) => s.name);
+
+  it("sin datos del buzón muestra a todos, alfabéticamente, sin pedidos", () => {
+    const list = mergeKnownSellers([], KNOWN);
+    expect(names(list)).toEqual(["Eddy", "Leodanis", "Lorenzo", "Melisa", "Niurka", "Raul"]);
+    expect(list.every((s) => s.pending === 0 && s.confirmed === 0 && s.orders.length === 0)).toBe(true);
+  });
+
+  it("usa lo que trae el buzón para los que ya tienen pedidos, sin repetirlos", () => {
+    const list = mergeKnownSellers([seller("raul", "Raul", 2, 1), seller("eddy", "Eddy", 0, 3)], KNOWN);
+    expect(names(list)).toEqual(["Eddy", "Leodanis", "Lorenzo", "Melisa", "Niurka", "Raul"]);
+    expect(list.find((s) => s.name === "Raul")).toMatchObject({ id: "raul", pending: 2, confirmed: 1 });
+    expect(list.find((s) => s.name === "Eddy")).toMatchObject({ pending: 0, confirmed: 3 });
+  });
+
+  it("reconoce al mismo vendedor sin importar tildes, mayúsculas o si el buzón trae el apellido", () => {
+    const list = mergeKnownSellers([seller("raul-salgado", "Raúl Salgado", 1), seller("m", "MELISA", 4)], KNOWN);
+    expect(list).toHaveLength(6);
+    expect(list.find((s) => s.id === "raul-salgado")).toMatchObject({ pending: 1 });
+    expect(list.find((s) => s.id === "m")).toMatchObject({ pending: 4 });
+  });
+
+  it("un vendedor del buzón que no está en la lista también aparece, en su lugar alfabético", () => {
+    const list = mergeKnownSellers([seller("carlos", "Carlos Pérez", 1)], KNOWN);
+    expect(names(list)).toEqual(["Carlos Pérez", "Eddy", "Leodanis", "Lorenzo", "Melisa", "Niurka", "Raul"]);
+  });
+
+  it("el orden ignora tildes: 'Álvaro' va antes que 'Beto'", () => {
+    expect(names(mergeKnownSellers([seller("a", "Álvaro"), seller("b", "Beto")], []))).toEqual(["Álvaro", "Beto"]);
+  });
+
+  it("no modifica lo que recibe", () => {
+    const input = [seller("raul", "Raul", 2)];
+    const snapshot = JSON.stringify(input);
+    mergeKnownSellers(input, KNOWN);
+    expect(JSON.stringify(input)).toBe(snapshot);
   });
 });
 

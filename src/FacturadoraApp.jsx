@@ -3,6 +3,8 @@ import { ChevronLeft, Check, Cloud, CloudOff } from "lucide-react";
 import { useFacturadora } from "./useFacturadora";
 import { formatCUP } from "./money";
 import { formatDate, todayStr } from "./dateUtils";
+import { mergeKnownSellers } from "./facturadoraData";
+import { KNOWN_SELLERS } from "./facturadoraSellers";
 
 // App de la facturadora (mismo código que la del vendedor, modo ?rol=facturadora):
 // vendedores → pedidos del vendedor → 👍. Ver
@@ -64,7 +66,7 @@ function Header({ title, subtitle, onBack, backLabel, children }) {
   );
 }
 
-function LinkScreen({ onLink, notice = "", onNoticeClear }) {
+function LinkScreen({ onLink, sellers = [], notice = "", onNoticeClear }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -83,8 +85,10 @@ function LinkScreen({ onLink, notice = "", onNoticeClear }) {
 
   return (
     <div style={pageStyle}>
-      <Header title="Enlazar facturación" subtitle="Abre tu enlace personal o pega el código que te dieron." />
-      <div style={{ ...column, padding: 16 }}>
+      <Header title="Pedidos por confirmar" subtitle="Enlaza este navegador para ver los pedidos de cada vendedor." />
+      <div style={{ ...column, padding: "14px 16px 16px" }}>
+        {sellers.map((seller) => <SellerCard key={seller.id} seller={seller} />)}
+        <div style={{ fontSize: 12.5, fontWeight: 600, margin: "16px 0 8px" }}>Enlazar</div>
         <input
           type="text"
           aria-label="Código de enlace"
@@ -124,7 +128,31 @@ function ConnectionLine({ f }) {
   );
 }
 
-function SellersScreen({ f, onOpen }) {
+// Una tarjeta por vendedor; sin enlazar son solo lectura (sin pedidos que ver).
+function SellerCard({ seller, onOpen }) {
+  const all = seller.pending + seller.confirmed;
+  const base = { display: "flex", alignItems: "center", gap: 12, width: "100%", boxSizing: "border-box", textAlign: "left", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10, fontFamily: "inherit", color: "var(--text)" };
+  const body = (
+    <>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 14.5, fontWeight: 700 }}>{seller.name}</span>
+        <span style={{ display: "block", fontSize: 12, color: "var(--text-muted)" }}>{onOpen ? `${seller.confirmed} de ${all} confirmados` : "Sin enlazar"}</span>
+      </span>
+      {onOpen && (seller.pending > 0 ? (
+        <span style={{ minWidth: 30, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 9px", fontSize: 12.5, fontWeight: 700, background: "var(--warn-tint)", border: "1px solid var(--border-warn)", color: "var(--orange)" }}>{seller.pending}</span>
+      ) : (
+        <span style={{ minWidth: 30, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 9px", fontSize: 12.5, fontWeight: 700, border: "1px solid var(--green)", color: "var(--green)" }}>✓</span>
+      ))}
+    </>
+  );
+  return onOpen ? (
+    <button type="button" data-seller-name={seller.name} onClick={onOpen} style={{ ...base, cursor: "pointer" }}>{body}</button>
+  ) : (
+    <div data-seller-name={seller.name} style={base}>{body}</div>
+  );
+}
+
+function SellersScreen({ f, sellers, onOpen }) {
   const total = f.totalPending;
   return (
     <div style={pageStyle}>
@@ -135,28 +163,7 @@ function SellersScreen({ f, onOpen }) {
         <ConnectionLine f={f} />
       </Header>
       <div style={{ ...column, padding: "14px 16px" }}>
-        {f.sellers.map((seller) => {
-          const all = seller.pending + seller.confirmed;
-          return (
-            <button
-              key={seller.id}
-              type="button"
-              onClick={() => onOpen(seller.id)}
-              style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10, fontFamily: "inherit", color: "var(--text)", cursor: "pointer" }}
-            >
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 14.5, fontWeight: 700 }}>{seller.name}</span>
-                <span style={{ display: "block", fontSize: 12, color: "var(--text-muted)" }}>{`${seller.confirmed} de ${all} confirmados`}</span>
-              </span>
-              {seller.pending > 0 ? (
-                <span style={{ minWidth: 30, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 9px", fontSize: 12.5, fontWeight: 700, background: "var(--warn-tint)", border: "1px solid var(--border-warn)", color: "var(--orange)" }}>{seller.pending}</span>
-              ) : (
-                <span style={{ minWidth: 30, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 9px", fontSize: 12.5, fontWeight: 700, border: "1px solid var(--green)", color: "var(--green)" }}>✓</span>
-              )}
-            </button>
-          );
-        })}
-        {f.sellers.length === 0 && <div style={{ fontSize: 13.5, color: "var(--text-muted)", textAlign: "center", padding: "30px 0" }}>Aún no hay vendedores.</div>}
+        {sellers.map((seller) => <SellerCard key={seller.id} seller={seller} onOpen={() => onOpen(seller.id)} />)}
         <div style={{ textAlign: "center", marginTop: 18 }}>
           <button type="button" onClick={f.unlink} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12.5, textDecoration: "underline", fontFamily: "inherit", cursor: "pointer" }}>Desenlazar</button>
         </div>
@@ -282,7 +289,9 @@ export default function FacturadoraApp() {
   const f = useFacturadora();
   const [selectedId, setSelectedId] = useState(null);
   const [linkNotice, setLinkNotice] = useState("");
-  const selected = useMemo(() => f.sellers.find((s) => s.id === selectedId) || null, [f.sellers, selectedId]);
+  // Siempre los vendedores actuales (con o sin pedidos), alfabéticamente.
+  const sellers = useMemo(() => mergeKnownSellers(f.sellers, KNOWN_SELLERS), [f.sellers]);
+  const selected = useMemo(() => sellers.find((s) => s.id === selectedId) || null, [sellers, selectedId]);
 
   // Enlace personal: la dirección trae el código (#procovar1:...). Se usa una vez,
   // se guarda y se quita de la barra (no queda en el historial ni se comparte sin querer).
@@ -301,7 +310,7 @@ export default function FacturadoraApp() {
     document.title = f.link && f.totalPending > 0 ? `(${f.totalPending}) ${TITLE}` : TITLE;
   }, [f.link, f.totalPending]);
 
-  if (!f.link) return <LinkScreen onLink={f.linkWith} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
+  if (!f.link) return <LinkScreen onLink={f.linkWith} sellers={sellers} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
   if (selected) return <SellerScreen f={f} seller={selected} onBack={() => setSelectedId(null)} />;
-  return <SellersScreen f={f} onOpen={setSelectedId} />;
+  return <SellersScreen f={f} sellers={sellers} onOpen={setSelectedId} />;
 }

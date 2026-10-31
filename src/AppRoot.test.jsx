@@ -14,19 +14,19 @@ describe("AppRoot", () => {
     localStorage.setItem("procovar-active-tab", "config");
     render(<AppRoot />);
     expect(await screen.findByText("CONFIGURACIÓN")).toBeTruthy();
-    expect(screen.queryByText("Enlazar facturación")).toBeNull();
+    expect(screen.queryByText("PROCOVAR · FACTURACIÓN")).toBeNull();
   });
 
   it("con rol facturadora (guardado) muestra la app de la facturadora", async () => {
     localStorage.setItem("procovar-rol", "facturadora");
     render(<AppRoot />);
-    expect(await screen.findByText("Enlazar facturación")).toBeTruthy();
+    expect(await screen.findByText("PROCOVAR · FACTURACIÓN")).toBeTruthy();
   });
 
   it("con ?rol=facturadora en la dirección también, y lo recuerda", async () => {
     window.history.replaceState(null, "", "/?rol=facturadora");
     render(<AppRoot />);
-    expect(await screen.findByText("Enlazar facturación")).toBeTruthy();
+    expect(await screen.findByText("PROCOVAR · FACTURACIÓN")).toBeTruthy();
     expect(localStorage.getItem("procovar-rol")).toBe("facturadora");
   });
 });

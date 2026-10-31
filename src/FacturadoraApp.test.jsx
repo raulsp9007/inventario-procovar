@@ -171,6 +171,45 @@ describe("facturadora: título de la pestaña", () => {
   });
 });
 
+// Página de inicio: siempre los vendedores actuales, alfabéticamente.
+describe("facturadora: inicio con los vendedores actuales", () => {
+  const CURRENT = ["Eddy", "Leodanis", "Lorenzo", "Melisa", "Niurka", "Raul"];
+  const shownNames = () => [...document.querySelectorAll("[data-seller-name]")].map((el) => el.getAttribute("data-seller-name"));
+
+  it("sin enlazar ya muestra a los seis en orden alfabético, y debajo el formulario para enlazar", async () => {
+    render(<FacturadoraApp />);
+    await screen.findByLabelText("Código de enlace");
+    expect(shownNames()).toEqual(CURRENT);
+    expect(screen.getByRole("button", { name: "Enlazar" })).toBeTruthy();
+    expect(calls).toEqual([]);
+  });
+
+  it("enlazada, los muestra todos aunque el buzón solo traiga a algunos, y los del buzón van en su lugar", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    expect(shownNames()).toEqual(["Carlos Pérez", "Eddy", "Leodanis", "Lorenzo", "Marta Díaz", "Melisa", "Niurka", "Raul", "Rosa Vega"]);
+  });
+
+  it("un vendedor actual sin pedidos se puede abrir y dice que no hay", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    fireEvent.click(await screen.findByRole("button", { name: /Eddy/ }));
+    expect(await screen.findByText("Sin pedidos por ahora.")).toBeTruthy();
+  });
+
+  it("los pedidos del buzón caen en el vendedor de la lista, sin repetirlo", async () => {
+    linkStorage();
+    server.sellers = [
+      recount({ id: "raul", name: "Raul", orders: [order("z", "Gina Paz", { sellerId: "raul", sellerName: "Raul" })] }),
+      recount({ id: "eddy", name: "Eddy", orders: [] }),
+    ];
+    render(<FacturadoraApp />);
+    await waitFor(() => expect(within(screen.getByRole("button", { name: /Raul/ })).getByText("0 de 1 confirmados")).toBeTruthy());
+    expect(shownNames().filter((n) => n === "Raul")).toHaveLength(1);
+  });
+});
+
 describe("facturadora: vendedores", () => {
   it("lista a los vendedores con cuántos pedidos tiene cada uno sin confirmar", async () => {
     linkStorage();
