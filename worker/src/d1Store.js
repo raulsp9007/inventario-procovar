@@ -1,0 +1,53 @@
+// Almacén de pedidos sobre Cloudflare D1 (SQLite). Misma interfaz que
+// memoryStore.js; las pruebas corren la API contra los dos (ver fakeD1.js).
+
+const COLUMNS = [
+  "id", "seller_id", "seller_name", "date", "customer_name", "customer_code", "business_name", "lines", "total", "status", "rev", "modified",
+  "confirmed_at", "confirmed_by", "created_at", "updated_at",
+];
+
+function fromRow(r) {
+  if (!r) return null;
+  return {
+    id: r.id, sellerId: r.seller_id, sellerName: r.seller_name, date: r.date, customerName: r.customer_name,
+    ...(r.customer_code ? { customerCode: r.customer_code } : {}), ...(r.business_name ? { businessName: r.business_name } : {}),
+    lines: JSON.parse(r.lines), total: r.total, status: r.status, rev: r.rev, modified: !!r.modified,
+    confirmedAt: r.confirmed_at, confirmedBy: r.confirmed_by, createdAt: r.created_at, updatedAt: r.updated_at,
+  };
+}
+
+const toValues = (o) => [
+  o.id, o.sellerId, o.sellerName, o.date, o.customerName, o.customerCode || null, o.businessName || null, JSON.stringify(o.lines), o.total, o.status, o.rev, o.modified ? 1 : 0,
+  o.confirmedAt, o.confirmedBy, o.createdAt, o.updatedAt,
+];
+
+export function createD1Store(db) {
+  const updates = COLUMNS.filter((c) => c !== "id").map((c) => `${c} = excluded.${c}`).join(", ");
+  const upsert = `INSERT INTO orders (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")}) ON CONFLICT(id) DO UPDATE SET ${updates}`;
+
+  return {
+    async get(id) {
+      return fromRow(await db.prepare("SELECT * FROM orders WHERE id = ?").bind(id).first());
+    },
+    async put(order) {
+      await db.prepare(upsert).bind(...toValues(order)).run();
+    },
+    async listBySeller(sellerId, since) {
+      const { results } = await db
+        .prepare("SELECT * FROM orders WHERE seller_id = ? AND updated_at > ? ORDER BY updated_at")
+        .bind(sellerId, since || "")
+        .all();
+      return results.map(fromRow);
+    },
+    async listFrom(desde) {
+      const { results } = await db
+        .prepare("SELECT * FROM orders WHERE status != 'cancelado' AND date >= ? ORDER BY date DESC, created_at DESC")
+        .bind(desde)
+        .all();
+      return results.map(fromRow);
+    },
+    async purge(beforeIso) {
+      await db.prepare("DELETE FROM orders WHERE updated_at < ?").bind(beforeIso).run();
+    },
+  };
+}

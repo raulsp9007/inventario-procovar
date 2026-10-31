@@ -21,6 +21,8 @@ import { sendSupervisorSummary } from "./supervisorSummary.js";
 import { usePwaStatus, applyUpdate, dismissUpdate } from "./pwaStatus.js";
 import BackupCard from "./BackupCard.jsx";
 import ProductListCard from "./ProductListCard.jsx";
+import CloudCard from "./CloudCard.jsx";
+import { useCloudSync } from "./useCloudSync.js";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import { useProductImages } from "./useProductImages.js";
 import { useInventoryStore, LOW_STOCK_THRESHOLD, MOVEMENTS_CAP, BACKUP_REMINDER_DAYS, lowStockThresholdFor } from "./useInventoryStore.js";
@@ -73,7 +75,7 @@ export default function InventoryApp() {
     sendBusinessName, setSendBusinessNameSetting,
     showRecommendations, setShowRecommendationsSetting,
     showPortalCheck, setShowPortalCheckSetting,
-    applyProductImport,
+    applyProductImport, setOrdersConfirmed,
     lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,
@@ -104,7 +106,11 @@ export default function InventoryApp() {
   // Cierre de ventas: pasada la hora, aviso de lo que quedó pendiente hoy en
   // todas las pestañas menos Pedidos (ahí ya está el detalle).
   const todayCal = todayStr();
-  const cierrePending = useMemo(() => getCierrePending(groupAllOrders(movements), todayCal), [movements, todayCal]);
+  const allOrders = useMemo(() => groupAllOrders(movements), [movements]);
+  const cierrePending = useMemo(() => getCierrePending(allOrders, todayCal), [allOrders, todayCal]);
+  // Nube de facturación: sube lo enviado a facturación y marca CONF. cuando la
+  // facturadora da 👍 (ver useCloudSync.js).
+  const cloud = useCloudSync({ orders: allOrders, products, customers, setOrdersConfirmed, ready: loaded });
   const showCierreAviso = isPastCierre(cierreVentasHour) && cierrePending.total > 0 && view !== "pedidos";
 
   // Compartir por el menú del sistema; solo si de verdad se compartió o se
@@ -423,6 +429,8 @@ export default function InventoryApp() {
             onReviewPendingConsumed={() => setReviewPending(false)}
             showRecommendations={showRecommendations}
             showPortalCheck={showPortalCheck}
+            cloudChips={cloud.chips}
+            cloud={cloud}
             focusOrderId={orderToFocus}
             onFocusOrderConsumed={() => setOrderToFocus(null)}
           />
@@ -467,6 +475,7 @@ export default function InventoryApp() {
                 onRestoreCopy={restorePreviousCopy}
               />
             )}
+            cloudSlot={<CloudCard cloud={cloud} />}
             whatsappPhone={whatsappPhone}
             onWhatsappPhoneChange={(next) => {
               setWhatsappPhone(next);

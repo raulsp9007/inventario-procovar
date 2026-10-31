@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, UserCheck, ClipboardCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff } from "lucide-react";
+import { Trash2, Receipt, UserCheck, ClipboardCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff, Cloud } from "lucide-react";
 import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { sendSupervisorSummary } from "./supervisorSummary";
@@ -14,6 +14,7 @@ import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
 import CierreDeVentasBanner from "./CierreDeVentasBanner.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
+import CloudCheckBar from "./CloudCheckBar.jsx";
 import { customerLabel, businessLabel } from "./nameLabels";
 import PulseNumber from "./PulseNumber.jsx";
 import { leaveAnimationMs, riseStyle, ENTER_ANIMATION_MS } from "./motion";
@@ -208,7 +209,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, focusOrderId, onFocusOrderConsumed }) {
+export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, cloudChips = {}, cloud = null, focusOrderId, onFocusOrderConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -1132,6 +1133,19 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
             </span>
           </div>
 
+          {cloudChips[order.orderId] && (
+            <div
+              data-cloud-state={cloudChips[order.orderId].state}
+              style={{
+                display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600,
+                color: cloudChips[order.orderId].state === "confirmed" ? "var(--green)" : cloudChips[order.orderId].state === "queued" ? "var(--orange)" : "var(--muted)",
+              }}
+            >
+              <Cloud size={13} strokeWidth={2} aria-hidden="true" />
+              <span>{cloudChips[order.orderId].text}</span>
+            </div>
+          )}
+
           {order.note && (
             <div style={{ display: "flex", alignItems: "flex-start", gap: 6, background: "var(--surface-subtle)", borderLeft: "2px solid var(--border)", borderRadius: "0 7px 7px 0", padding: "6px 8px" }}>
               <span style={{ flexShrink: 0, marginTop: 1, fontSize: 12, color: "var(--faint)" }}>📝</span>
@@ -1340,6 +1354,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
 
   return (
     <div>
+      {cloud && <CloudCheckBar cloud={cloud} />}
       <div style={{ background: "var(--segment-track)", borderRadius: 12, padding: 3, display: "flex", gap: 2, marginBottom: 16 }}>
         {[
           { key: "hoy", label: "Hoy", count: totalTodayCount },

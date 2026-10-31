@@ -1,0 +1,14 @@
+{
+  "name": "procovar-buzon",
+  "private": true,
+  "type": "module",
+  "description": "Buzón de pedidos entre los vendedores y la facturadora (Cloudflare Worker + D1).",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "usuarios": "node scripts/provision.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

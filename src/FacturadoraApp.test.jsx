@@ -1,0 +1,313 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import FacturadoraApp from "./FacturadoraApp";
+import { makeLinkCode } from "./linkCode";
+
+// App de la facturadora (mismo código, modo ?rol=facturadora): vendedores →
+// pedidos del vendedor → 👍. El buzón se simula con un fetch falso. Hoy fijo:
+// viernes 2026-10-30.
+
+const URL_OK = "https://buzon.test";
+const TOKEN = "f".repeat(24);
+const FACT_CODE = makeLinkCode({ url: URL_OK, token: TOKEN });
+const SELLER_CODE = makeLinkCode({ url: URL_OK, token: "s".repeat(24) });
+
+const line = (name, qty, unitPrice = 100) => ({ code: name, name, qty, unitPrice });
+const order = (id, customerName, over = {}) => ({
+  id, sellerId: "carlos", sellerName: "Carlos Pérez", date: "2026-10-30", customerName, total: 7200,
+  lines: [line("Parranda 500ml", 40), line("Malta 330ml", 30)],
+  status: "pendiente", rev: 1, modified: false, confirmedAt: null, confirmedBy: null, createdAt: `2026-10-30T0${id.length}:00:00.000Z`, updatedAt: "x", ...over,
+});
+
+let server;
+let calls;
+
+const recount = (seller) => ({
+  ...seller,
+  pending: seller.orders.filter((o) => o.status === "pendiente").length,
+  confirmed: seller.orders.filter((o) => o.status === "confirmado").length,
+});
+
+function installFetch() {
+  calls = [];
+  server = {
+    role: "facturadora",
+    offline: false,
+    sellers: [
+      recount({ id: "carlos", name: "Carlos Pérez", orders: [
+        order("a", "Ana López"),
+        order("b", "Beto Ruiz", { modified: true, total: 8400 }),
+        order("c", "Marta Gil", { status: "confirmado", confirmedBy: "facturadora", confirmedAt: new Date(2026, 9, 30, 10, 12).toISOString() }),
+      ] }),
+      recount({ id: "marta", name: "Marta Díaz", orders: [order("d", "Luis Pérez", { sellerId: "marta", sellerName: "Marta Díaz", date: "2026-10-29" })] }),
+      recount({ id: "rosa", name: "Rosa Vega", orders: [] }),
+    ],
+  };
+  vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+    const path = url.replace(URL_OK, "");
+    calls.push({ method: init.method, path, body: init.body ? JSON.parse(init.body) : undefined });
+    if (server.offline) throw new TypeError("Failed to fetch");
+    const ok = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) });
+    if (path === "/me") return ok({ id: "fact", name: "Facturadora", role: server.role });
+    if (path.startsWith("/orders/confirm") || path.startsWith("/orders/unconfirm")) {
+      const confirming = path.startsWith("/orders/confirm");
+      const ids = JSON.parse(init.body).ids;
+      server.sellers = server.sellers.map((s) => recount({
+        ...s,
+        orders: s.orders.map((o) => (ids.includes(o.id)
+          ? confirming
+            ? { ...o, status: "confirmado", confirmedBy: "facturadora", confirmedAt: new Date(2026, 9, 30, 11, 5).toISOString(), modified: false }
+            : { ...o, status: "pendiente", confirmedBy: null, confirmedAt: null }
+          : o)),
+      }));
+      return ok(confirming ? { confirmed: ids, missing: [] } : { unconfirmed: ids, missing: [] });
+    }
+    if (path.startsWith("/orders")) return ok({ now: "2026-10-30T16:00:00.000Z", sellers: server.sellers });
+    return ok({});
+  }));
+}
+
+function linkStorage() {
+  localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date("2026-10-30T11:00:00"));
+  installFetch();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+const openSeller = async (name) => {
+  fireEvent.click(await screen.findByRole("button", { name: new RegExp(name) }));
+};
+
+describe("facturadora: enlazar", () => {
+  it("sin enlace pide el código", async () => {
+    render(<FacturadoraApp />);
+    expect(await screen.findByLabelText("Código de enlace")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Enlazar" })).toBeTruthy();
+    expect(calls).toEqual([]);
+  });
+
+  it("un código mal escrito o de un vendedor dice por qué", async () => {
+    render(<FacturadoraApp />);
+    fireEvent.change(await screen.findByLabelText("Código de enlace"), { target: { value: "hola" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enlazar" }));
+    expect(await screen.findByText("Ese no es un código de enlace de Procovar.")).toBeTruthy();
+
+    server.role = "vendedor";
+    fireEvent.change(screen.getByLabelText("Código de enlace"), { target: { value: SELLER_CODE } });
+    fireEvent.click(screen.getByRole("button", { name: "Enlazar" }));
+    expect(await screen.findByText("Este código es de un vendedor. Úsalo en la app de ventas.")).toBeTruthy();
+  });
+
+  it("con el código bueno entra y ve a los vendedores", async () => {
+    render(<FacturadoraApp />);
+    fireEvent.change(await screen.findByLabelText("Código de enlace"), { target: { value: FACT_CODE } });
+    fireEvent.click(screen.getByRole("button", { name: "Enlazar" }));
+    expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
+  });
+});
+
+// Sitio web de la facturadora: el enlace personal lleva el código en la dirección
+// (#procovar1:...). Se usa una vez, se guarda y se quita de la barra.
+describe("facturadora: enlace personal en la dirección", () => {
+  afterEach(() => { window.history.replaceState(null, "", "/"); });
+
+  it("entra solo con el código de la dirección y lo quita de la barra", async () => {
+    window.location.hash = `#${FACT_CODE}`;
+    render(<FacturadoraApp />);
+    expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
+    expect(window.location.hash).toBe("");
+    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace")).token).toBe(TOKEN);
+  });
+
+  it("si el código de la dirección es de un vendedor, lo dice y deja pegar otro", async () => {
+    server.role = "vendedor";
+    window.location.hash = `#${SELLER_CODE}`;
+    render(<FacturadoraApp />);
+    expect(await screen.findByText("Este código es de un vendedor. Úsalo en la app de ventas.")).toBeTruthy();
+    expect(screen.getByLabelText("Código de enlace")).toBeTruthy();
+    expect(window.location.hash).toBe("");
+  });
+
+  it("una dirección con un código dañado avisa y muestra el formulario", async () => {
+    window.location.hash = "#procovar1:xxxx";
+    render(<FacturadoraApp />);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByLabelText("Código de enlace")).toBeTruthy();
+  });
+
+  it("si ya estaba enlazada, no vuelve a enlazar con una dirección vieja", async () => {
+    linkStorage();
+    window.location.hash = `#${FACT_CODE}`;
+    render(<FacturadoraApp />);
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    expect(calls.some((c) => c.path === "/me")).toBe(false);
+  });
+});
+
+describe("facturadora: título de la pestaña", () => {
+  it("lleva el número de pedidos por confirmar", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await screen.findByText("3 pedidos por confirmar");
+    await waitFor(() => expect(document.title).toBe("(3) Facturación Procovar"));
+  });
+
+  it("sin pendientes queda sin número", async () => {
+    linkStorage();
+    server.sellers = server.sellers.map((s) => recount({ ...s, orders: s.orders.map((o) => ({ ...o, status: "confirmado", confirmedBy: "facturadora" })) }));
+    render(<FacturadoraApp />);
+    await screen.findByText("Todo confirmado");
+    await waitFor(() => expect(document.title).toBe("Facturación Procovar"));
+  });
+});
+
+describe("facturadora: vendedores", () => {
+  it("lista a los vendedores con cuántos pedidos tiene cada uno sin confirmar", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    const carlos = await screen.findByRole("button", { name: /Carlos Pérez/ });
+    expect(within(carlos).getByText("1 de 3 confirmados")).toBeTruthy();
+    expect(within(carlos).getByText("2")).toBeTruthy();
+    const marta = screen.getByRole("button", { name: /Marta Díaz/ });
+    expect(within(marta).getByText("0 de 1 confirmados")).toBeTruthy();
+    const rosa = screen.getByRole("button", { name: /Rosa Vega/ });
+    expect(within(rosa).getByText("✓")).toBeTruthy();
+  });
+
+  it("dice cuántos hay en total por confirmar", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    expect(await screen.findByText("3 pedidos por confirmar")).toBeTruthy();
+  });
+
+  it("se puede desenlazar", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    fireEvent.click(screen.getByRole("button", { name: "Desenlazar" }));
+    expect(await screen.findByLabelText("Código de enlace")).toBeTruthy();
+    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+  });
+});
+
+describe("facturadora: pedidos de un vendedor", () => {
+  it("muestra los sin confirmar con productos, total y la etiqueta MODIFICADO", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    expect(await screen.findByText("Ana López")).toBeTruthy();
+    expect(screen.getByText("Beto Ruiz")).toBeTruthy();
+    expect(screen.getByText("MODIFICADO")).toBeTruthy();
+    expect(screen.getAllByText("Parranda 500ml ×40").length).toBe(2);
+    expect(screen.getByText("7200 CUP")).toBeTruthy();
+    expect(screen.queryByText("Marta Gil")).toBeNull(); // ya confirmado: solo en "Todos"
+  });
+
+  it("muestra el código y el negocio del cliente para buscarlo en la otra plataforma", async () => {
+    linkStorage();
+    server.sellers[0].orders[0] = order("a", "Ana López", { customerCode: "AB1001", businessName: "Kiosco El Sol" });
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    expect(await screen.findByText("Cód. AB1001")).toBeTruthy();
+    expect(screen.getByText("Kiosco El Sol")).toBeTruthy();
+  });
+
+  it("un pedido sin código ni negocio no muestra esas líneas", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    await screen.findByText("Ana López");
+    expect(screen.queryByText(/^Cód\./)).toBeNull();
+  });
+
+  it("la pestaña Todos incluye los confirmados, con la hora", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    fireEvent.click(await screen.findByRole("button", { name: "Todos" }));
+    expect(await screen.findByText("Marta Gil")).toBeTruthy();
+    expect(screen.getByText("✓ Confirmado a las 10:12")).toBeTruthy();
+  });
+
+  it("un pedido de otro día muestra su fecha", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Marta Díaz");
+    expect(await screen.findByText("Luis Pérez")).toBeTruthy();
+    expect(screen.getByText(/29/)).toBeTruthy();
+  });
+
+  it("👍 Confirmar manda el pedido y lo pasa a confirmado", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    const card = (await screen.findByText("Ana López")).closest("[data-order-id]");
+    fireEvent.click(within(card).getByRole("button", { name: "👍 Confirmar" }));
+    await waitFor(() => expect(calls.some((c) => c.path === "/orders/confirm" && c.body.ids.join() === "a")).toBe(true));
+    await waitFor(() => expect(screen.queryByText("Ana López")).toBeNull());
+    expect(await screen.findByText("Confirmado · se refleja en la app de Carlos Pérez")).toBeTruthy();
+  });
+
+  it("Confirmar todos manda todos los pendientes de ese vendedor", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar todos \(2\)/ }));
+    await waitFor(() => expect(calls.some((c) => c.path === "/orders/confirm" && c.body.ids.join() === "a,b")).toBe(true));
+    expect(await screen.findByText("Todo confirmado por hoy.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Confirmar todos/ })).toBeNull();
+  });
+
+  it("Deshacer vuelve el pedido a sin confirmar", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    const card = (await screen.findByText("Ana López")).closest("[data-order-id]");
+    fireEvent.click(within(card).getByRole("button", { name: "👍 Confirmar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Deshacer" }));
+    await waitFor(() => expect(calls.some((c) => c.path === "/orders/unconfirm" && c.body.ids.join() === "a")).toBe(true));
+    expect(await screen.findByText("Ana López")).toBeTruthy();
+  });
+
+  it("‹ Vendedores vuelve a la lista", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    fireEvent.click(await screen.findByRole("button", { name: /Vendedores/ }));
+    expect(await screen.findByRole("button", { name: /Rosa Vega/ })).toBeTruthy();
+  });
+});
+
+describe("facturadora: sin internet", () => {
+  it("muestra lo último que vio y lo dice", async () => {
+    linkStorage();
+    const first = render(<FacturadoraApp />);
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    first.unmount();
+    server.offline = true;
+    render(<FacturadoraApp />);
+    expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
+    expect(await screen.findByText(/Sin conexión/)).toBeTruthy();
+  });
+
+  it("confirmar sin internet lo deja confirmado y avisa que está pendiente de enviar", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos Pérez");
+    const card = (await screen.findByText("Ana López")).closest("[data-order-id]");
+    server.offline = true;
+    fireEvent.click(within(card).getByRole("button", { name: "👍 Confirmar" }));
+    await waitFor(() => expect(screen.queryByText("Ana López")).toBeNull());
+    expect(await screen.findByText(/1 pendiente de enviar/)).toBeTruthy();
+  });
+});

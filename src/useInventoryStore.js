@@ -1235,6 +1235,7 @@ export function useInventoryStore() {
     setWaitlist(merged.waitlist);
     persist({ ...currentPersistedState, movements: merged.movements, customers: merged.customers, waitlist: merged.waitlist });
   }
+
   // Importación de clientes (clientsImport.js): reemplaza la lista por la que
   // salió del plan ya calculado. No toca pedidos ni movimientos.
   // `merges` ({ keep, drop }): clientes que ya estaban sin código y se parecen a
@@ -1258,6 +1259,20 @@ export function useInventoryStore() {
     );
     setMovements(nextMovements);
     persist({ ...currentPersistedState, movements: nextMovements });
+  }
+
+  // Marca o desmarca "Confirmado" en varios pedidos a la vez. Lo usa la nube de
+  // facturación (useCloudSync), que corre fuera de un toque del usuario: por eso
+  // lee el estado más reciente y no el del último render.
+  function setOrdersConfirmed(orderIds, confirmed) {
+    const idSet = new Set(orderIds);
+    const fresh = latestStateRef.current.currentPersistedState;
+    const nextMovements = latestStateRef.current.movements.map((m) =>
+      idSet.has(m.orderId) && !!m.confirmed !== confirmed ? { ...m, confirmed } : m
+    );
+    syncLatest({ movements: nextMovements });
+    setMovements(nextMovements);
+    persist({ ...fresh, movements: nextMovements });
   }
 
   // Solo informativo -- a diferencia de markOrdersSent, no toca stock ni
@@ -1322,6 +1337,7 @@ export function useInventoryStore() {
     showRecommendations, setShowRecommendationsSetting,
     showPortalCheck, setShowPortalCheckSetting,
     applyProductImport,
+    setOrdersConfirmed,
     lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
     editMode, editInputs, setEditInputs, editPriceInputs, setEditPriceInputs,

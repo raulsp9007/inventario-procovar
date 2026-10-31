@@ -3,3 +3,6 @@ dist
 .DS_Store
 .claude
 .superpowers
+worker/.usuarios.secret.json
+worker/.wrangler
+worker/.dev.vars

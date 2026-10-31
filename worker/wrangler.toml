@@ -1,0 +1,9 @@
+name = "procovar-buzon"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Base de pedidos. El id lo da `wrangler d1 create procovar-buzon` (ver README.md).
+[[d1_databases]]
+binding = "DB"
+database_name = "procovar-buzon"
+database_id = "REEMPLAZA-CON-EL-ID-DE-TU-BASE"

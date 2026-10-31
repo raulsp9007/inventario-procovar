@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 // Commit con el que se construye la app (7 caracteres): en GitHub Actions viene
 // en GITHUB_SHA; en local se pide a git. Se muestra en Configuración para saber
@@ -29,12 +31,34 @@ export default defineConfig(({ mode, isPreview }) => {
     server: {
       port: Number(process.env.PORT) || 5173,
     },
+    // Dos páginas: la app de los vendedores (index.html) y el sitio de la
+    // facturadora (facturadora.html, sin service worker).
+    build: {
+      rollupOptions: {
+        input: {
+          main: fileURLToPath(new URL("./index.html", import.meta.url)),
+          facturadora: fileURLToPath(new URL("./facturadora.html", import.meta.url)),
+        },
+      },
+    },
     test: {
       environment: "jsdom",
       setupFiles: ["./src/setupTests.js"],
     },
     plugins: [
       react(),
+      // El sitio de la facturadora no es la app instalable de los vendedores:
+      // sin su manifest, el navegador no le ofrece instalarla como "Inventario Procovar".
+      {
+        name: "facturadora-sin-manifest",
+        apply: "build",
+        enforce: "post",
+        closeBundle() {
+          const file = fileURLToPath(new URL("./dist/facturadora.html", import.meta.url));
+          if (!existsSync(file)) return;
+          writeFileSync(file, readFileSync(file, "utf8").replace(/<link rel="manifest"[^>]*>/g, ""));
+        },
+      },
       VitePWA({
         // "prompt": la versión nueva se descarga pero NO se activa sola ni
         // recarga la app (autoUpdate lo hacía y podía tirar un formulario a
@@ -48,7 +72,11 @@ export default defineConfig(({ mode, isPreview }) => {
         includeAssets: ["icon-192.png", "icon-512.png"],
         workbox: {
           navigateFallback: `${base}index.html`,
+          // El sitio de la facturadora es otra página: ni se guarda para uso sin
+          // conexión ni la reemplaza la app de los vendedores.
+          navigateFallbackDenylist: [/facturadora\.html$/],
           globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+          globIgnores: ["**/facturadora.html"],
         },
         manifest: {
           name: "Inventario Procovar",
