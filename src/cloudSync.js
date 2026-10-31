@@ -37,18 +37,20 @@ const isWanted = (o) => o.sent && !o.isDelivery;
 // Qué hay que mandar a la nube según los pedidos de la app: subir los nuevos o
 // cambiados, borrar los que ya no van, y confirmar los que el vendedor confirmó
 // a mano. Devuelve las operaciones y el mapa ya actualizado.
-// `minDate` (AAAA-MM-DD): un pedido más viejo que eso no se sube por primera vez
-// (al enlazar no se manda todo el historial); los ya subidos siguen su curso.
-export function reconcile({ orders, products, customers = [], map, minDate }) {
+// `today` (AAAA-MM-DD): solo cuentan los pedidos de "Hoy" (la facturadora ve el día
+// y a las 12 am se limpia). Un pedido de otro día no se sube; si ya estaba subido
+// y su día pasó, se deja quieto (no se borra ni se vuelve a subir). Sin `today`
+// no se filtra por fecha.
+export function reconcile({ orders, products, customers = [], map, today }) {
   const ops = [];
   const nextMap = { ...map };
   const wanted = new Map(orders.filter(isWanted).map((o) => [o.orderId, o]));
 
   wanted.forEach((order, id) => {
+    if (today && order.date !== today) return;
     const content = toCloudContent(order, products, customers);
     const hash = JSON.stringify(content);
     let entry = nextMap[id];
-    if ((!entry || !entry.published) && minDate && order.date < minDate) return;
     if (!entry || !entry.published || entry.hash !== hash) {
       ops.push({ kind: "put", orderId: id, content });
       entry = { hash, published: true, status: "pendiente", confirmedBy: null, confirmedAt: null, appliedAt: null, autoConfirmed: false };

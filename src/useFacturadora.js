@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCloudApi, CloudError } from "./cloudApi";
 import { parseLinkCode } from "./linkCode";
 import { loadCloud, saveCloud, clearCloud } from "./cloudStorage";
-import { overlayOps, totalPending, mergeFactOps } from "./facturadoraData";
+import { overlayOps, totalPending, mergeFactOps, onlyDay } from "./facturadoraData";
+import { todayStr } from "./dateUtils";
 
 // Lógica de la app de la facturadora: lista los pedidos por vendedor, manda su 👍
 // (y el deshacer) y, sin internet, guarda esas operaciones en cola y las muestra
@@ -14,7 +15,10 @@ const MESSAGES = {
   server: "La nube tuvo un problema. Se reintentará.",
 };
 
-export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000, ready = true } = {}) {
+// Solo cuentan los pedidos de "Hoy": se le pide al buzón únicamente desde hoy y lo
+// guardado de otro día no se muestra, así que a las 12 am la lista se limpia sola.
+// `today` (AAAA-MM-DD) se puede fijar para pruebas; por defecto es el día de hoy.
+export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000, ready = true, today } = {}) {
   const [cloud, setCloud] = useState(() => loadCloud());
   const [sellersRaw, setSellersRaw] = useState(() => (loadCloud().data ? loadCloud().data.sellers : []));
   const [status, setStatus] = useState(() => {
@@ -24,6 +28,8 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
   const cloudRef = useRef(cloud);
   const createApiRef = useRef(createApi);
   createApiRef.current = createApi;
+  const todayRef = useRef(today);
+  todayRef.current = today;
   const busyRef = useRef(false);
   const rerunRef = useRef(false);
 
@@ -58,7 +64,7 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     let fetched = false;
     if (!stopped) {
       try {
-        const data = await api.listOrders();
+        const data = await api.listOrders(todayRef.current || todayStr());
         const at = Date.now();
         setSellersRaw(data.sellers);
         commit({ data: { sellers: data.sellers, at } });
@@ -138,7 +144,12 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     setStatus({ phase: "idle", message: "", lastSyncAt: null });
   }, []);
 
-  const sellers = useMemo(() => overlayOps(sellersRaw, cloud.queue, new Date().toISOString()), [sellersRaw, cloud.queue]);
+  // Solo los pedidos de hoy (también lo guardado de ayer deja de verse).
+  const day = today || todayStr();
+  const sellers = useMemo(
+    () => overlayOps(onlyDay(sellersRaw, day), cloud.queue, new Date().toISOString()),
+    [sellersRaw, cloud.queue, day],
+  );
 
   return {
     link: cloud.link,

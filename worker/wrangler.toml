@@ -6,4 +6,4 @@ compatibility_date = "2026-10-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "procovar-buzon"
-database_id = "REEMPLAZA-CON-EL-ID-DE-TU-BASE"
+database_id = "586a89de-d215-49d4-b3e0-a7794bdd43a7"

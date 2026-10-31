@@ -118,18 +118,40 @@ describe("reconcile: qué subir", () => {
     expect(reconcile({ orders: [order({ confirmed: true })], products, map }).ops).toEqual([]);
   });
 
-  it("con una fecha mínima no sube pedidos más viejos (al enlazar no se manda todo el historial)", () => {
-    const old = order({ orderId: "viejo", date: "2026-09-01" });
-    const { ops, nextMap } = reconcile({ orders: [old, order()], products, map: {}, minDate: "2026-10-23" });
-    expect(ops.map((o) => o.orderId)).toEqual(["o1"]);
-    expect(nextMap.viejo).toBeUndefined();
-  });
+  // Solo cuentan los pedidos de "Hoy": el sitio de la facturadora se limpia a las
+  // 12 am, así que ni los viejos ni los de mañana se suben.
+  describe("solo los pedidos de hoy", () => {
+    const TODAY = "2026-10-30";
 
-  it("la fecha mínima no afecta a lo que ya estaba subido (se sigue actualizando y borrando)", () => {
-    const first = reconcile({ orders: [order({ date: "2026-10-01" })], products, map: {} });
-    const edited = order({ date: "2026-10-01", lines: [{ code: "P500", qty: 1, unitPrice: 120 }] });
-    expect(reconcile({ orders: [edited], products, map: first.nextMap, minDate: "2026-10-23" }).ops.map((o) => o.kind)).toEqual(["put"]);
-    expect(reconcile({ orders: [], products, map: first.nextMap, minDate: "2026-10-23" }).ops.map((o) => o.kind)).toEqual(["delete"]);
+    it("sube los de hoy; los de otros días no (ni el historial al enlazar ni los de 'Para mañana')", () => {
+      const old = order({ orderId: "viejo", date: "2026-10-29" });
+      const tomorrow = order({ orderId: "manana", date: "2026-10-31" });
+      const { ops, nextMap } = reconcile({ orders: [old, tomorrow, order()], products, map: {}, today: TODAY });
+      expect(ops.map((o) => o.orderId)).toEqual(["o1"]);
+      expect(nextMap.viejo).toBeUndefined();
+      expect(nextMap.manana).toBeUndefined();
+    });
+
+    it("el de mañana se sube cuando llega su día", () => {
+      const tomorrow = order({ orderId: "manana", date: "2026-10-31" });
+      expect(reconcile({ orders: [tomorrow], products, map: {}, today: "2026-10-31" }).ops.map((o) => o.orderId)).toEqual(["manana"]);
+    });
+
+    it("un pedido ya subido cuyo día pasó se deja quieto: no se borra ni se vuelve a subir", () => {
+      const first = reconcile({ orders: [order()], products, map: {}, today: TODAY });
+      const nextDay = reconcile({ orders: [order()], products, map: first.nextMap, today: "2026-10-31" });
+      expect(nextDay.ops).toEqual([]);
+      expect(nextDay.nextMap.o1).toMatchObject({ published: true, status: "pendiente" });
+      const edited = order({ lines: [{ code: "P500", qty: 1, unitPrice: 120 }] });
+      expect(reconcile({ orders: [edited], products, map: first.nextMap, today: "2026-10-31" }).ops).toEqual([]);
+    });
+
+    it("sigue actualizando y borrando los de hoy", () => {
+      const first = reconcile({ orders: [order()], products, map: {}, today: TODAY });
+      const edited = order({ lines: [{ code: "P500", qty: 1, unitPrice: 120 }] });
+      expect(reconcile({ orders: [edited], products, map: first.nextMap, today: TODAY }).ops.map((o) => o.kind)).toEqual(["put"]);
+      expect(reconcile({ orders: [order({ sent: false })], products, map: first.nextMap, today: TODAY }).ops.map((o) => o.kind)).toEqual(["delete"]);
+    });
   });
 
   it("subir y confirmar a la vez va en ese orden", () => {

@@ -3,7 +3,7 @@ import { createCloudApi, CloudError } from "./cloudApi";
 import { parseLinkCode } from "./linkCode";
 import { loadCloud, saveCloud, clearCloud } from "./cloudStorage";
 import { reconcile, applyStatuses, mergeOps, flushQueue, chipFor } from "./cloudSync";
-import { addDaysStr, todayStr } from "./dateUtils";
+import { todayStr } from "./dateUtils";
 
 // Sincronización del vendedor con la nube de facturación. Orquesta las piezas
 // puras de cloudSync.js: sube lo enviado a facturación, vacía la cola cuando hay
@@ -12,8 +12,7 @@ import { addDaysStr, todayStr } from "./dateUtils";
 // cuenta: ni al enlazar, ni cada rato, ni al volver a la app. Todo se guarda aparte
 // del estado de la app (cloudStorage.js).
 
-// Al enlazar solo se suben pedidos de los últimos días (los que ve la facturadora).
-const WINDOW_DAYS = 7;
+// Solo se suben los pedidos de "Hoy" (los que ve la facturadora; a las 12 am se limpia).
 
 const MESSAGES = {
   network: "Sin conexión. Se enviará al volver.",
@@ -45,9 +44,9 @@ export function useCloudSync({
     const current = cloudRef.current;
     const { orders: latestOrders, products: latestProducts, customers: latestCustomers, createApi: makeApi } = propsRef.current;
     const api = makeApi({ url: current.link.url, token: current.link.token });
-    const minDate = addDaysStr(propsRef.current.today || todayStr(), -WINDOW_DAYS);
+    const today = propsRef.current.today || todayStr();
 
-    const planned = reconcile({ orders: latestOrders, products: latestProducts, customers: latestCustomers, map: current.map, minDate });
+    const planned = reconcile({ orders: latestOrders, products: latestProducts, customers: latestCustomers, map: current.map, today });
     const queue = mergeOps(current.queue, planned.ops);
     commit({ map: planned.nextMap, queue });
 

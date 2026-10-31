@@ -21,8 +21,15 @@ sola el paso **CONF.** de ese pedido. Antes lo marcaba el vendedor a mano.
 ## Reglas
 
 - El vendedor manda el **contenido** del pedido; la facturadora manda el **estado**.
-- Un pedido llega al buzón al marcar **FACT.** (enviado a facturación) y no es
-  domicilio (los domicilios van al supervisor; fuera de la fase 1).
+- Un pedido llega al buzón al marcar **FACT.** (enviado a facturación), si no es
+  domicilio (los domicilios van al supervisor; fuera de la fase 1) y es **de hoy**:
+  los de otros días (viejos o "Para mañana") no se suben; el de mañana se sube
+  cuando llega su día. Un pedido ya subido cuyo día pasó se deja quieto.
+- El sitio de la facturadora solo muestra los pedidos de **hoy** (pide `desde=hoy`
+  y descarta lo guardado de otro día): a las 12 am la lista se limpia sola, aunque
+  quedaran pedidos sin confirmar. La fecha es la del dispositivo (hora de Cuba).
+  Los pedidos de días anteriores siguen en el buzón (60 días), así que el vendedor
+  aún puede comprobar su estado.
 - Estados: `pendiente` → `confirmado` (por la facturadora, o por el vendedor a
   mano) · `cancelado` (el vendedor lo eliminó o lo des-envió).
 - Si el vendedor **cambia el contenido** de un pedido ya enviado: vuelve a

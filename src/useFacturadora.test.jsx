@@ -35,7 +35,7 @@ function fakeCloud() {
 
 function setup(over = {}) {
   const cloud = fakeCloud();
-  const hook = renderHook((props) => useFacturadora(props), { initialProps: { createApi: cloud.createApi, intervalMs: 999999, ...over } });
+  const hook = renderHook((props) => useFacturadora(props), { initialProps: { createApi: cloud.createApi, intervalMs: 999999, today: "2026-10-30", ...over } });
   return { ...cloud, hook };
 }
 
@@ -45,6 +45,37 @@ const linked = async (ctx) => {
 };
 
 beforeEach(() => localStorage.clear());
+
+// Solo cuentan los pedidos de "Hoy": a las 12 am la lista se limpia.
+describe("useFacturadora: solo los pedidos de hoy", () => {
+  it("le pide al buzón únicamente desde hoy", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    expect(ctx.api.listOrders).toHaveBeenCalledWith("2026-10-30");
+  });
+
+  it("no muestra los pedidos de otros días, y los contadores solo cuentan los de hoy", async () => {
+    const ctx = setup();
+    ctx.state.sellers = [
+      { id: "carlos", name: "Carlos Pérez", pending: 2, confirmed: 1, orders: [order("hoy"), order("ayer", { date: "2026-10-29" }), order("ayer-ok", { date: "2026-10-29", status: "confirmado", confirmedBy: "facturadora" })] },
+    ];
+    await linked(ctx);
+    const carlos = ctx.hook.result.current.sellers[0];
+    expect(carlos.orders.map((o) => o.id)).toEqual(["hoy"]);
+    expect(carlos).toMatchObject({ pending: 1, confirmed: 0 });
+    expect(ctx.hook.result.current.totalPending).toBe(1);
+  });
+
+  it("al pasar la medianoche, lo guardado de ayer deja de verse aunque no haya internet", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    expect(ctx.hook.result.current.sellers[0].orders).toHaveLength(2);
+    ctx.hook.unmount();
+    const nextDay = setup({ today: "2026-10-31" });
+    expect(nextDay.hook.result.current.sellers.every((s) => s.orders.length === 0)).toBe(true);
+    expect(nextDay.hook.result.current.totalPending).toBe(0);
+  });
+});
 
 describe("useFacturadora: enlazar", () => {
   it("sin enlace no hace nada", async () => {

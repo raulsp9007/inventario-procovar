@@ -32,7 +32,12 @@ export function overlayOps(sellers, queue, nowIso) {
   return sellers.map((s) => recount({ ...s, orders: s.orders.map((o) => orders.get(o.id)) }));
 }
 
-export const totalPending = (sellers) => sellers.reduce((sum, s) => sum + s.pending, 0);
+// Deja solo los pedidos de un día (AAAA-MM-DD) y vuelve a contar. No modifica lo que recibe.
+export function onlyDay(sellers, day) {
+  return sellers.map((s) => recount({ ...s, orders: s.orders.filter((o) => o.date === day) }));
+}
+
+export const totalPending =(sellers) => sellers.reduce((sum, s) => sum + s.pending, 0);
 
 const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
 const keyOf = (text) => String(text || "").normalize("NFD").replace(DIACRITICS, "").toLowerCase().replace(/\s+/g, " ").trim();

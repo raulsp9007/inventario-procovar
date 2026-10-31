@@ -39,7 +39,7 @@ function installFetch() {
         order("b", "Beto Ruiz", { modified: true, total: 8400 }),
         order("c", "Marta Gil", { status: "confirmado", confirmedBy: "facturadora", confirmedAt: new Date(2026, 9, 30, 10, 12).toISOString() }),
       ] }),
-      recount({ id: "marta", name: "Marta Díaz", orders: [order("d", "Luis Pérez", { sellerId: "marta", sellerName: "Marta Díaz", date: "2026-10-29" })] }),
+      recount({ id: "marta", name: "Marta Díaz", orders: [order("d", "Luis Pérez", { sellerId: "marta", sellerName: "Marta Díaz" })] }),
       recount({ id: "rosa", name: "Rosa Vega", orders: [] }),
     ],
   };
@@ -323,12 +323,20 @@ describe("facturadora: pedidos de un vendedor", () => {
     expect(screen.getByText("✓ Confirmado a las 10:12")).toBeTruthy();
   });
 
-  it("un pedido de otro día muestra su fecha", async () => {
+  it("un pedido de otro día no se muestra: solo cuentan los de hoy", async () => {
+    linkStorage();
+    server.sellers[2] = recount({ id: "rosa", name: "Rosa Vega", orders: [order("v", "Luis Viejo", { sellerId: "rosa", sellerName: "Rosa Vega", date: "2026-10-29" })] });
+    render(<FacturadoraApp />);
+    await openSeller("Rosa Vega");
+    expect(await screen.findByText("Sin pedidos por ahora.")).toBeTruthy();
+    expect(screen.queryByText("Luis Viejo")).toBeNull();
+  });
+
+  it("pide al buzón solo lo de hoy", async () => {
     linkStorage();
     render(<FacturadoraApp />);
-    await openSeller("Marta Díaz");
-    expect(await screen.findByText("Luis Pérez")).toBeTruthy();
-    expect(screen.getByText(/29/)).toBeTruthy();
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    expect(calls.some((c) => c.path === "/orders?desde=2026-10-30")).toBe(true);
   });
 
   it("👍 Confirmar manda el pedido y lo pasa a confirmado", async () => {
