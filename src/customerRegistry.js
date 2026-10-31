@@ -134,6 +134,11 @@ export function getRegistryStats(customers, movements, products) {
       customerName: c.name,
       businessName: c.businessName || "",
       phone: c.phone || "",
+      // Datos que trae la importación de clientes (clientsImport.js).
+      code: c.code || "",
+      address: c.address || "",
+      clientType: c.clientType || "",
+      consumptionType: c.consumptionType || "",
       hasOrders: !!stat,
       favoriteProductCode: stat ? stat.favoriteProductCode : null,
       lastPurchaseDate: stat ? stat.lastPurchaseDate : "",

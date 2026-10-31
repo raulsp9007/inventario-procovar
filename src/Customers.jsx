@@ -4,6 +4,7 @@ import { formatDate, todayStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { getCustomerOrders, getCustomerProductHistory, findNearDuplicateCustomerName, getProductBuyers, cubanPhoneLocalPart } from "./customerHelpers";
 import { getRegistryStats, registryNames, buildVcf } from "./customerRegistry";
+import ClientsImportCard from "./ClientsImportCard.jsx";
 import { shareContactsFile } from "./backup";
 import { customerLabel, businessLabel } from "./nameLabels";
 
@@ -69,7 +70,7 @@ function sortStats(stats, sortBy, buyers) {
 
 const SORT_LABELS = { recent: "Reciente", oldest: "Antiguo", name: "Nombre A-Z", qty: "Más unidades" };
 
-export default function Customers({ products, movements, customers, waitlist, showPrices, sendBusinessName, onToggleSendBusinessName, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData, openCustomer, onOpenCustomerConsumed }) {
+export default function Customers({ products, movements, customers, waitlist, showPrices, sendBusinessName, onToggleSendBusinessName, onUpdateCustomer, onDeleteCustomer, onRestoreCustomerData, onImportCustomers, openCustomer, onOpenCustomerConsumed }) {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [sortBy, setSortBy] = useState("recent");
@@ -209,7 +210,8 @@ export default function Customers({ products, movements, customers, waitlist, sh
   const searched = search.trim()
     ? allStats.filter((c) => {
         const q = search.trim().toLowerCase();
-        return c.customerName.toLowerCase().includes(q) || (c.businessName || "").toLowerCase().includes(q);
+        return c.customerName.toLowerCase().includes(q) || (c.businessName || "").toLowerCase().includes(q)
+          || (c.code || "").toLowerCase().includes(q) || (c.address || "").toLowerCase().includes(q);
       })
     : allStats;
   // Clientes sin teléfono (no se les puede llamar ni mandar WhatsApp): el
@@ -281,6 +283,8 @@ export default function Customers({ products, movements, customers, waitlist, sh
           )}
         </div>
       )}
+
+      {onImportCustomers && <ClientsImportCard customers={customers} onImport={onImportCustomers} />}
 
       {allStats.length > 0 && (
         <div style={{ background: "var(--surface-subtle)", border: "1px solid var(--border)", borderRadius: 12, display: "flex", alignItems: "stretch", marginBottom: 16 }}>
@@ -594,6 +598,13 @@ export default function Customers({ products, movements, customers, waitlist, sh
 
                 {isExpanded && (
                   <div className="expandin" style={{ background: "var(--surface-subtle)", borderTop: "1px solid var(--hairline)", padding: "12px 14px 14px" }}>
+                    {(c.address || c.clientType || c.consumptionType || c.code) && (
+                      <div style={{ display: "grid", gap: 3, fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
+                        {c.address && <div>{c.address}</div>}
+                        {(c.clientType || c.consumptionType) && <div>{[c.clientType, c.consumptionType].filter(Boolean).join(" · ")}</div>}
+                        {c.code && <div style={{ fontSize: 11.5, color: "var(--faint)", fontVariantNumeric: "tabular-nums" }}>{c.code}</div>}
+                      </div>
+                    )}
                     <div style={{ background: "var(--segment-track)", borderRadius: 9, padding: 3, display: "flex", gap: 2, marginBottom: 12, width: "fit-content" }}>
                       <button
                         onClick={() => setModeFor(c.customerName, "pedido")}

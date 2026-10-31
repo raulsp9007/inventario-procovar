@@ -1221,6 +1221,13 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, movements: snapshotMovements, customers: snapshotCustomers, waitlist: snapshotWaitlist });
   }
 
+  // Importación de clientes (clientsImport.js): reemplaza la lista por la que
+  // salió del plan ya calculado. No toca pedidos ni movimientos.
+  function importCustomers(nextCustomers) {
+    setCustomers(nextCustomers);
+    persist({ ...currentPersistedState, customers: nextCustomers });
+  }
+
   function markOrderConfirmed(orderId, confirmed) {
     const nextMovements = movements.map((m) =>
       m.orderId === orderId ? { ...m, confirmed } : m
@@ -1312,6 +1319,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, restoreCustomerData, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
+    updateCustomer, restoreCustomerData, importCustomers, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
   };
 }
