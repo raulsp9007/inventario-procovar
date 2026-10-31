@@ -4,6 +4,7 @@ import { nextBusinessDayStr, formatDateShort, formatDate } from "./dateUtils";
 import { formatCUP, priceToCUP } from "./money";
 import { productChipColors } from "./colorUtils";
 import { getCustomerProductHistory } from "./customerHelpers";
+import CodeField from "./CodeField.jsx";
 
 // El picker de contactos del navegador (Contact Picker API) solo existe en
 // Chrome/Android por ahora -- repetido acá en vez de importado de
@@ -31,6 +32,7 @@ export default function OrderFormModal({
   customerName, onCustomerNameChange,
   businessName, onBusinessNameChange,
   customerPhone, onCustomerPhoneChange,
+  showCodeField, customerCode, onCustomerCodeChange,
   showSuggestions, onShowSuggestions, suggestions, onPickSuggestion,
   showBusinessSuggestions, onShowBusinessSuggestions, businessSuggestions, onPickBusinessSuggestion,
   nearDuplicateName, onUseNearDuplicateName,
@@ -373,6 +375,10 @@ export default function OrderFormModal({
 
             {phonePickerError && (
               <div style={{ fontSize: 12, color: "var(--error-text)" }}>{phonePickerError}</div>
+            )}
+
+            {showCodeField && (
+              <CodeField value={customerCode} onChange={onCustomerCodeChange} background="var(--surface-sunken)" />
             )}
 
             {noteOpen ? (

@@ -155,6 +155,27 @@ describe("Clientes parecidos: fusionar", () => {
     expect(saved().movements.every((m) => m.customerName === "Beto Ruiz")).toBe(true);
   });
 
+  it("se puede eliminar a uno de los dos en vez de fusionar: el otro queda tal cual y el par desaparece", async () => {
+    const panel = await openPanel();
+    const betos = pair(panel, "Beto Ruiz", "Beto R.");
+    fireEvent.click(within(betos).getByRole("button", { name: "Eliminar a Beto R." }));
+    await waitFor(() => expect(saved().customers.some((c) => c.name === "Beto R.")).toBe(false));
+    expect(saved().customers.find((c) => c.name === "Beto Ruiz")).toMatchObject({ businessName: "Cafetería Beto", phone: "5355000001" });
+    expect(saved().customers).toHaveLength(8);
+    expect(await screen.findByText("Beto R. eliminado de Clientes")).toBeTruthy();
+    expect(within(await screen.findByRole("group", { name: "Clientes parecidos" })).queryByRole("group", { name: "Posible duplicado: Beto Ruiz y Beto R." })).toBeNull();
+  });
+
+  it("eliminar de Clientes no borra pedidos, y Deshacer lo devuelve", async () => {
+    const panel = await openPanel();
+    fireEvent.click(within(pair(panel, "Beto Ruiz", "Beto R.")).getByRole("button", { name: "Eliminar a Beto Ruiz" }));
+    await waitFor(() => expect(saved().customers.some((c) => c.name === "Beto Ruiz")).toBe(false));
+    expect(saved().movements.map((m) => m.customerName)).toEqual(["Beto Ruiz", "Beto Ruiz", "Beto R."]);
+    fireEvent.click(await screen.findByRole("button", { name: "Deshacer" }));
+    await waitFor(() => expect(saved().customers.some((c) => c.name === "Beto Ruiz")).toBe(true));
+    expect(saved().customers).toHaveLength(9);
+  });
+
   it("Deshacer deja todo como estaba", async () => {
     const panel = await openPanel();
     fireEvent.click(within(pair(panel, "Beto Ruiz", "Beto R.")).getByRole("button", { name: "Fusionar" }));

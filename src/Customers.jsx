@@ -3,9 +3,10 @@ import { ChevronRight, ChevronDown, Pencil, X, AlertTriangle, Search, Phone, Pho
 import { formatDate, todayStr } from "./dateUtils";
 import { formatCUP } from "./money";
 import { getCustomerOrders, getCustomerProductHistory, findNearDuplicateCustomerName, getProductBuyers, cubanPhoneLocalPart } from "./customerHelpers";
-import { getRegistryStats, registryNames, buildVcf } from "./customerRegistry";
+import { getRegistryStats, registryNames, buildVcf, findCustomerByCode } from "./customerRegistry";
 import ClientsImportCard from "./ClientsImportCard.jsx";
 import SimilarCustomersCard from "./SimilarCustomersCard.jsx";
+import CodeField from "./CodeField.jsx";
 import { shareContactsFile } from "./backup";
 import { customerLabel, businessLabel } from "./nameLabels";
 
@@ -87,6 +88,8 @@ export default function Customers({ products, movements, customers, waitlist, sh
   const [pendingUndo, setPendingUndo] = useState(null); // { message, snapshot, timeoutId } | null
   const [onlyNoPhone, setOnlyNoPhone] = useState(false);
   const [onlyNoCode, setOnlyNoCode] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState("");
   // Qué campo recibe el cursor al abrir la edición: el nombre normalmente, el
   // teléfono cuando se llega desde "Sin tel." de un pedido.
   const [editFocus, setEditFocus] = useState("name");
@@ -101,7 +104,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
     const { name, edit } = openCustomer;
     const target = edit ? allStats.find((c) => c.customerName === name) : null;
     if (target) {
-      startRename(target.customerName, target.businessName, target.phone, "phone");
+      startRename(target.customerName, target.businessName, target.phone, "phone", target.code);
     } else {
       setExpandedCustomer(name);
     }
@@ -109,12 +112,14 @@ export default function Customers({ products, movements, customers, waitlist, sh
     onOpenCustomerConsumed();
   }, [openCustomer, onOpenCustomerConsumed]);
 
-  function startRename(customerName, businessName, phone, focus = "name") {
+  function startRename(customerName, businessName, phone, focus = "name", code = "") {
     setEditFocus(focus);
     setEditingCustomer(customerName);
     setNameInput(customerName);
     setBusinessNameInput(businessName || "");
     setPhoneInput(cubanPhoneLocalPart(phone || ""));
+    setCodeInput(code || "");
+    setCodeError("");
     setPhonePickerError("");
   }
 
@@ -135,8 +140,19 @@ export default function Customers({ products, movements, customers, waitlist, sh
   }
 
   function saveRename(oldName) {
+    // El código solo se manda si de verdad cambió: guardar otra cosa nunca lo toca.
+    const current = customers.find((c) => c.name === oldName);
+    const originalCode = (current && current.code) || "";
+    const codeChanged = codeInput.trim() !== originalCode.trim();
+    if (codeChanged) {
+      const owner = findCustomerByCode(customers, codeInput, oldName);
+      if (owner) {
+        setCodeError(`Ese código ya es de ${owner.name}.`);
+        return;
+      }
+    }
     const snapshot = takeSnapshot();
-    onUpdateCustomer(oldName, nameInput, businessNameInput, phoneInput);
+    onUpdateCustomer(oldName, nameInput, businessNameInput, phoneInput, codeChanged ? codeInput : undefined);
     setEditingCustomer(null);
     showUndo(`Cambios guardados en ${nameInput.trim() || oldName}`, snapshot);
   }
@@ -292,7 +308,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
       {onImportCustomers && <ClientsImportCard customers={customers} onImport={onImportCustomers} onImported={(withoutCode) => setOnlyNoCode(withoutCode > 0)} />}
 
       {onMergeCustomers && (
-        <SimilarCustomersCard customers={customers} movements={movements} waitlist={waitlist} onMerge={onMergeCustomers} onRestore={onRestoreCustomerData} />
+        <SimilarCustomersCard customers={customers} movements={movements} waitlist={waitlist} onMerge={onMergeCustomers} onDelete={onDeleteCustomer} onRestore={onRestoreCustomerData} />
       )}
 
       {allStats.length > 0 && (
@@ -512,6 +528,13 @@ export default function Customers({ products, movements, customers, waitlist, sh
                       <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 10 }}>{phonePickerError}</div>
                     )}
 
+                    <div style={{ marginBottom: codeError ? 4 : 10 }}>
+                      <CodeField value={codeInput} onChange={(next) => { setCodeInput(next); setCodeError(""); }} onEnter={() => saveRename(c.customerName)} />
+                    </div>
+                    {codeError && (
+                      <div role="alert" style={{ fontSize: 12, color: "var(--danger)", marginBottom: 10 }}>{codeError}</div>
+                    )}
+
                     {nearDuplicateName && (
                       <div style={{
                         display: "flex", gap: 8, background: "var(--banner-bg)", border: "1px solid var(--border-warn)",
@@ -574,7 +597,7 @@ export default function Customers({ products, movements, customers, waitlist, sh
                           {customerLabel(c.customerName)}
                         </span>
                         <span
-                          onClick={(e) => { e.stopPropagation(); startRename(c.customerName, c.businessName, c.phone); }}
+                          onClick={(e) => { e.stopPropagation(); startRename(c.customerName, c.businessName, c.phone, "name", c.code); }}
                           title="Editar cliente"
                           role="button"
                           aria-label="Editar cliente"

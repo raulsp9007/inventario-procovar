@@ -897,7 +897,7 @@ export function useInventoryStore() {
   // sale de la lista en el MISMO guardado que el pedido. Hacerlo aparte
   // (otro persist con el estado de este render) pisaría el pedido recién
   // creado con datos viejos.
-  function confirmOrder({ customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate, waitlistEntryId }) {
+  function confirmOrder({ customerName, businessName, customerPhone, customerCode, isDelivery, note, lines, bucket, date: chosenDate, waitlistEntryId }) {
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const committed = bucket === "hoy";
     const date = bucket === "hoy" ? todayStr() : (chosenDate || nextBusinessDayStr());
@@ -924,7 +924,7 @@ export function useInventoryStore() {
     const nextCumulativeRevenue = cumulativeRevenue + addedRevenue;
     const nextCumulativeHl = cumulativeHl + addedHl;
     const nextWaitlist = waitlistEntryId ? waitlist.filter((w) => w.id !== waitlistEntryId) : waitlist;
-    const nextCustomers = upsertCustomer(customers, { name: customerName, businessName, phone: customerPhone });
+    const nextCustomers = upsertCustomer(customers, { name: customerName, businessName, phone: customerPhone, code: customerCode });
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
@@ -1181,7 +1181,8 @@ export function useInventoryStore() {
   // llamar y WhatsApp de cada pedido leen el teléfono del propio pedido.
   // Renombrar también actualiza la lista de espera (guarda el nombre como
   // texto), todo en un solo guardado.
-  function updateCustomer(oldName, newName, businessName, phone) {
+  // El código (el del portal) igual: undefined = no tocarlo; "" = borrarlo.
+  function updateCustomer(oldName, newName, businessName, phone, code) {
     const trimmedName = newName.trim() || oldName;
     const trimmedBusiness = businessName.trim();
     const nextPhone = phone === undefined ? undefined : (phone ? toCubanPhone(phone) : "");
@@ -1190,7 +1191,7 @@ export function useInventoryStore() {
         ? { ...m, customerName: trimmedName, businessName: trimmedBusiness, ...(nextPhone !== undefined ? { customerPhone: nextPhone } : {}) }
         : m
     );
-    const nextCustomers = renameCustomer(customers, oldName, trimmedName, trimmedBusiness, phone);
+    const nextCustomers = renameCustomer(customers, oldName, trimmedName, trimmedBusiness, phone, code);
     const nextWaitlist = trimmedName !== oldName
       ? waitlist.map((w) => (w.customerName === oldName ? { ...w, customerName: trimmedName } : w))
       : waitlist;

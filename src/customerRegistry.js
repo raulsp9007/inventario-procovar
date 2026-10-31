@@ -43,24 +43,38 @@ export function buildRegistryFromMovements(movements) {
 
 // Alta o actualización "suave": un dato vacío no borra el que ya está
 // guardado (un pedido sin teléfono no le quita el teléfono al cliente).
-export function upsertCustomer(customers, { name, businessName, phone }) {
+// `code` (el del portal): a uno nuevo se le da; a uno que ya existe solo se le
+// completa si no tenía, nunca se pisa el que ya tiene (es el dato más importante).
+export function upsertCustomer(customers, { name, businessName, phone, code }) {
   if (!name || name === MANUAL_SALE_NAME) return customers;
   const cleanBusiness = (businessName || "").trim();
   const cleanPhone = phone ? toCubanPhone(phone) : "";
+  const cleanCode = (code || "").trim();
   const idx = customers.findIndex((c) => c.name === name);
   if (idx === -1) {
-    return [...customers, { id: newCustomerId(), name, businessName: cleanBusiness, phone: cleanPhone, createdAt: new Date().toISOString() }];
+    const created = { id: newCustomerId(), name, businessName: cleanBusiness, phone: cleanPhone, createdAt: new Date().toISOString() };
+    if (cleanCode) created.code = cleanCode;
+    return [...customers, created];
   }
   const current = customers[idx];
   const next = { ...current, businessName: cleanBusiness || current.businessName, phone: cleanPhone || current.phone };
-  if (next.businessName === current.businessName && next.phone === current.phone) return customers;
+  if (cleanCode && !current.code) next.code = cleanCode;
+  if (next.businessName === current.businessName && next.phone === current.phone && next.code === current.code) return customers;
   return customers.map((c, i) => (i === idx ? next : c));
+}
+
+// Quién tiene ese código (sin importar mayúsculas ni espacios), o null.
+// `exceptName`: ese cliente no cuenta (para no avisarle de su propio código).
+export function findCustomerByCode(customers, code, exceptName) {
+  const key = String(code || "").trim().toLowerCase();
+  if (!key) return null;
+  return customers.find((c) => c.name !== exceptName && String(c.code || "").trim().toLowerCase() === key) || null;
 }
 
 // Cambio explícito de campos: lo que viene definido pisa lo guardado, aunque
 // sea vacío (así se puede borrar un teléfono). Lo no incluido no se toca.
 // Crea al cliente si todavía no estaba.
-export function patchCustomer(customers, name, { businessName, phone }) {
+export function patchCustomer(customers, name, { businessName, phone, code }) {
   if (!name || name === MANUAL_SALE_NAME) return customers;
   const idx = customers.findIndex((c) => c.name === name);
   const base = idx === -1
@@ -70,6 +84,7 @@ export function patchCustomer(customers, name, { businessName, phone }) {
     ...base,
     businessName: businessName === undefined ? base.businessName : businessName.trim(),
     phone: phone === undefined ? base.phone : (phone ? toCubanPhone(phone) : ""),
+    ...(code === undefined ? {} : { code: String(code).trim() }),
   };
   if (idx === -1) return [...customers, next];
   return customers.map((c, i) => (i === idx ? next : c));
@@ -77,12 +92,14 @@ export function patchCustomer(customers, name, { businessName, phone }) {
 
 // Renombra y/o edita negocio y teléfono. Si el nombre nuevo ya es de OTRO
 // cliente, los fusiona en ese (conserva su id). `phone` undefined = no tocar.
-export function renameCustomer(customers, oldName, newName, businessName, phone) {
+// `code` undefined = no tocar; "" = borrarlo.
+export function renameCustomer(customers, oldName, newName, businessName, phone, code) {
   const name = (newName || "").trim() || oldName;
   const business = (businessName || "").trim();
   const nextPhone = phone === undefined ? undefined : (phone ? toCubanPhone(phone) : "");
+  const nextCode = code === undefined ? undefined : String(code).trim();
   const old = customers.find((c) => c.name === oldName);
-  if (!old) return patchCustomer(customers, name, { businessName: business, phone: nextPhone });
+  if (!old) return patchCustomer(customers, name, { businessName: business, phone: nextPhone, code: nextCode });
 
   const target = name !== oldName ? customers.find((c) => c.name === name) : null;
   if (target) {
@@ -92,11 +109,13 @@ export function renameCustomer(customers, oldName, newName, businessName, phone)
       phone: nextPhone !== undefined ? nextPhone : (target.phone || old.phone),
       createdAt: old.createdAt && old.createdAt < target.createdAt ? old.createdAt : target.createdAt,
     };
+    const mergedCode = nextCode !== undefined ? nextCode : (target.code || old.code);
+    if (mergedCode !== undefined) merged.code = mergedCode;
     return customers.filter((c) => c.name !== oldName).map((c) => (c.name === name ? merged : c));
   }
   return customers.map((c) => (
     c.name === oldName
-      ? { ...c, name, businessName: business, phone: nextPhone !== undefined ? nextPhone : c.phone }
+      ? { ...c, name, businessName: business, phone: nextPhone !== undefined ? nextPhone : c.phone, ...(nextCode !== undefined ? { code: nextCode } : {}) }
       : c
   ));
 }

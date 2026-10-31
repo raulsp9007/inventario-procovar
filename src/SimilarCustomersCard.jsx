@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Users } from "lucide-react";
+import { Users, Trash2 } from "lucide-react";
 import { findSimilarCustomers, pairKey } from "./customerSimilarity";
 import { loadDistinct, saveDistinct } from "./customerDistinct";
 
@@ -49,7 +49,7 @@ function Side({ customer, orders, selected, onSelect }) {
   );
 }
 
-export default function SimilarCustomersCard({ customers, movements, waitlist, onMerge, onRestore }) {
+export default function SimilarCustomersCard({ customers, movements, waitlist, onMerge, onDelete, onRestore }) {
   const [open, setOpen] = useState(false);
   const [showLow, setShowLow] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -97,6 +97,13 @@ export default function SimilarCustomersCard({ customers, movements, waitlist, o
     const snapshot = { movements, customers, waitlist };
     onMerge(keep.name, drop.name);
     setUndo({ snapshot, text: `Fusionados: ${drop.name} → ${keep.name}` });
+  }
+
+  // Quita a uno de Clientes (como "Eliminar cliente" en su ficha): sus pedidos se conservan.
+  function remove(customer) {
+    const snapshot = { movements, customers, waitlist };
+    onDelete(customer.name);
+    setUndo({ snapshot, text: `${customer.name} eliminado de Clientes` });
   }
 
   function notTheSame(pair) {
@@ -150,6 +157,25 @@ export default function SimilarCustomersCard({ customers, movements, waitlist, o
                   <button type="button" style={{ ...buttonStyle, background: "var(--ink)", color: "var(--cream)", borderColor: "var(--ink)" }} onClick={() => merge(pair)}>Fusionar</button>
                   <button type="button" style={buttonStyle} onClick={() => notTheSame(pair)}>No son el mismo</button>
                 </div>
+                {onDelete && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    {[pair.a, pair.b].map((customer) => (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        aria-label={`Eliminar a ${customer.name}`}
+                        onClick={() => remove(customer)}
+                        style={{
+                          flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 4px",
+                          background: "none", border: "none", color: "var(--danger)", fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer",
+                        }}
+                      >
+                        <Trash2 size={12} strokeWidth={2} style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{`Eliminar a ${customer.name}`}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

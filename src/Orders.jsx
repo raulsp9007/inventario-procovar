@@ -8,7 +8,7 @@ import { openPortalSearch } from "./portalLink";
 import { customersToContact, buildCustomerProfile, availableTypical, formatReorderMessage } from "./recommendations";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
-import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness } from "./customerRegistry";
+import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness, findCustomerByCode } from "./customerRegistry";
 import { productChipColors } from "./colorUtils";
 import Today from "./Today.jsx";
 import OrderFormModal from "./OrderFormModal.jsx";
@@ -213,6 +213,8 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  // Código del cliente nuevo (el del portal); solo se ofrece para un cliente que todavía no existe.
+  const [customerCode, setCustomerCode] = useState("");
   const [isDelivery, setIsDelivery] = useState(false);
   const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
@@ -557,10 +559,13 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     }
   }
 
+  const isNewCustomerName = !editingOrderId && !!customerName.trim() && !findRegistryCustomer(customers, customerName.trim());
+
   function resetForm() {
     setCustomerName("");
     setBusinessName("");
     setCustomerPhone("");
+    setCustomerCode("");
     setIsDelivery(false);
     setNote("");
     setDraftLines([]);
@@ -822,7 +827,13 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         reserveDips.push({ code: line.code, name: product ? product.name : line.code, fromReserve: line.qty - Math.max(0, available) });
       }
     }
-    const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
+    const newCode = isNewCustomerName ? customerCode.trim() : "";
+    const codeOwner = newCode ? findCustomerByCode(customers, newCode) : null;
+    if (codeOwner) {
+      onError(`El código ${newCode} ya es de ${codeOwner.name}.`);
+      return;
+    }
+    const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), ...(newCode ? { customerCode: newCode } : {}), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
     // Si alguna línea solo entra usando la reserva, no se manda directo --
     // se avisa primero y se confirma acá mismo (submitDraft con el draft ya
     // armado), en vez de bloquear como si no hubiera stock.
@@ -1727,6 +1738,9 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         onPickBusinessSuggestion={pickBusinessSuggestion}
         customerPhone={customerPhone}
         onCustomerPhoneChange={setCustomerPhone}
+        showCodeField={isNewCustomerName}
+        customerCode={customerCode}
+        onCustomerCodeChange={setCustomerCode}
         showSuggestions={showSuggestions}
         onShowSuggestions={setShowSuggestions}
         suggestions={suggestions}
