@@ -103,26 +103,46 @@ describe("Clientes parecidos: aviso y lista", () => {
 });
 
 describe("Clientes parecidos: fusionar", () => {
-  it("por defecto se conserva el que tiene más pedidos, y el otro se une a él", async () => {
+  // El que ya tiene código viene de la lista del portal (CSV): su nombre y su
+  // código son los buenos. Beto R. tiene código aunque Beto Ruiz tenga más pedidos.
+  it("por defecto se conserva el que ya tiene código (nombre del CSV), aunque el otro tenga más pedidos", async () => {
     const panel = await openPanel();
     const betos = pair(panel, "Beto Ruiz", "Beto R.");
-    expect(within(betos).getByRole("button", { name: "Conservar a Beto Ruiz" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(betos).getByRole("button", { name: "Conservar a Beto R." }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(within(betos).getByRole("button", { name: "Fusionar" }));
-    await waitFor(() => expect(saved().customers.some((c) => c.name === "Beto R.")).toBe(false));
-    const beto = saved().customers.find((c) => c.name === "Beto Ruiz");
-    expect(beto).toMatchObject({ businessName: "Cafetería Beto", phone: "5355000001", code: "BT1" }); // completó el código
-    // Los tres pedidos quedan con Beto Ruiz.
-    expect(saved().movements.map((m) => m.customerName)).toEqual(["Beto Ruiz", "Beto Ruiz", "Beto Ruiz"]);
-    expect(await screen.findByText("Fusionados: Beto R. → Beto Ruiz")).toBeTruthy();
+    await waitFor(() => expect(saved().customers.some((c) => c.name === "Beto Ruiz")).toBe(false));
+    const beto = saved().customers.find((c) => c.name === "Beto R.");
+    expect(beto).toMatchObject({ businessName: "Cafetería Beto", phone: "5355000001", code: "BT1" }); // completó el negocio
+    // Los tres pedidos quedan con el nombre del CSV.
+    expect(saved().movements.map((m) => m.customerName)).toEqual(["Beto R.", "Beto R.", "Beto R."]);
+    expect(await screen.findByText("Fusionados: Beto Ruiz → Beto R.")).toBeTruthy();
+  });
+
+  it("sin código en ninguno, se conserva el que tiene más pedidos", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...saved(),
+      customers: [cust("c1", "Beto Ruiz", { phone: "5355000001" }), cust("c2", "Beto R.", { phone: "5355000001" })],
+    }));
+    const panel = await openPanel();
+    expect(within(pair(panel, "Beto Ruiz", "Beto R.")).getByRole("button", { name: "Conservar a Beto Ruiz" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("con código en los dos, se conserva el que tiene más pedidos", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...saved(),
+      customers: [cust("c1", "Beto Ruiz", { phone: "5355000001", code: "BT9" }), cust("c2", "Beto R.", { phone: "5355000001", code: "BT1" })],
+    }));
+    const panel = await openPanel();
+    expect(within(pair(panel, "Beto Ruiz", "Beto R.")).getByRole("button", { name: "Conservar a Beto Ruiz" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("se puede elegir conservar el otro", async () => {
     const panel = await openPanel();
     const betos = pair(panel, "Beto Ruiz", "Beto R.");
-    fireEvent.click(within(betos).getByRole("button", { name: "Conservar a Beto R." }));
+    fireEvent.click(within(betos).getByRole("button", { name: "Conservar a Beto Ruiz" }));
     fireEvent.click(within(betos).getByRole("button", { name: "Fusionar" }));
-    await waitFor(() => expect(saved().customers.some((c) => c.name === "Beto Ruiz")).toBe(false));
-    expect(saved().movements.every((m) => m.customerName === "Beto R.")).toBe(true);
+    await waitFor(() => expect(saved().customers.some((c) => c.name === "Beto R.")).toBe(false));
+    expect(saved().movements.every((m) => m.customerName === "Beto Ruiz")).toBe(true);
   });
 
   it("Deshacer deja todo como estaba", async () => {

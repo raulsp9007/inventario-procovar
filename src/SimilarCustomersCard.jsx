@@ -76,10 +76,12 @@ export default function SimilarCustomersCard({ customers, movements, waitlist, o
   const visible = pairs.filter((p) => showLow || p.confidence !== "baja");
   const shown = showAll ? visible : visible.slice(0, MAX_PAIRS);
 
-  // Se conserva, por defecto, el que tiene más pedidos; si empatan, el que tiene más datos y es más antiguo.
+  // Se conserva, por defecto, el que ya tiene código (viene de la lista del
+  // portal: su nombre y su código son los buenos). Si los dos o ninguno lo tienen,
+  // el que tiene más pedidos; si empatan, el que tiene más datos y es más antiguo.
   function defaultKeep(pair) {
     const [x, y] = [pair.a, pair.b];
-    const diff = ordersOf(x) - ordersOf(y) || filledCount(x) - filledCount(y);
+    const diff = (x.code ? 1 : 0) - (y.code ? 1 : 0) || ordersOf(x) - ordersOf(y) || filledCount(x) - filledCount(y);
     if (diff !== 0) return diff > 0 ? x : y;
     return (x.createdAt || "") <= (y.createdAt || "") ? x : y;
   }
