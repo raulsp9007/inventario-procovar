@@ -924,7 +924,9 @@ export function useInventoryStore() {
     const nextCumulativeRevenue = cumulativeRevenue + addedRevenue;
     const nextCumulativeHl = cumulativeHl + addedHl;
     const nextWaitlist = waitlistEntryId ? waitlist.filter((w) => w.id !== waitlistEntryId) : waitlist;
-    const nextCustomers = upsertCustomer(customers, { name: customerName, businessName, phone: customerPhone, code: customerCode });
+    let nextCustomers = upsertCustomer(customers, { name: customerName, businessName, phone: customerPhone });
+    // customerCode solo llega si se pidió cambiarlo (lápiz en el pedido): ahí sí pisa el guardado.
+    if (customerCode !== undefined) nextCustomers = patchCustomer(nextCustomers, customerName, { code: customerCode });
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
@@ -988,7 +990,7 @@ export function useInventoryStore() {
   // importar si ya estaba marcado Enviado -- por eso ahí se fuerza `false`.
   // Igual que deleteOrder, también se llama diferida (posponer a mañana desde
   // el aviso de cierre): lee el estado más reciente de la referencia.
-  function editOrder(orderId, { customerName, businessName, customerPhone, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
+  function editOrder(orderId, { customerName, businessName, customerPhone, customerCode, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
     const fresh = latestStateRef.current.currentPersistedState;
     const { movements, stock, cumulativeRevenue, cumulativeHl, prices, products, exchangeRate, customers } = fresh;
     const originalMovements = movements.filter((m) => m.orderId === orderId);
@@ -1055,6 +1057,8 @@ export function useInventoryStore() {
         });
       }
     }
+
+    if (customerCode !== undefined) nextCustomers = patchCustomer(nextCustomers, customerName, { code: customerCode });
 
     syncLatest({ stock: nextStock, movements: nextMovements, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl, customers: nextCustomers });
     setStock(nextStock);

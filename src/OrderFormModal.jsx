@@ -378,7 +378,7 @@ export default function OrderFormModal({
             )}
 
             {showCodeField && (
-              <CodeField value={customerCode} onChange={onCustomerCodeChange} background="var(--surface-sunken)" />
+              <CodeField key={customerName.trim()} value={customerCode} onChange={onCustomerCodeChange} background="var(--surface-sunken)" />
             )}
 
             {noteOpen ? (

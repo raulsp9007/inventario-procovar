@@ -213,8 +213,9 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  // Código del cliente nuevo (el del portal); solo se ofrece para un cliente que todavía no existe.
-  const [customerCode, setCustomerCode] = useState("");
+  // Código del cliente (el del portal): { name, value } solo cuando se tocó el lápiz;
+  // mientras tanto se muestra el guardado y no se cambia nada.
+  const [codeEdit, setCodeEdit] = useState(null);
   const [isDelivery, setIsDelivery] = useState(false);
   const [note, setNote] = useState("");
   const [draftLines, setDraftLines] = useState([]);
@@ -559,13 +560,16 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     }
   }
 
-  const isNewCustomerName = !editingOrderId && !!customerName.trim() && !findRegistryCustomer(customers, customerName.trim());
+  const typedName = customerName.trim();
+  const storedCode = ((typedName && findRegistryCustomer(customers, typedName)) || {}).code || "";
+  const editedCode = codeEdit && codeEdit.name === typedName ? codeEdit.value : null;
+  const shownCode = editedCode !== null ? editedCode : storedCode;
 
   function resetForm() {
     setCustomerName("");
     setBusinessName("");
     setCustomerPhone("");
-    setCustomerCode("");
+    setCodeEdit(null);
     setIsDelivery(false);
     setNote("");
     setDraftLines([]);
@@ -827,13 +831,14 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         reserveDips.push({ code: line.code, name: product ? product.name : line.code, fromReserve: line.qty - Math.max(0, available) });
       }
     }
-    const newCode = isNewCustomerName ? customerCode.trim() : "";
-    const codeOwner = newCode ? findCustomerByCode(customers, newCode) : null;
+    // Solo se manda el código si se tocó el lápiz y de verdad cambió.
+    const wantedCode = editedCode !== null && editedCode.trim() !== storedCode.trim() ? editedCode.trim() : undefined;
+    const codeOwner = wantedCode ? findCustomerByCode(customers, wantedCode, typedName) : null;
     if (codeOwner) {
-      onError(`El código ${newCode} ya es de ${codeOwner.name}.`);
+      onError(`El código ${wantedCode} ya es de ${codeOwner.name}.`);
       return;
     }
-    const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), ...(newCode ? { customerCode: newCode } : {}), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
+    const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), ...(wantedCode !== undefined ? { customerCode: wantedCode } : {}), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
     // Si alguna línea solo entra usando la reserva, no se manda directo --
     // se avisa primero y se confirma acá mismo (submitDraft con el draft ya
     // armado), en vez de bloquear como si no hubiera stock.
@@ -1738,9 +1743,9 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         onPickBusinessSuggestion={pickBusinessSuggestion}
         customerPhone={customerPhone}
         onCustomerPhoneChange={setCustomerPhone}
-        showCodeField={isNewCustomerName}
-        customerCode={customerCode}
-        onCustomerCodeChange={setCustomerCode}
+        showCodeField={!!typedName}
+        customerCode={shownCode}
+        onCustomerCodeChange={(value) => setCodeEdit({ name: typedName, value })}
         showSuggestions={showSuggestions}
         onShowSuggestions={setShowSuggestions}
         suggestions={suggestions}

@@ -116,12 +116,64 @@ describe("Pedido nuevo: código del cliente nuevo", () => {
     expect(within(field).queryByRole("textbox")).toBeNull();
   });
 
-  it("sin nombre, o con un cliente que ya existe, no se ofrece el código", async () => {
+  it("sin nombre no hay campo; con un cliente que ya existe muestra su código, cerrado", async () => {
     seed("pedidos");
     const input = await openForm();
     expect(screen.queryByRole("group", { name: "Código del cliente" })).toBeNull();
     fireEvent.change(input, { target: { value: "Ana López" } });
-    expect(screen.queryByRole("group", { name: "Código del cliente" })).toBeNull();
+    const field = await screen.findByRole("group", { name: "Código del cliente" });
+    expect(within(field).getByText("AB1001")).toBeTruthy();
+    expect(within(field).queryByRole("textbox")).toBeNull();
+    fireEvent.change(input, { target: { value: "Dora Mena" } });
+    expect(within(await screen.findByRole("group", { name: "Código del cliente" })).getByText("Sin código")).toBeTruthy();
+  });
+
+  it("armar el pedido de un cliente que ya tiene código, sin tocar el lápiz, no cambia su código", async () => {
+    seed("pedidos");
+    fireEvent.change(await openForm(), { target: { value: "Ana López" } });
+    addLine();
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar pedido/ }));
+    await waitFor(() => expect(saved().movements).toHaveLength(1));
+    expect(byName("Ana López").code).toBe("AB1001");
+  });
+
+  it("a un cliente que ya existe sin código se le puede poner desde el pedido", async () => {
+    seed("pedidos");
+    fireEvent.change(await openForm(), { target: { value: "Dora Mena" } });
+    const field = await screen.findByRole("group", { name: "Código del cliente" });
+    fireEvent.click(within(field).getByRole("button", { name: "Editar código" }));
+    fireEvent.change(within(field).getByRole("textbox", { name: "Código" }), { target: { value: "DM77" } });
+    addLine();
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar pedido/ }));
+    await waitFor(() => expect(byName("Dora Mena").code).toBe("DM77"));
+  });
+
+  it("y al de uno que ya tiene código se le puede cambiar, a propósito, con el lápiz", async () => {
+    seed("pedidos");
+    fireEvent.change(await openForm(), { target: { value: "Ana López" } });
+    const field = await screen.findByRole("group", { name: "Código del cliente" });
+    fireEvent.click(within(field).getByRole("button", { name: "Editar código" }));
+    expect(within(field).getByRole("textbox", { name: "Código" }).value).toBe("AB1001");
+    fireEvent.change(within(field).getByRole("textbox", { name: "Código" }), { target: { value: "AB2002" } });
+    addLine();
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar pedido/ }));
+    await waitFor(() => expect(byName("Ana López").code).toBe("AB2002"));
+  });
+
+  it("el código escrito para un nombre no se arrastra a otro nombre", async () => {
+    seed("pedidos");
+    const input = await openForm();
+    fireEvent.change(input, { target: { value: "Dora Mena" } });
+    const field = await screen.findByRole("group", { name: "Código del cliente" });
+    fireEvent.click(within(field).getByRole("button", { name: "Editar código" }));
+    fireEvent.change(within(field).getByRole("textbox", { name: "Código" }), { target: { value: "DM77" } });
+    fireEvent.change(input, { target: { value: "Ana López" } });
+    expect(within(await screen.findByRole("group", { name: "Código del cliente" })).getByText("AB1001")).toBeTruthy();
+    addLine();
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar pedido/ }));
+    await waitFor(() => expect(saved().movements).toHaveLength(1));
+    expect(byName("Ana López").code).toBe("AB1001");
+    expect(byName("Dora Mena").code).toBeUndefined();
   });
 
   it("se escribe el código con el lápiz y queda guardado en el cliente nuevo", async () => {
@@ -145,5 +197,49 @@ describe("Pedido nuevo: código del cliente nuevo", () => {
     fireEvent.click(screen.getByRole("button", { name: /Confirmar pedido/ }));
     expect(await screen.findByText("El código BT1 ya es de Beto Ruiz.")).toBeTruthy();
     expect(saved().movements).toHaveLength(0);
+  });
+});
+
+describe("Editar un pedido: código del cliente", () => {
+  const dora = () => ({
+    id: "m-o1", code: "P500", type: "venta", qty: 3, unitPrice: 1, unitHl: 0, date: "2026-10-31",
+    timestamp: "2026-10-31T08:00:00.000Z", orderId: "o1", orderSeq: 1, customerName: "Dora Mena", businessName: "",
+    customerPhone: "", isDelivery: false, note: "", bucket: "hoy", sent: false, confirmed: false, sentToCustomer: false,
+  });
+
+  async function openEditOrder() {
+    seed("pedidos");
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...saved(), movements: [dora()] }));
+    render(<InventoryApp />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar pedido" }));
+    return await screen.findByRole("group", { name: "Código del cliente" });
+  }
+
+  it("al editar un pedido también se ve el código del cliente, cerrado", async () => {
+    const field = await openEditOrder();
+    expect(within(field).getByText("Sin código")).toBeTruthy();
+    expect(within(field).queryByRole("textbox")).toBeNull();
+  });
+
+  it("con el lápiz se le pone el código desde la edición del pedido", async () => {
+    const field = await openEditOrder();
+    fireEvent.click(within(field).getByRole("button", { name: "Editar código" }));
+    fireEvent.change(within(field).getByRole("textbox", { name: "Código" }), { target: { value: "DM77" } });
+    fireEvent.click(screen.getByRole("button", { name: /Guardar cambios/ }));
+    await waitFor(() => expect(byName("Dora Mena").code).toBe("DM77"));
+    expect(saved().movements).toHaveLength(1);
+  });
+
+  it("guardar el pedido sin tocar el lápiz no cambia el código", async () => {
+    seed("pedidos");
+    const withCode = dora();
+    withCode.customerName = "Ana López";
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...saved(), movements: [withCode] }));
+    render(<InventoryApp />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar pedido" }));
+    expect(within(await screen.findByRole("group", { name: "Código del cliente" })).getByText("AB1001")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Guardar cambios/ }));
+    await waitFor(() => expect(saved().movements[0].qty).toBe(3));
+    expect(byName("Ana López").code).toBe("AB1001");
   });
 });
