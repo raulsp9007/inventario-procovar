@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import FacturadoraApp from "./FacturadoraApp";
+
+// La dirección del buzón que trae la página (para entrar con contraseña).
+vi.mock("./cloudConfig", () => ({ CLOUD_URL: "https://buzon.test" }));
 import { makeLinkCode } from "./linkCode";
 
 // App de la facturadora (mismo código, modo ?rol=facturadora): vendedores →
@@ -48,6 +51,7 @@ function installFetch() {
     calls.push({ method: init.method, path, body: init.body ? JSON.parse(init.body) : undefined });
     if (server.offline) throw new TypeError("Failed to fetch");
     const ok = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) });
+    if (server.unauthorized) return { ok: false, status: 401, json: async () => ({ error: "x" }), text: async () => "x" };
     if (path === "/me") return ok({ id: "fact", name: "Facturadora", role: server.role });
     if (path.startsWith("/orders/confirm") || path.startsWith("/orders/unconfirm")) {
       const confirming = path.startsWith("/orders/confirm");
@@ -91,27 +95,48 @@ const openSeller = async (name) => {
 describe("facturadora: enlazar", () => {
   it("sin enlace pide el código", async () => {
     render(<FacturadoraApp />);
-    expect(await screen.findByLabelText("Código de enlace")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Enlazar" })).toBeTruthy();
+    expect(await screen.findByLabelText("Contraseña o código de enlace")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Entrar" })).toBeTruthy();
     expect(calls).toEqual([]);
   });
 
-  it("un código mal escrito o de un vendedor dice por qué", async () => {
+  it("un código dañado o de un vendedor dice por qué", async () => {
     render(<FacturadoraApp />);
-    fireEvent.change(await screen.findByLabelText("Código de enlace"), { target: { value: "hola" } });
-    fireEvent.click(screen.getByRole("button", { name: "Enlazar" }));
-    expect(await screen.findByText("Ese no es un código de enlace de Procovar.")).toBeTruthy();
+    fireEvent.change(await screen.findByLabelText("Contraseña o código de enlace"), { target: { value: "procovar1:xxxx" } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByText("El código de enlace está dañado.")).toBeTruthy();
 
     server.role = "vendedor";
-    fireEvent.change(screen.getByLabelText("Código de enlace"), { target: { value: SELLER_CODE } });
-    fireEvent.click(screen.getByRole("button", { name: "Enlazar" }));
+    fireEvent.change(screen.getByLabelText("Contraseña o código de enlace"), { target: { value: SELLER_CODE } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByText("Este código es de un vendedor. Úsalo en la app de ventas.")).toBeTruthy();
+  });
+
+  it("la contraseña se escribe oculta y se entra con Enter", async () => {
+    render(<FacturadoraApp />);
+    const field = await screen.findByLabelText("Contraseña o código de enlace");
+    expect(field.getAttribute("type")).toBe("password");
+    fireEvent.change(field, { target: { value: TOKEN } });
+    fireEvent.submit(field.closest("form"));
+    expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
+    expect(calls[0].path).toBe("/me");
+    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toMatchObject({ url: URL_OK, token: TOKEN, role: "facturadora" });
+  });
+
+  it("una contraseña equivocada avisa y deja intentar otra vez", async () => {
+    server.unauthorized = true;
+    render(<FacturadoraApp />);
+    const field = await screen.findByLabelText("Contraseña o código de enlace");
+    fireEvent.change(field, { target: { value: "x".repeat(24) } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByText("La contraseña no es correcta.")).toBeTruthy();
+    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
   });
 
   it("con el código bueno entra y ve a los vendedores", async () => {
     render(<FacturadoraApp />);
-    fireEvent.change(await screen.findByLabelText("Código de enlace"), { target: { value: FACT_CODE } });
-    fireEvent.click(screen.getByRole("button", { name: "Enlazar" }));
+    fireEvent.change(await screen.findByLabelText("Contraseña o código de enlace"), { target: { value: FACT_CODE } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
   });
 });
@@ -134,7 +159,7 @@ describe("facturadora: enlace personal en la dirección", () => {
     window.location.hash = `#${SELLER_CODE}`;
     render(<FacturadoraApp />);
     expect(await screen.findByText("Este código es de un vendedor. Úsalo en la app de ventas.")).toBeTruthy();
-    expect(screen.getByLabelText("Código de enlace")).toBeTruthy();
+    expect(screen.getByLabelText("Contraseña o código de enlace")).toBeTruthy();
     expect(window.location.hash).toBe("");
   });
 
@@ -142,7 +167,7 @@ describe("facturadora: enlace personal en la dirección", () => {
     window.location.hash = "#procovar1:xxxx";
     render(<FacturadoraApp />);
     expect(await screen.findByRole("alert")).toBeTruthy();
-    expect(screen.getByLabelText("Código de enlace")).toBeTruthy();
+    expect(screen.getByLabelText("Contraseña o código de enlace")).toBeTruthy();
   });
 
   it("si ya estaba enlazada, no vuelve a enlazar con una dirección vieja", async () => {
@@ -178,9 +203,9 @@ describe("facturadora: inicio con los vendedores actuales", () => {
 
   it("sin enlazar ya muestra a los seis en orden alfabético, y debajo el formulario para enlazar", async () => {
     render(<FacturadoraApp />);
-    await screen.findByLabelText("Código de enlace");
+    await screen.findByLabelText("Contraseña o código de enlace");
     expect(shownNames()).toEqual(CURRENT);
-    expect(screen.getByRole("button", { name: "Enlazar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Entrar" })).toBeTruthy();
     expect(calls).toEqual([]);
   });
 
@@ -248,7 +273,7 @@ describe("facturadora: vendedores", () => {
     render(<FacturadoraApp />);
     await screen.findByRole("button", { name: /Carlos Pérez/ });
     fireEvent.click(screen.getByRole("button", { name: "Desenlazar" }));
-    expect(await screen.findByLabelText("Código de enlace")).toBeTruthy();
+    expect(await screen.findByLabelText("Contraseña o código de enlace")).toBeTruthy();
     expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
   });
 });

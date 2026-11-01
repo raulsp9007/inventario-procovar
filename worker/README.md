@@ -50,7 +50,12 @@ que falta el secreto `USERS` o tiene un error (el mensaje dice cuál).
 - **Vendedor:** Configuración → "Nube de facturación" → pegar el código → Enlazar.
   Para ver lo que confirmó la facturadora, pulsa **Comprobar** (en Pedidos o en
   Configuración); la app no lo hace sola.
-- **Facturadora:** abre su **enlace personal** (el paso 8 lo imprime junto a su código):
+- **Facturadora con contraseña:** abre `…/facturadora.html`, escribe su contraseña y pulsa
+  **Entrar** (el navegador puede recordarla). La contraseña es el código de su usuario en
+  `USERS` (mínimo 20 caracteres; puede ser una frase fácil de recordar). Para cambiarla:
+  edita el `token` de la facturadora en `worker/.usuarios.secret.json`, vuelve a guardar el
+  secreto `USERS` (paso 6) y publica. El código viejo deja de servir.
+- **Facturadora con enlace:** abre su **enlace personal** (el paso 8 lo imprime junto a su código):
   `https://raulsp9007.github.io/inventario-procovar/facturadora.html#CÓDIGO`. La primera vez
   la deja enlazada en ese navegador y quita el código de la barra; después basta abrir
   `…/facturadora.html` (conviene guardarlo en favoritos). No necesita APK. Es un sitio

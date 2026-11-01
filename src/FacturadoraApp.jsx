@@ -87,23 +87,26 @@ function LinkScreen({ onLink, sellers = [], notice = "", onNoticeClear }) {
 
   return (
     <div style={pageStyle}>
-      <Header title="Pedidos por confirmar" subtitle="Enlaza este navegador para ver los pedidos de cada vendedor." />
+      <Header title="Pedidos por confirmar" subtitle="Escribe tu contraseña para ver los pedidos de cada vendedor." />
       <div style={{ ...column, padding: "14px 16px 16px" }}>
         {sellers.map((seller) => <SellerCard key={seller.id} seller={seller} />)}
-        <div style={{ fontSize: 12.5, fontWeight: 600, margin: "16px 0 8px" }}>Enlazar</div>
+        <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, margin: "16px 0 8px" }}>Contraseña</div>
         <input
-          type="text"
-          aria-label="Código de enlace"
-          placeholder="Pega el código de enlace"
+          type="password"
+          aria-label="Contraseña o código de enlace"
+          placeholder="Contraseña"
+          name="password"
+          autoComplete="current-password"
           value={code}
-          autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
           onChange={(e) => { setCode(e.target.value); setError(""); if (onNoticeClear) onNoticeClear(); }}
           style={{ width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 9, padding: "11px 12px", fontSize: 14, background: "var(--surface)", color: "var(--text)", marginBottom: 10 }}
         />
-        <button type="button" onClick={submit} disabled={busy} style={primaryButton}>Enlazar</button>
+        <button type="submit" disabled={busy} style={primaryButton}>Entrar</button>
         {(error || notice) && <div role="alert" style={{ fontSize: 13, color: "var(--error-text)", marginTop: 10 }}>{error || notice}</div>}
+        </form>
       </div>
     </div>
   );

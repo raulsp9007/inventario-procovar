@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeLinkCode, parseLinkCode } from "./linkCode";
+import { makeLinkCode, parseLinkCode, parseAccess } from "./linkCode";
 
 // Código de enlace con la nube de facturación: lleva la dirección del buzón y el
 // código secreto de la persona, para pegarlo una sola vez en Configuración.
@@ -39,5 +39,28 @@ describe("linkCode", () => {
   it("solo admite direcciones https (o localhost)", () => {
     expect(() => makeLinkCode({ url: "http://buzon.example.com", token: TOKEN })).toThrow("La dirección del buzón debe ser https.");
     expect(() => makeLinkCode({ url: URL_OK, token: "corto" })).toThrow("El código secreto es demasiado corto.");
+  });
+});
+
+// La facturadora puede entrar con una contraseña sencilla en vez del código largo:
+// la dirección del buzón ya viene incluida en la página.
+describe("parseAccess (código de enlace o contraseña)", () => {
+  const DEFAULT_URL = "https://procovar-buzon.cuenta.workers.dev";
+
+  it("un código de enlace se lee como siempre", () => {
+    const code = makeLinkCode({ url: URL_OK, token: TOKEN });
+    expect(parseAccess(code, DEFAULT_URL)).toEqual({ url: URL_OK, token: TOKEN });
+  });
+
+  it("cualquier otro texto es la contraseña y usa la dirección de la página", () => {
+    expect(parseAccess("  mi clave larga 2026  ", DEFAULT_URL)).toEqual({ url: DEFAULT_URL, token: "mi clave larga 2026" });
+  });
+
+  it("vacío pide escribir la contraseña", () => {
+    expect(() => parseAccess("   ", DEFAULT_URL)).toThrow("Escribe la contraseña.");
+  });
+
+  it("un código de enlace dañado sigue avisando que está dañado", () => {
+    expect(() => parseAccess("procovar1:xxxx", DEFAULT_URL)).toThrow("El código de enlace está dañado.");
   });
 });

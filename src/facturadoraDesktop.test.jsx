@@ -283,6 +283,6 @@ describe("escritorio: sigue habiendo vista de teléfono", () => {
   it("sin enlazar, en escritorio también se ve la pantalla para enlazar", async () => {
     localStorage.clear();
     render(<FacturadoraApp />);
-    expect(await screen.findByLabelText("Código de enlace")).toBeTruthy();
+    expect(await screen.findByLabelText("Contraseña o código de enlace")).toBeTruthy();
   });
 });

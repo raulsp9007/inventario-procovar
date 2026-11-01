@@ -94,6 +94,20 @@ describe("useFacturadora: enlazar", () => {
     expect(ctx.hook.result.current.phase).toBe("ok");
   });
 
+  it("con la contraseña (sin código de enlace) entra usando la dirección de la página", async () => {
+    const ctx = setup({ cloudUrl: URL_OK });
+    await act(async () => { await ctx.hook.result.current.linkWith("  frase de la facturadora 2026  "); });
+    expect(ctx.createApi).toHaveBeenCalledWith({ url: URL_OK, token: "frase de la facturadora 2026" });
+    expect(ctx.hook.result.current.link).toMatchObject({ url: URL_OK, token: "frase de la facturadora 2026", role: "facturadora" });
+  });
+
+  it("una contraseña equivocada lo dice con esas palabras", async () => {
+    const ctx = setup({ cloudUrl: URL_OK });
+    ctx.api.me.mockRejectedValueOnce(new CloudError("auth", 401, "El código de enlace ya no sirve."));
+    await expect(act(async () => { await ctx.hook.result.current.linkWith("otra cosa"); })).rejects.toThrow("La contraseña no es correcta.");
+    expect(ctx.hook.result.current.link).toBeNull();
+  });
+
   it("el código de un vendedor no sirve acá", async () => {
     const ctx = setup();
     ctx.state.role = "vendedor";

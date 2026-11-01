@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCloudApi, CloudError } from "./cloudApi";
-import { parseLinkCode } from "./linkCode";
+import { parseAccess } from "./linkCode";
+import { CLOUD_URL } from "./cloudConfig";
 import { loadCloud, saveCloud, clearCloud } from "./cloudStorage";
 import { overlayOps, totalPending, mergeFactOps, onlyDay } from "./facturadoraData";
 import { todayStr } from "./dateUtils";
@@ -18,7 +19,7 @@ const MESSAGES = {
 // Solo cuentan los pedidos de "Hoy": se le pide al buzón únicamente desde hoy y lo
 // guardado de otro día no se muestra, así que a las 12 am la lista se limpia sola.
 // `today` (AAAA-MM-DD) se puede fijar para pruebas; por defecto es el día de hoy.
-export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000, ready = true, today } = {}) {
+export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000, ready = true, today, cloudUrl = CLOUD_URL } = {}) {
   const [cloud, setCloud] = useState(() => loadCloud());
   const [sellersRaw, setSellersRaw] = useState(() => (loadCloud().data ? loadCloud().data.sellers : []));
   const [status, setStatus] = useState(() => {
@@ -128,13 +129,19 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
   const unconfirm = useCallback((ids) => operate("unconfirm", ids), [operate]);
 
   const linkWith = useCallback(async (code) => {
-    const { url, token } = parseLinkCode(code);
-    const me = await createApiRef.current({ url, token }).me();
+    const { url, token } = parseAccess(code, cloudUrl);
+    let me;
+    try {
+      me = await createApiRef.current({ url, token }).me();
+    } catch (e) {
+      if (e instanceof CloudError && e.kind === "auth") throw new Error("La contraseña no es correcta.");
+      throw e;
+    }
     if (me.role !== "facturadora") throw new Error("Este código es de un vendedor. Úsalo en la app de ventas.");
     commit({ link: { url, token, name: me.name, role: me.role }, queue: [], data: null });
     setSellersRaw([]);
     setStatus({ phase: "idle", message: "", lastSyncAt: null });
-  }, [commit]);
+  }, [commit, cloudUrl]);
 
   const unlink = useCallback(() => {
     clearCloud();

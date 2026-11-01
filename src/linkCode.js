@@ -43,3 +43,12 @@ export function parseLinkCode(text) {
   if (!data || typeof data.u !== "string" || typeof data.t !== "string") throw new Error("El código de enlace está incompleto.");
   return { url: cleanUrl(data.u), token: data.t };
 }
+
+// La facturadora puede escribir el código de enlace completo o solo su contraseña: en
+// ese caso la dirección del buzón es la que trae la página (`defaultUrl`).
+export function parseAccess(text, defaultUrl) {
+  const value = String(text || "").trim();
+  if (!value) throw new Error("Escribe la contraseña.");
+  if (value.startsWith(PREFIX)) return parseLinkCode(value);
+  return { url: cleanUrl(defaultUrl), token: value };
+}
