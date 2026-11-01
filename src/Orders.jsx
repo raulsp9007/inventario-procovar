@@ -638,8 +638,10 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
   }
 
   // Abre el portal de pedidos ya buscando al cliente del pedido que se arma.
+  // Primero el código del cliente (el guardado, o el que se ve en el campo Código del
+  // pedido); si no tiene, su nombre.
   function checkCustomerInPortal() {
-    openPortalSearch(customerName);
+    openPortalSearch(shownCode.trim() || customerName);
   }
 
   function useFormSuggestion() {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import InventoryApp from "./InventoryApp";
 
 // "Comprobar en el portal": en el pedido nuevo, con un cliente escrito, un
@@ -84,6 +84,72 @@ describe("Comprobar en el portal (pedido nuevo)", () => {
     expect(openSpy).toHaveBeenCalledTimes(2);
     expect(openSpy.mock.calls[0][1]).toBe(openSpy.mock.calls[1][1]);
     expect(openSpy.mock.calls[1][0]).toContain("buscar=Beto%20Ruiz");
+  });
+
+  // Primero el código del cliente (es lo que mejor lo encuentra en el portal);
+  // si no tiene, su nombre.
+  describe("qué busca: primero el código, luego el nombre", () => {
+    const customers = [
+      { id: "a", name: "Ana López", businessName: "", phone: "", createdAt: "2026-01-01T00:00:00.000Z", code: "LT05TCP0932" },
+      { id: "b", name: "Beto Ruiz", businessName: "", phone: "", createdAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    const urlOf = () => openSpy.mock.calls[openSpy.mock.calls.length - 1][0];
+    const typeCode = async (value) => {
+      const field = await screen.findByRole("group", { name: "Código del cliente" });
+      fireEvent.click(within(field).getByRole("button", { name: "Editar código" }));
+      fireEvent.change(within(field).getByRole("textbox", { name: "Código" }), { target: { value } });
+    };
+
+    it("un cliente guardado con código: busca por su código", async () => {
+      seed("pedidos", { customers });
+      const input = await openForm();
+      fireEvent.change(input, { target: { value: "Ana López" } });
+      fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=LT05TCP0932");
+    });
+
+    it("un cliente guardado sin código: busca por su nombre", async () => {
+      seed("pedidos", { customers });
+      const input = await openForm();
+      fireEvent.change(input, { target: { value: "Beto Ruiz" } });
+      fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Beto%20Ruiz");
+    });
+
+    it("un cliente nuevo con el código que se escribió en el pedido: busca por ese código", async () => {
+      seed("pedidos", { customers });
+      const input = await openForm();
+      fireEvent.change(input, { target: { value: "Gina Paz" } });
+      await typeCode(" LT05TCP0777 ");
+      fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=LT05TCP0777");
+    });
+
+    it("si se cambia el código en el pedido, manda el que se ve (no el guardado)", async () => {
+      seed("pedidos", { customers });
+      const input = await openForm();
+      fireEvent.change(input, { target: { value: "Ana López" } });
+      await typeCode("LT05TCP0001");
+      fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=LT05TCP0001");
+    });
+
+    it("si se borra el código en el pedido, vuelve a buscar por el nombre", async () => {
+      seed("pedidos", { customers });
+      const input = await openForm();
+      fireEvent.change(input, { target: { value: "Ana López" } });
+      await typeCode("   ");
+      fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana%20L%C3%B3pez");
+    });
+
+    it("sigue abriendo la misma ventana pequeña", async () => {
+      seed("pedidos", { customers });
+      const input = await openForm();
+      fireEvent.change(input, { target: { value: "Ana López" } });
+      fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+      expect(openSpy.mock.calls[0].slice(1)).toEqual(["procovar-portal", "popup,width=480,height=820"]);
+    });
   });
 
   it("no cambia el pedido que se está armando", async () => {
