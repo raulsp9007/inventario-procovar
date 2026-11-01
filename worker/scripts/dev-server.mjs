@@ -17,6 +17,7 @@ export const demoUsers = [
   { id: "marta", name: "Marta Díaz", role: "vendedor", token: "demo-marta-0123456789abcdefg" },
   { id: "rosa", name: "Rosa Vega", role: "vendedor", token: "demo-rosa-0123456789abcdefgh" },
   { id: "facturadora", name: "Facturadora", role: "facturadora", token: "demo-factura-0123456789abcdef" },
+  { id: "admin", name: "Administrador", role: "admin", token: "demo-admin-0123456789abcdefghi" },
 ];
 
 const store = createMemoryStore();

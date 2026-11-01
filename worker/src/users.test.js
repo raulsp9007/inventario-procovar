@@ -19,6 +19,19 @@ describe("parseUsers", () => {
     expect(users).toEqual(good);
   });
 
+  it("acepta un administrador (rol admin), a lo sumo uno", () => {
+    const admin = { id: "admin", name: "Administrador", role: "admin", token: token(3) };
+    const ok = parseUsers(JSON.stringify([...good, admin]));
+    expect(ok.errors).toEqual([]);
+    expect(ok.users).toEqual([...good, admin]);
+    const two = parseUsers(JSON.stringify([...good, admin, { ...admin, id: "admin2", token: token(4) }]));
+    expect(two.errors).toContain("Solo puede haber un administrador.");
+  });
+
+  it("sin administrador sigue funcionando (es opcional)", () => {
+    expect(parseUsers(JSON.stringify(good)).errors).toEqual([]);
+  });
+
   it("sin secreto o con algo que no es una lista, avisa", () => {
     expect(parseUsers(undefined).errors[0]).toMatch(/USERS/);
     expect(parseUsers("no json").errors[0]).toMatch(/JSON/);

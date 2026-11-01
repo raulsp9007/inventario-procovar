@@ -2,9 +2,17 @@
 // y sirve para probar la API sin base de datos.
 export function createMemoryStore() {
   const orders = new Map();
+  const vendors = new Map();
   const copy = (o) => (o ? JSON.parse(JSON.stringify(o)) : null);
 
   return {
+    // Vendedores que maneja el administrador (ver roster.js).
+    async listVendors() {
+      return [...vendors.values()].map(copy);
+    },
+    async putVendor(vendor) {
+      vendors.set(vendor.id, copy(vendor));
+    },
     async get(id) {
       return copy(orders.get(id));
     },

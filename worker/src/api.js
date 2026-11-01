@@ -2,6 +2,8 @@
 // recibe la petición, el almacén, los usuarios y el reloj; devuelve la respuesta.
 // Ver docs/superpowers/specs/2026-10-30-facturacion-nube-design.md.
 
+import { mergeUsers, vendorsView, freeId, nameKey } from "./roster.js";
+
 const ALLOWED_ORIGINS = ["https://raulsp9007.github.io"];
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
@@ -103,7 +105,24 @@ async function readJson(request) {
   }
 }
 
-export async function handleRequest(request, { store, users, now }) {
+// Código nuevo para un vendedor: 24 bytes al azar en base64url (32 caracteres).
+function randomToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+const NAME_MAX = 40;
+
+// Nombre de vendedor: texto con espacios simples, de 1 a 40 caracteres.
+function parseVendorName(value) {
+  const name = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (!name) return { error: "Falta el nombre del vendedor." };
+  if (name.length > NAME_MAX) return { error: `El nombre es demasiado largo (máximo ${NAME_MAX} caracteres).` };
+  return { name };
+}
+
+// `makeToken` se puede cambiar en las pruebas.
+export async function handleRequest(request, { store, users, now, makeToken = randomToken }) {
   const origin = request.headers.get("Origin");
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -111,7 +130,9 @@ export async function handleRequest(request, { store, users, now }) {
 
   if (method === "OPTIONS") return reply(origin, null, 204);
 
-  const user = authenticate(request, users);
+  // Quién tiene acceso: los del secreto + los vendedores que maneja el administrador.
+  const roster = mergeUsers(users, await store.listVendors());
+  const user = authenticate(request, roster.filter((u) => u.active));
   if (!user) return fail(origin, 401, "Código no válido.");
   const only = (role) => (user.role === role ? null : fail(origin, 403, "Esto no es para tu usuario."));
   const stamp = now();
@@ -196,7 +217,7 @@ export async function handleRequest(request, { store, users, now }) {
       ? requested
       : new Date(new Date(stamp).getTime() - DEFAULT_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10);
     const orders = await store.listFrom(desde);
-    const sellers = users.filter((u) => u.role === "vendedor").map((seller) => {
+    const sellers = roster.filter((u) => u.role === "vendedor" && u.active).map((seller) => {
       const mine = orders.filter((o) => o.sellerId === seller.id).sort(byRecent);
       return {
         id: seller.id, name: seller.name,
@@ -231,6 +252,81 @@ export async function handleRequest(request, { store, users, now }) {
       }
     }
     return reply(origin, path === "/orders/confirm" ? { confirmed: done, missing } : { unconfirmed: done, missing });
+  }
+
+  // ----- administrador: la lista de vendedores -----
+  if (path === "/admin/vendors" || path.startsWith("/admin/vendors/")) {
+    const denied = only("admin");
+    if (denied) return denied;
+
+    const view = (id) => vendorsView(mergeUsers(users, vendorsSnapshot)).find((v) => v.id === id);
+    // La lista tal como estaba al empezar, más lo que se guarde en esta petición.
+    let vendorsSnapshot = roster.filter((u) => u.source === "db").map((u) => ({ id: u.id, name: u.name, token: u.token, active: u.active, createdAt: u.createdAt, updatedAt: u.updatedAt }));
+    const save = async (vendor) => {
+      await store.putVendor(vendor);
+      vendorsSnapshot = [...vendorsSnapshot.filter((v) => v.id !== vendor.id), vendor];
+    };
+    const found = (id) => roster.find((u) => u.id === id && u.role === "vendedor");
+    // Lo que se guarda en la base de un vendedor (también de uno que venía solo del secreto).
+    const asRecord = (u, patch) => ({
+      id: u.id, name: u.name, token: u.token, active: u.active, createdAt: u.createdAt || stamp, updatedAt: stamp, ...patch,
+    });
+    const nameTaken = (name, exceptId) => roster.some((u) => u.role === "vendedor" && u.id !== exceptId && nameKey(u.name) === nameKey(name));
+
+    if (method === "GET" && path === "/admin/vendors") {
+      const fact = roster.find((u) => u.role === "facturadora");
+      return reply(origin, {
+        vendors: vendorsView(roster),
+        facturadora: fact ? { id: fact.id, name: fact.name, token: fact.token } : null,
+      });
+    }
+
+    if (method === "POST" && path === "/admin/vendors") {
+      const read = await readJson(request);
+      if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
+      const parsed = parseVendorName(read.body && read.body.name);
+      if (parsed.error) return fail(origin, 400, parsed.error);
+      if (nameTaken(parsed.name, null)) return fail(origin, 409, "Ya hay un vendedor con ese nombre.");
+      let token = makeToken();
+      while (roster.some((u) => u.token === token)) token = makeToken();
+      const id = freeId(parsed.name, roster);
+      await save({ id, name: parsed.name, token, active: true, createdAt: stamp, updatedAt: stamp });
+      return reply(origin, view(id));
+    }
+
+    const one = path.match(/^\/admin\/vendors\/([^/]+)$/);
+    const regenerate = path.match(/^\/admin\/vendors\/([^/]+)\/regenerate$/);
+
+    if (method === "PUT" && one) {
+      const current = found(decodeURIComponent(one[1]));
+      if (!current) return fail(origin, 404, "No existe ese vendedor.");
+      const read = await readJson(request);
+      if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
+      const body = read.body || {};
+      const patch = {};
+      if (body.name !== undefined) {
+        const parsed = parseVendorName(body.name);
+        if (parsed.error) return fail(origin, 400, parsed.error);
+        if (nameTaken(parsed.name, current.id)) return fail(origin, 409, "Ya hay un vendedor con ese nombre.");
+        patch.name = parsed.name;
+      }
+      if (body.active !== undefined) {
+        if (typeof body.active !== "boolean") return fail(origin, 400, "Activo debe ser verdadero o falso.");
+        patch.active = body.active;
+      }
+      if (Object.keys(patch).length === 0) return fail(origin, 400, "No hay nada que cambiar.");
+      await save(asRecord(current, patch));
+      return reply(origin, view(current.id));
+    }
+
+    if (method === "POST" && regenerate) {
+      const current = found(decodeURIComponent(regenerate[1]));
+      if (!current) return fail(origin, 404, "No existe ese vendedor.");
+      let token = makeToken();
+      while (roster.some((u) => u.token === token)) token = makeToken();
+      await save(asRecord(current, { token }));
+      return reply(origin, view(current.id));
+    }
   }
 
   return fail(origin, 404, "No existe esa ruta.");

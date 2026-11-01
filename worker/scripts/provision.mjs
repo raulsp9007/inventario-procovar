@@ -10,7 +10,7 @@
 // que la segunda ejecución reutilice los mismos y no cambie nada.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { generateUsers, buildLinks } from "../src/provision.js";
+import { generateUsers, buildLinks, ensureAdmin } from "../src/provision.js";
 import { parseUsers } from "../src/users.js";
 
 const FILE = fileURLToPath(new URL("../.usuarios.secret.json", import.meta.url));
@@ -41,14 +41,24 @@ if (existsSync(FILE)) {
   console.log(`Códigos nuevos guardados en ${FILE} (no lo compartas ni lo subas a git).\n`);
 }
 
+// El administrador (opcional en el buzón, pero hace falta para el sitio admin.html).
+// Si el archivo no lo tenía, se agrega SIN cambiar los códigos que ya se entregaron.
+const withAdmin = ensureAdmin(users, arg("admin") || "Administrador");
+if (withAdmin.added) {
+  users = withAdmin.users;
+  writeFileSync(FILE, JSON.stringify(users, null, 2));
+  console.log("Se agregó al administrador. IMPORTANTE: vuelve a guardar el secreto USERS en Cloudflare (los demás códigos no cambian).\n");
+}
+
 console.log("== Secreto USERS (cópialo entero cuando `wrangler secret put USERS` te lo pida) ==");
 console.log(JSON.stringify(users));
 
 const url = arg("url");
 if (url) {
   const site = arg("sitio") || "https://raulsp9007.github.io/inventario-procovar/facturadora.html";
+  const adminSite = arg("sitio-admin") || "https://raulsp9007.github.io/inventario-procovar/admin.html";
   console.log("\n== Códigos de enlace (uno por persona; los vendedores lo pegan en Configuración) ==");
-  buildLinks(users, url, site).forEach((l) => {
+  buildLinks(users, url, site, adminSite).forEach((l) => {
     console.log(`\n${l.name} (${l.role}):\n${l.code}`);
     if (l.siteLink) console.log(`\nEnlace personal del sitio (se lo mandas a ${l.name}; lo abre y queda entrada):\n${l.siteLink}`);
   });

@@ -10,6 +10,25 @@
     <meta name="copyright" content="© 2026 Raúl Salgado Peña (raulsp9007). Todos los derechos reservados." />
     <link rel="icon" type="image/png" href="/icon-192.png" />
     <title>Facturación Procovar</title>
+    <script data-guard>
+      // Si falla la carga de un script o de los estilos (HTML viejo en caché que pide
+      // archivos que ya no existen), se recarga UNA vez saltándose la caché.
+      (function () {
+        var KEY = "procovar-recarga-cache";
+        window.addEventListener("error", function (e) {
+          var t = e && e.target;
+          if (!t || (t.tagName !== "SCRIPT" && t.tagName !== "LINK")) return;
+          try {
+            if (sessionStorage.getItem(KEY)) return;
+            sessionStorage.setItem(KEY, "1");
+          } catch (x) {
+            return;
+          }
+          var again = function () { location.reload(); };
+          try { fetch(location.href, { cache: "reload" }).then(again, again); } catch (x) { again(); }
+        }, true);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

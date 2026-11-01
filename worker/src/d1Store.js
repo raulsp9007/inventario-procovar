@@ -25,7 +25,18 @@ export function createD1Store(db) {
   const updates = COLUMNS.filter((c) => c !== "id").map((c) => `${c} = excluded.${c}`).join(", ");
   const upsert = `INSERT INTO orders (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")}) ON CONFLICT(id) DO UPDATE SET ${updates}`;
 
+  const vendorUpsert = "INSERT INTO vendors (id, name, token, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) "
+    + "ON CONFLICT(id) DO UPDATE SET name = excluded.name, token = excluded.token, active = excluded.active, updated_at = excluded.updated_at";
+
   return {
+    // Vendedores que maneja el administrador (ver roster.js).
+    async listVendors() {
+      const { results } = await db.prepare("SELECT * FROM vendors ORDER BY created_at, id").bind().all();
+      return results.map((r) => ({ id: r.id, name: r.name, token: r.token, active: !!r.active, createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+    async putVendor(v) {
+      await db.prepare(vendorUpsert).bind(v.id, v.name, v.token, v.active ? 1 : 0, v.createdAt, v.updatedAt).run();
+    },
     async get(id) {
       return fromRow(await db.prepare("SELECT * FROM orders WHERE id = ?").bind(id).first());
     },

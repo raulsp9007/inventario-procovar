@@ -31,13 +31,14 @@ export default defineConfig(({ mode, isPreview }) => {
     server: {
       port: Number(process.env.PORT) || 5173,
     },
-    // Dos páginas: la app de los vendedores (index.html) y el sitio de la
-    // facturadora (facturadora.html, sin service worker).
+    // Tres páginas: la app de los vendedores (index.html), el sitio de la facturadora
+    // (facturadora.html) y el de administración (admin.html), estos dos sin service worker.
     build: {
       rollupOptions: {
         input: {
           main: fileURLToPath(new URL("./index.html", import.meta.url)),
           facturadora: fileURLToPath(new URL("./facturadora.html", import.meta.url)),
+          admin: fileURLToPath(new URL("./admin.html", import.meta.url)),
         },
       },
     },
@@ -47,16 +48,19 @@ export default defineConfig(({ mode, isPreview }) => {
     },
     plugins: [
       react(),
-      // El sitio de la facturadora no es la app instalable de los vendedores:
-      // sin su manifest, el navegador no le ofrece instalarla como "Inventario Procovar".
+      // Los sitios de la facturadora y de administración no son la app instalable de
+      // los vendedores: sin su manifest, el navegador no les ofrece instalarse como
+      // "Inventario Procovar".
       {
-        name: "facturadora-sin-manifest",
+        name: "paginas-sueltas-sin-manifest",
         apply: "build",
         enforce: "post",
         closeBundle() {
-          const file = fileURLToPath(new URL("./dist/facturadora.html", import.meta.url));
-          if (!existsSync(file)) return;
-          writeFileSync(file, readFileSync(file, "utf8").replace(/<link rel="manifest"[^>]*>/g, ""));
+          ["facturadora.html", "admin.html"].forEach((page) => {
+            const file = fileURLToPath(new URL(`./dist/${page}`, import.meta.url));
+            if (!existsSync(file)) return;
+            writeFileSync(file, readFileSync(file, "utf8").replace(/<link rel="manifest"[^>]*>/g, ""));
+          });
         },
       },
       VitePWA({
@@ -74,9 +78,9 @@ export default defineConfig(({ mode, isPreview }) => {
           navigateFallback: `${base}index.html`,
           // El sitio de la facturadora es otra página: ni se guarda para uso sin
           // conexión ni la reemplaza la app de los vendedores.
-          navigateFallbackDenylist: [/facturadora\.html$/],
+          navigateFallbackDenylist: [/(facturadora|admin)\.html$/],
           globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-          globIgnores: ["**/facturadora.html"],
+          globIgnores: ["**/facturadora.html", "**/admin.html"],
         },
         manifest: {
           name: "Inventario Procovar",

@@ -184,17 +184,31 @@ describe("facturadora: inicio con los vendedores actuales", () => {
     expect(calls).toEqual([]);
   });
 
-  it("enlazada, los muestra todos aunque el buzón solo traiga a algunos, y los del buzón van en su lugar", async () => {
+  // Con la lista del buzón en mano, esa manda: es la que arma el administrador
+  // (nombres, altas y bajas). Los seis de arriba solo valen antes de tenerla.
+  it("enlazada, manda la lista del buzón (por orden alfabético), no la de arranque", async () => {
     linkStorage();
     render(<FacturadoraApp />);
     await screen.findByRole("button", { name: /Carlos Pérez/ });
-    expect(shownNames()).toEqual(["Carlos Pérez", "Eddy", "Leodanis", "Lorenzo", "Marta Díaz", "Melisa", "Niurka", "Raul", "Rosa Vega"]);
+    expect(shownNames()).toEqual(["Carlos Pérez", "Marta Díaz", "Rosa Vega"]);
   });
 
-  it("un vendedor actual sin pedidos se puede abrir y dice que no hay", async () => {
+  it("si el administrador cambió un nombre o dio de baja a alguien, la página lo refleja", async () => {
     linkStorage();
+    server.sellers = [
+      recount({ id: "lorenzo", name: "Lorenzo Fuentes", orders: [] }),
+      recount({ id: "raul", name: "Raul", orders: [] }),
+    ];
     render(<FacturadoraApp />);
-    fireEvent.click(await screen.findByRole("button", { name: /Eddy/ }));
+    await screen.findByRole("button", { name: /Lorenzo Fuentes/ });
+    expect(shownNames()).toEqual(["Lorenzo Fuentes", "Raul"]);
+  });
+
+  it("un vendedor sin pedidos se puede abrir y dice que no hay", async () => {
+    linkStorage();
+    server.sellers[2] = recount({ id: "rosa", name: "Rosa Vega", orders: [] });
+    render(<FacturadoraApp />);
+    fireEvent.click(await screen.findByRole("button", { name: /Rosa Vega/ }));
     expect(await screen.findByText("Sin pedidos por ahora.")).toBeTruthy();
   });
 

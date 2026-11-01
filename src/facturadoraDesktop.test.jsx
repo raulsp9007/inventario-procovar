@@ -84,13 +84,13 @@ const sidebar = () => screen.getByRole("navigation", { name: "Vendedores" });
 const names = () => within(screen.getByRole("table", { name: "Pedidos" })).getAllByRole("row").slice(1).map((r) => r.getAttribute("data-order-name"));
 
 describe("escritorio: barra de vendedores", () => {
-  it("lista Todos y a los seis vendedores actuales con sus pendientes, alfabéticamente", async () => {
+  it("lista Todos y a los vendedores del buzón con sus pendientes, alfabéticamente", async () => {
     render(<FacturadoraApp />);
     await table();
     const nav = sidebar();
     await waitFor(() => expect(within(nav).getByRole("button", { name: /Raul/ }).textContent).toContain("2"));
     const labels = within(nav).getAllByRole("button").map((b) => b.getAttribute("data-seller"));
-    expect(labels).toEqual(["todos", "Eddy", "Leodanis", "Lorenzo", "Melisa", "Niurka", "Raul"]);
+    expect(labels).toEqual(["todos", "Eddy", "Melisa", "Raul"]);
     expect(within(nav).getByRole("button", { name: /Todos/ }).textContent).toContain("3");
     expect(within(nav).getByRole("button", { name: /Raul/ }).textContent).toContain("2");
     expect(within(nav).getByRole("button", { name: /Melisa/ }).textContent).toContain("1");

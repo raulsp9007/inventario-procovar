@@ -17,5 +17,15 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
 );
+-- Vendedores que maneja el administrador desde el sitio (se juntan con los del
+-- secreto USERS; lo de esta tabla gana). Se puede volver a aplicar este archivo.
+CREATE TABLE IF NOT EXISTS vendors (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  token      TEXT NOT NULL UNIQUE,
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS orders_seller_updated ON orders (seller_id, updated_at);
 CREATE INDEX IF NOT EXISTS orders_date ON orders (date);

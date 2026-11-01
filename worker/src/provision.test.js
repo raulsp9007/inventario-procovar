@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { generateUsers, buildLinks, slugId } from "./provision";
+import { generateUsers, buildLinks, slugId, ensureAdmin } from "./provision";
 import { parseUsers } from "./users";
 import { parseLinkCode } from "../../src/linkCode";
 
@@ -49,6 +49,53 @@ describe("generateUsers", () => {
   it("pide al menos un vendedor y la facturadora", () => {
     expect(() => generateUsers({ vendedores: [], facturadora: "F" })).toThrow(/vendedor/);
     expect(() => generateUsers({ vendedores: ["A"], facturadora: " " })).toThrow(/facturadora/);
+  });
+});
+
+// El administrador maneja la lista de vendedores desde admin.html.
+describe("administrador", () => {
+  const ADMIN_SITE = "https://raulsp9007.github.io/inventario-procovar/admin.html";
+
+  it("generateUsers puede incluir al administrador, con su propio código", () => {
+    const users = generateUsers({ vendedores: ["Carlos Pérez"], facturadora: "Facturadora", administrador: "Raúl" }, fakeToken);
+    expect(users.map((u) => u.role)).toEqual(["vendedor", "facturadora", "admin"]);
+    expect(users[2]).toMatchObject({ id: "raul", name: "Raúl" });
+    expect(new Set(users.map((u) => u.token)).size).toBe(3);
+  });
+
+  it("sin administrador, la lista queda como antes", () => {
+    const users = generateUsers({ vendedores: ["Carlos Pérez"], facturadora: "Facturadora" }, fakeToken);
+    expect(users.map((u) => u.role)).toEqual(["vendedor", "facturadora"]);
+  });
+
+  it("ensureAdmin agrega al administrador a una lista que no lo tenía, sin tocar los demás códigos", () => {
+    const before = generateUsers({ vendedores: ["Carlos Pérez"], facturadora: "Facturadora" }, fakeToken);
+    const { users, added } = ensureAdmin(before, "Administrador", fakeToken);
+    expect(added).toBe(true);
+    expect(users.slice(0, 2)).toEqual(before);
+    expect(users[2]).toMatchObject({ role: "admin", name: "Administrador" });
+    expect(users[2].token).toHaveLength(24);
+  });
+
+  it("ensureAdmin no repite al administrador si ya existe", () => {
+    const withAdmin = generateUsers({ vendedores: ["Carlos Pérez"], facturadora: "Facturadora", administrador: "Raúl" }, fakeToken);
+    const { users, added } = ensureAdmin(withAdmin, "Otro", fakeToken);
+    expect(added).toBe(false);
+    expect(users).toEqual(withAdmin);
+  });
+
+  it("ensureAdmin cuida que el id no choque con otro usuario", () => {
+    const before = generateUsers({ vendedores: ["Administrador"], facturadora: "Facturadora" }, fakeToken);
+    const { users } = ensureAdmin(before, "Administrador", fakeToken);
+    expect(new Set(users.map((u) => u.id)).size).toBe(3);
+  });
+
+  it("buildLinks: el administrador recibe el enlace personal de su sitio", () => {
+    const users = generateUsers({ vendedores: ["Carlos Pérez"], facturadora: "Facturadora", administrador: "Raúl" }, fakeToken);
+    const links = buildLinks(users, "https://buzon.cuenta.workers.dev", undefined, ADMIN_SITE);
+    const admin = links.find((l) => l.role === "admin");
+    expect(admin.siteLink).toBe(`${ADMIN_SITE}#${admin.code}`);
+    expect(links.filter((l) => l.siteLink)).toHaveLength(1);
   });
 });
 

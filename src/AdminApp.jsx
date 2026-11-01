@@ -1,0 +1,267 @@
+import { useEffect, useRef, useState } from "react";
+import { Copy, RefreshCw, Power, Check } from "lucide-react";
+import { useAdmin } from "./useAdmin";
+import { makeLinkCode } from "./linkCode";
+import { buildVendorMessage } from "./vendorMessage";
+
+// Sitio de administración (admin.html): el administrador maneja los nombres y los
+// enlaces de los vendedores. La lógica vive en useAdmin; acá solo está la pantalla.
+
+const pageStyle = { minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'Inter', system-ui, sans-serif", paddingBottom: 60 };
+const column = { maxWidth: 980, margin: "0 auto" };
+const card = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 12 };
+const button = { height: 32, padding: "0 12px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--surface-subtle)", color: "var(--text)", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 };
+const primary = { ...button, border: "none", background: "var(--ink)", color: "var(--cream)", fontWeight: 700 };
+const inputStyle = { height: 36, boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", fontSize: 14, fontFamily: "inherit", background: "var(--surface)", color: "var(--text)" };
+
+function useTheme() {
+  useEffect(() => {
+    let theme = "light";
+    try {
+      const saved = localStorage.getItem("procovar-theme");
+      if (saved === "dark" || saved === "light") theme = saved;
+      else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark";
+    } catch {
+      theme = "light";
+    }
+    document.documentElement.setAttribute("data-theme", theme);
+    document.title = "Administración Procovar";
+  }, []);
+}
+
+function Header({ title, subtitle, children }) {
+  return (
+    <div style={{ background: "var(--ink)", color: "var(--cream)", padding: "18px 20px" }}>
+      <div style={{ ...column, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--on-ink-label)", fontWeight: 600, marginBottom: 4 }}>PROCOVAR · ADMINISTRACIÓN</div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>{title}</h1>
+          {subtitle && <div style={{ fontSize: 12.5, color: "var(--on-ink-subtitle)", marginTop: 4 }}>{subtitle}</div>}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function LinkScreen({ onLink, notice, onNoticeClear }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    setError("");
+    try {
+      await onLink(code);
+    } catch (e) {
+      setError(e && e.message ? e.message : "No se pudo enlazar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={pageStyle}>
+      <Header title="Administración" subtitle="Abre tu enlace personal o pega tu código de administrador." />
+      <div style={{ ...column, padding: 20, maxWidth: 560 }}>
+        <input
+          type="text"
+          aria-label="Código de enlace"
+          placeholder="Pega el código de enlace"
+          value={code}
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          onChange={(e) => { setCode(e.target.value); setError(""); if (onNoticeClear) onNoticeClear(); }}
+          style={{ ...inputStyle, width: "100%", height: 42, marginBottom: 10 }}
+        />
+        <button type="button" onClick={submit} disabled={busy} style={{ ...primary, width: "100%", height: 42, justifyContent: "center", fontSize: 14 }}>Enlazar</button>
+        {(error || notice) && <div role="alert" style={{ fontSize: 13, color: "var(--error-text)", marginTop: 10 }}>{error || notice}</div>}
+      </div>
+    </div>
+  );
+}
+
+function VendorRow({ vendor, busy, codeOf, onRename, onToggle, onRegenerate, onCopy }) {
+  const [draft, setDraft] = useState(vendor.name);
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => { setDraft(vendor.name); }, [vendor.name]);
+  const changed = draft.trim() !== vendor.name;
+  const on = vendor.active;
+
+  return (
+    <div data-vendor-id={vendor.id} style={{ ...card, opacity: on ? 1 : 0.7 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <input
+          data-name
+          aria-label={`Nombre de ${vendor.name}`}
+          value={draft}
+          maxLength={60}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && changed) onRename(vendor.id, draft); if (e.key === "Escape") setDraft(vendor.name); }}
+          style={{ ...inputStyle, flex: "1 1 200px", minWidth: 0, fontWeight: 700 }}
+        />
+        {changed && (
+          <button type="button" aria-label={`Guardar nombre de ${vendor.name}`} disabled={busy} onClick={() => onRename(vendor.id, draft)} style={primary}>
+            <Check size={14} strokeWidth={2.6} aria-hidden="true" /> Guardar
+          </button>
+        )}
+        <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", border: `1px solid ${on ? "var(--green)" : "var(--border-strong)"}`, color: on ? "var(--green)" : "var(--text-muted)" }}>
+          {on ? "Activo" : "Desactivado"}
+        </span>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+        <button type="button" aria-label={`Copiar código de ${vendor.name}`} onClick={() => onCopy(codeOf(vendor), "Código copiado")} style={button}>
+          <Copy size={13} strokeWidth={2.2} aria-hidden="true" /> Copiar código
+        </button>
+        <button type="button" aria-label={`Copiar mensaje para ${vendor.name}`} onClick={() => onCopy(buildVendorMessage(vendor.name, codeOf(vendor)), "Mensaje copiado")} style={button}>
+          <Copy size={13} strokeWidth={2.2} aria-hidden="true" /> Copiar mensaje
+        </button>
+        <button type="button" aria-label={`Regenerar enlace de ${vendor.name}`} onClick={() => setConfirming(true)} style={button}>
+          <RefreshCw size={13} strokeWidth={2.2} aria-hidden="true" /> Regenerar enlace
+        </button>
+        <button type="button" aria-label={on ? `Desactivar a ${vendor.name}` : `Reactivar a ${vendor.name}`} disabled={busy} onClick={() => onToggle(vendor.id, !on)} style={button}>
+          <Power size={13} strokeWidth={2.2} aria-hidden="true" /> {on ? "Desactivar" : "Reactivar"}
+        </button>
+      </div>
+
+      {confirming && (
+        <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: "var(--banner-bg)", border: "1px solid var(--border-warn)", fontSize: 13 }}>
+          El código anterior dejará de servir: {vendor.name} tendrá que enlazar de nuevo con el código nuevo.
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button type="button" disabled={busy} onClick={() => { setConfirming(false); onRegenerate(vendor.id); }} style={primary}>Sí, regenerar</button>
+            <button type="button" onClick={() => setConfirming(false)} style={button}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function AdminApp() {
+  useTheme();
+  const admin = useAdmin();
+  const [newName, setNewName] = useState("");
+  const [localError, setLocalError] = useState("");
+  const [linkNotice, setLinkNotice] = useState("");
+  const [toast, setToast] = useState("");
+  const [manual, setManual] = useState("");
+  const manualRef = useRef(null);
+
+  // Enlace personal (#código): se usa una vez y se quita de la barra de direcciones.
+  useEffect(() => {
+    const code = window.location.hash.replace(/^#/, "");
+    if (!code.startsWith("procovar1:")) return;
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    if (admin.link) return;
+    admin.linkWith(code).catch((e) => setLinkNotice(e && e.message ? e.message : "No se pudo enlazar."));
+    // Solo al abrir la página.
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const id = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  useEffect(() => {
+    if (manual && manualRef.current) manualRef.current.select();
+  }, [manual]);
+
+  if (!admin.link) return <LinkScreen onLink={admin.linkWith} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
+
+  const codeOf = (vendor) => makeLinkCode({ url: admin.link.url, token: vendor.token });
+  const factLink = admin.facturadora
+    ? `${new URL("facturadora.html", window.location.href).href}#${makeLinkCode({ url: admin.link.url, token: admin.facturadora.token })}`
+    : "";
+
+  async function copy(text, label) {
+    setManual("");
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast(label);
+    } catch {
+      setManual(text);
+    }
+  }
+
+  async function add() {
+    setLocalError("");
+    admin.clearError();
+    if (!newName.trim()) {
+      setLocalError("Escribe el nombre del vendedor.");
+      return;
+    }
+    if (await admin.addVendor(newName)) setNewName("");
+  }
+
+  const error = localError || admin.error;
+
+  return (
+    <div style={pageStyle}>
+      <Header title="Vendedores" subtitle="Nombres y enlaces de cada vendedor. Los cambios se ven al instante en el sitio de la facturadora.">
+        <button type="button" onClick={admin.unlink} style={{ ...button, background: "transparent", color: "var(--on-ink-subtitle)", border: "1px solid var(--on-ink-subtitle)" }}>Desenlazar</button>
+      </Header>
+
+      <div style={{ ...column, padding: "16px 20px" }}>
+        {error && <div role="alert" style={{ ...card, borderColor: "var(--danger-border)", color: "var(--error-text)", fontSize: 13.5 }}>{error}</div>}
+
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "4px 2px 8px" }}>VENDEDORES</div>
+        {admin.vendors.map((v) => (
+          <VendorRow
+            key={v.id}
+            vendor={v}
+            busy={admin.busy}
+            codeOf={codeOf}
+            onRename={async (id, name) => { setLocalError(""); await admin.renameVendor(id, name); }}
+            onToggle={admin.setActive}
+            onRegenerate={admin.regenerate}
+            onCopy={copy}
+          />
+        ))}
+        {admin.vendors.length === 0 && admin.phase === "ok" && <div style={{ ...card, color: "var(--text-muted)", fontSize: 13.5 }}>Todavía no hay vendedores.</div>}
+
+        <div style={{ ...card, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            aria-label="Nombre del nuevo vendedor"
+            placeholder="Nombre del nuevo vendedor"
+            value={newName}
+            maxLength={60}
+            onChange={(e) => { setNewName(e.target.value); setLocalError(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+            style={{ ...inputStyle, flex: "1 1 220px", minWidth: 0 }}
+          />
+          <button type="button" onClick={add} disabled={admin.busy} style={primary}>Agregar</button>
+        </div>
+
+        {admin.facturadora && (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "18px 2px 8px" }}>FACTURADORA</div>
+            <div style={{ ...card, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontWeight: 700 }}>{admin.facturadora.name}</div>
+                <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Su enlace personal abre el sitio ya enlazado.</div>
+              </div>
+              <button type="button" aria-label="Copiar enlace de la facturadora" onClick={() => copy(factLink, "Enlace copiado")} style={button}>
+                <Copy size={13} strokeWidth={2.2} aria-hidden="true" /> Copiar enlace
+              </button>
+            </div>
+          </>
+        )}
+
+        {manual && (
+          <div style={card}>
+            <div style={{ fontSize: 13, marginBottom: 6 }}>El navegador no dejó copiar. Selecciona y copia este texto:</div>
+            <textarea ref={manualRef} readOnly aria-label="Texto para copiar" value={manual} rows={6} style={{ ...inputStyle, width: "100%", height: "auto", padding: 10, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 12 }} />
+          </div>
+        )}
+      </div>
+
+      {toast && (
+        <div role="status" style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 24, zIndex: 50, background: "#111", color: "#eee", borderRadius: 10, padding: "10px 16px", fontSize: 13 }}>{toast}</div>
+      )}
+    </div>
+  );
+}

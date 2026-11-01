@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#22261F" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="author" content="Raúl Salgado Peña (raulsp9007)" />
+    <meta name="copyright" content="© 2026 Raúl Salgado Peña (raulsp9007). Todos los derechos reservados." />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <title>Administración Procovar</title>
+    <script data-guard>
+      // Si falla la carga de un script o de los estilos (HTML viejo en caché que pide
+      // archivos que ya no existen), se recarga UNA vez saltándose la caché.
+      (function () {
+        var KEY = "procovar-recarga-cache";
+        window.addEventListener("error", function (e) {
+          var t = e && e.target;
+          if (!t || (t.tagName !== "SCRIPT" && t.tagName !== "LINK")) return;
+          try {
+            if (sessionStorage.getItem(KEY)) return;
+            sessionStorage.setItem(KEY, "1");
+          } catch (x) {
+            return;
+          }
+          var again = function () { location.reload(); };
+          try { fetch(location.href, { cache: "reload" }).then(again, again); } catch (x) { again(); }
+        }, true);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/adminMain.jsx"></script>
+  </body>
+</html>

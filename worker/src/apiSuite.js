@@ -11,12 +11,14 @@ const users = [
   { id: "carlos", name: "Carlos Pérez", role: "vendedor", token: "tok-carlos" },
   { id: "marta", name: "Marta Díaz", role: "vendedor", token: "tok-marta" },
   { id: "fact", name: "Facturadora", role: "facturadora", token: "tok-fact" },
+  { id: "admin", name: "Administrador", role: "admin", token: "tok-admin" },
 ];
 
 export function apiSuite(label, makeStore) {
   describe(label, () => {
     let store;
     let clock;
+    let tokenCounter;
 
     async function call(method, path, { token, body, origin } = {}) {
       const headers = {};
@@ -25,7 +27,7 @@ export function apiSuite(label, makeStore) {
       if (origin) headers.Origin = origin;
       const response = await handleRequest(
         new Request(`https://buzon.test${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined }),
-        { store, users, now: () => clock },
+        { store, users, now: () => clock, makeToken: () => `tok-nuevo-${String((tokenCounter += 1)).padStart(6, "0")}-abcdefghij` },
       );
       const text = await response.text();
       return { status: response.status, headers: response.headers, json: text ? JSON.parse(text) : null };
@@ -41,6 +43,7 @@ export function apiSuite(label, makeStore) {
     beforeEach(() => {
       store = makeStore();
       clock = NOW;
+      tokenCounter = 0;
     });
 
     describe("autenticación", () => {
@@ -310,6 +313,148 @@ export function apiSuite(label, makeStore) {
       it("pide una lista de ids", async () => {
         expect((await call("POST", "/orders/confirm", { token: "tok-fact", body: {} })).status).toBe(400);
         expect((await call("POST", "/orders/confirm", { token: "tok-fact", body: { ids: "o1" } })).status).toBe(400);
+      });
+    });
+
+    // El administrador (rol "admin", del secreto USERS) maneja la lista de vendedores:
+    // nombres, activos/desactivados y sus códigos. Lo que crea o cambia vive en la base
+    // y se junta con los vendedores del secreto (lo de la base gana).
+    describe("administración de vendedores (rol admin)", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const listed = async () => (await admin("GET", "/vendors")).json;
+      const vendorOf = async (id) => (await listed()).vendors.find((v) => v.id === id);
+
+      it("solo el administrador entra: los demás roles reciben 403 y sin código 401", async () => {
+        expect((await call("GET", "/admin/vendors")).status).toBe(401);
+        for (const token of ["tok-carlos", "tok-fact"]) {
+          expect((await call("GET", "/admin/vendors", { token })).status).toBe(403);
+          expect((await call("POST", "/admin/vendors", { token, body: { name: "Nuevo" } })).status).toBe(403);
+        }
+        expect((await call("GET", "/orders", { token: "tok-admin" })).status).toBe(403);
+        expect((await call("GET", "/me", { token: "tok-admin" })).json).toEqual({ id: "admin", name: "Administrador", role: "admin" });
+      });
+
+      it("lista a los vendedores con su código y de dónde vienen, y la facturadora con el suyo", async () => {
+        const { status, json } = await admin("GET", "/vendors");
+        expect(status).toBe(200);
+        expect(json.vendors.map((v) => [v.id, v.name, v.active, v.source])).toEqual([
+          ["carlos", "Carlos Pérez", true, "secret"],
+          ["marta", "Marta Díaz", true, "secret"],
+        ]);
+        expect(json.vendors[0].token).toBe("tok-carlos");
+        expect(json.facturadora).toEqual({ id: "fact", name: "Facturadora", token: "tok-fact" });
+      });
+
+      it("agrega un vendedor: nombre, código nuevo, activo; ya puede subir pedidos y la facturadora lo ve", async () => {
+        const { status, json } = await admin("POST", "/vendors", { name: "  Lorenzo  " });
+        expect(status).toBe(200);
+        expect(json).toMatchObject({ id: "lorenzo", name: "Lorenzo", active: true, source: "db" });
+        expect(json.token).toMatch(/^tok-nuevo-000001/);
+        expect((await call("GET", "/me", { token: json.token })).json).toMatchObject({ id: "lorenzo", role: "vendedor" });
+        expect((await put("o1", order(), json.token)).status).toBe(200);
+        const seen = await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(seen.json.sellers.map((s) => s.name)).toContain("Lorenzo");
+        expect(seen.json.sellers.find((s) => s.id === "lorenzo").orders).toHaveLength(1);
+      });
+
+      it("un vendedor sin pedidos aparece igual en la lista de la facturadora", async () => {
+        await admin("POST", "/vendors", { name: "Eddy" });
+        const seen = await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(seen.json.sellers.find((s) => s.id === "eddy")).toMatchObject({ pending: 0, confirmed: 0, orders: [] });
+      });
+
+      it("no deja nombres vacíos, larguísimos ni repetidos (sin importar tildes ni mayúsculas)", async () => {
+        expect((await admin("POST", "/vendors", { name: "   " })).status).toBe(400);
+        expect((await admin("POST", "/vendors", {})).status).toBe(400);
+        expect((await admin("POST", "/vendors", { name: "x".repeat(41) })).status).toBe(400);
+        expect((await admin("POST", "/vendors", { name: "carlos pérez" })).status).toBe(409);
+        await admin("POST", "/vendors", { name: "José" });
+        expect((await admin("POST", "/vendors", { name: "JOSE" })).status).toBe(409);
+      });
+
+      it("el id no choca con el de otros usuarios (por ejemplo 'Facturadora' o 'Admin')", async () => {
+        const first = await admin("POST", "/vendors", { name: "Admin" });
+        expect(first.json.id).toBe("admin-2");
+        const second = await admin("POST", "/vendors", { name: "Fact" });
+        expect(second.json.id).toBe("fact-2");
+      });
+
+      it("cambiar el nombre conserva el id, el código y los pedidos", async () => {
+        await put("o1", order());
+        const { status, json } = await admin("PUT", "/vendors/carlos", { name: "Carlos Pérez Díaz" });
+        expect(status).toBe(200);
+        expect(json).toMatchObject({ id: "carlos", name: "Carlos Pérez Díaz", token: "tok-carlos", active: true, source: "db" });
+        expect((await call("GET", "/me", { token: "tok-carlos" })).json.name).toBe("Carlos Pérez Díaz");
+        const seen = await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(seen.json.sellers.find((s) => s.id === "carlos")).toMatchObject({ name: "Carlos Pérez Díaz", pending: 1 });
+        expect((await listed()).vendors.filter((v) => v.id === "carlos")).toHaveLength(1);
+      });
+
+      it("no deja renombrar a uno con el nombre de otro, ni con un nombre vacío", async () => {
+        expect((await admin("PUT", "/vendors/carlos", { name: "Marta Díaz" })).status).toBe(409);
+        expect((await admin("PUT", "/vendors/carlos", { name: " " })).status).toBe(400);
+        expect((await vendorOf("carlos")).name).toBe("Carlos Pérez");
+      });
+
+      it("renombrarse a sí mismo con otras mayúsculas sí se permite", async () => {
+        expect((await admin("PUT", "/vendors/carlos", { name: "CARLOS PÉREZ" })).status).toBe(200);
+      });
+
+      it("desactivar: su código deja de servir y sale de la lista de la facturadora; reactivar lo devuelve", async () => {
+        expect((await admin("PUT", "/vendors/marta", { active: false })).json).toMatchObject({ active: false });
+        expect((await call("GET", "/me", { token: "tok-marta" })).status).toBe(401);
+        expect((await put("o2", order(), "tok-marta")).status).toBe(401);
+        let seen = await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(seen.json.sellers.map((s) => s.id)).toEqual(["carlos"]);
+        expect((await vendorOf("marta")).active).toBe(false);
+
+        await admin("PUT", "/vendors/marta", { active: true });
+        expect((await call("GET", "/me", { token: "tok-marta" })).status).toBe(200);
+        seen = await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(seen.json.sellers.map((s) => s.id)).toEqual(["carlos", "marta"]);
+      });
+
+      it("regenerar el enlace: el código viejo deja de servir y el nuevo sí (nombre y pedidos igual)", async () => {
+        await put("o1", order());
+        const { status, json } = await admin("POST", "/vendors/carlos/regenerate");
+        expect(status).toBe(200);
+        expect(json.token).toMatch(/^tok-nuevo-000001/);
+        expect(json.token).not.toBe("tok-carlos");
+        expect((await call("GET", "/me", { token: "tok-carlos" })).status).toBe(401);
+        expect((await call("GET", "/me", { token: json.token })).json.name).toBe("Carlos Pérez");
+        const seen = await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(seen.json.sellers.find((s) => s.id === "carlos").orders).toHaveLength(1);
+      });
+
+      it("el código regenerado se mantiene al leer la lista otra vez", async () => {
+        const { json } = await admin("POST", "/vendors/marta/regenerate");
+        expect((await vendorOf("marta")).token).toBe(json.token);
+      });
+
+      it("un id que no existe (o que no es de un vendedor) da 404", async () => {
+        expect((await admin("PUT", "/vendors/nadie", { name: "X" })).status).toBe(404);
+        expect((await admin("POST", "/vendors/nadie/regenerate")).status).toBe(404);
+        expect((await admin("PUT", "/vendors/fact", { name: "X" })).status).toBe(404);
+        expect((await admin("POST", "/vendors/admin/regenerate")).status).toBe(404);
+      });
+
+      it("un cuerpo que no es JSON: 400", async () => {
+        const response = await handleRequest(
+          new Request("https://buzon.test/admin/vendors", { method: "POST", headers: { Authorization: "Bearer tok-admin" }, body: "no json" }),
+          { store, users, now: () => clock },
+        );
+        expect(response.status).toBe(400);
+      });
+
+      it("la lista queda por orden alfabético, con los de la base mezclados con los del secreto", async () => {
+        await admin("POST", "/vendors", { name: "Álvaro" });
+        await admin("POST", "/vendors", { name: "Zoila" });
+        expect((await listed()).vendors.map((v) => v.name)).toEqual(["Álvaro", "Carlos Pérez", "Marta Díaz", "Zoila"]);
+      });
+
+      it("CORS: el sitio de administración recibe sus cabeceras", async () => {
+        const { headers } = await call("GET", "/admin/vendors", { token: "tok-admin", origin: ORIGIN });
+        expect(headers.get("Access-Control-Allow-Origin")).toBe(ORIGIN);
       });
     });
 

@@ -24,6 +24,34 @@ const api = (response) => {
   return { fetchImpl, api: createCloudApi({ url: URL_OK, token: TOKEN, fetchImpl }) };
 };
 
+describe("createCloudApi: administración de vendedores", () => {
+  it("lista, agrega, cambia y regenera con las rutas de /admin", async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push([init.method, url.replace(URL_OK, ""), init.body ? JSON.parse(init.body) : undefined]);
+      return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+    });
+    const cloud = createCloudApi({ url: URL_OK, token: TOKEN, fetchImpl });
+    await cloud.adminVendors();
+    await cloud.addVendor("Lorenzo");
+    await cloud.updateVendor("lorenzo", { name: "Lorenzo F.", active: false });
+    await cloud.regenerateVendor("lorenzo");
+    await cloud.regenerateVendor("a b");
+    expect(calls).toEqual([
+      ["GET", "/admin/vendors", undefined],
+      ["POST", "/admin/vendors", { name: "Lorenzo" }],
+      ["PUT", "/admin/vendors/lorenzo", { name: "Lorenzo F.", active: false }],
+      ["POST", "/admin/vendors/lorenzo/regenerate", undefined],
+      ["POST", "/admin/vendors/a%20b/regenerate", undefined],
+    ]);
+  });
+
+  it("un nombre repetido (409) llega como error con el mensaje del buzón", async () => {
+    const { api: cloud } = api({ status: 409, body: { error: "Ya hay un vendedor con ese nombre." } });
+    await expect(cloud.addVendor("Raul")).rejects.toMatchObject({ status: 409, message: "Ya hay un vendedor con ese nombre." });
+  });
+});
+
 describe("createCloudApi: peticiones", () => {
   it("me: GET /me con el código", async () => {
     const { api: cloud, fetchImpl } = api({ status: 200, body: { id: "carlos", name: "Carlos", role: "vendedor" } });

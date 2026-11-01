@@ -68,5 +68,10 @@ export function createCloudApi({ url, token, fetchImpl }) {
     listOrders: (desde) => request("GET", desde ? `/orders?desde=${enc(desde)}` : "/orders"),
     confirmMany: (ids) => request("POST", "/orders/confirm", { ids }),
     unconfirmMany: (ids) => request("POST", "/orders/unconfirm", { ids }),
+    // administrador (lista de vendedores)
+    adminVendors: () => request("GET", "/admin/vendors"),
+    addVendor: (name) => request("POST", "/admin/vendors", { name }),
+    updateVendor: (id, patch) => request("PUT", `/admin/vendors/${enc(id)}`, patch),
+    regenerateVendor: (id) => request("POST", `/admin/vendors/${enc(id)}/regenerate`),
   };
 }

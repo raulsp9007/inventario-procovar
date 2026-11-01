@@ -327,8 +327,9 @@ export default function FacturadoraApp() {
   const [selectedId, setSelectedId] = useState(null);
   const [linkNotice, setLinkNotice] = useState("");
   const desktop = useIsDesktop();
-  // Siempre los vendedores actuales (con o sin pedidos), alfabéticamente.
-  const sellers = useMemo(() => mergeKnownSellers(f.sellers, KNOWN_SELLERS), [f.sellers]);
+  // Los vendedores, alfabéticamente. Con la lista del buzón en mano (la que arma el
+  // administrador) manda esa; los de arranque solo valen mientras no se tiene.
+  const sellers = useMemo(() => mergeKnownSellers(f.sellers, f.sellers.length > 0 ? [] : KNOWN_SELLERS), [f.sellers]);
   const selected = useMemo(() => sellers.find((s) => s.id === selectedId) || null, [sellers, selectedId]);
 
   // Enlace personal: la dirección trae el código (#procovar1:...). Se usa una vez,

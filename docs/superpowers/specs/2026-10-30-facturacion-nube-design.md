@@ -18,6 +18,14 @@ sola el paso **CONF.** de ese pedido. Antes lo marcaba el vendedor a mano.
    pone el número de pendientes en el título de la pestaña. (El modo
    `?rol=facturadora` de la app sigue existiendo, pero ya no es el camino.)
 
+4. **Sitio de administración** (`admin.html`, mismo despliegue; sin service worker): el
+   administrador (rol `admin`, del secreto `USERS`) agrega, renombra, desactiva y
+   regenera el enlace de los vendedores, y copia sus mensajes. Los vendedores que
+   maneja viven en la tabla `vendors` de D1 y se juntan con los del secreto (lo de la
+   base gana; nunca puede pisar a la facturadora ni al administrador). La lista de la
+   facturadora sale de ahí: los seis nombres de `facturadoraSellers.js` solo valen
+   antes de tener la primera respuesta del buzón.
+
 ## Reglas
 
 - El vendedor manda el **contenido** del pedido; la facturadora manda el **estado**.
@@ -62,6 +70,10 @@ sola el paso **CONF.** de ese pedido. Antes lo marcaba el vendedor a mano.
 | facturadora | `GET /orders?desde=` | pedidos agrupados por vendedor |
 | facturadora | `POST /orders/confirm` `{ids}` | 👍 a uno o varios |
 | facturadora | `POST /orders/unconfirm` `{ids}` | deshacer el 👍 |
+| admin | `GET /admin/vendors` | vendedores (con su código y si están activos) y la facturadora |
+| admin | `POST /admin/vendors` `{name}` | agrega un vendedor (código nuevo) |
+| admin | `PUT /admin/vendors/:id` `{name?, active?}` | cambia el nombre o lo activa/desactiva |
+| admin | `POST /admin/vendors/:id/regenerate` | código nuevo (el anterior deja de servir) |
 
 ## Sin internet
 

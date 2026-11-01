@@ -15,7 +15,7 @@ Cuesta cero a este volumen (6 vendedores y 1 facturadora).
 node worker/scripts/dev-server.mjs      # buzón de demostración en http://localhost:8787
 ```
 
-Imprime un código de enlace por usuario de demostración. Los datos viven en memoria
+Imprime un código de enlace por usuario de demostración (incluido un administrador). Los datos viven en memoria
 y se pierden al apagarlo.
 
 ## Desplegarlo (una sola vez)
@@ -56,10 +56,37 @@ que falta el secreto `USERS` o tiene un error (el mensaje dice cuál).
   `…/facturadora.html` (conviene guardarlo en favoritos). No necesita APK. Es un sitio
   aparte de la app de ventas.
 
+## Sitio de administración (nombres y enlaces de los vendedores)
+
+El **administrador** maneja la lista de vendedores sin tocar la consola, desde
+`https://raulsp9007.github.io/inventario-procovar/admin.html`. Allí puede:
+
+- **Agregar** un vendedor (el buzón le crea su código).
+- **Cambiar el nombre** (el código y los pedidos se conservan).
+- **Copiar el código** o el **mensaje listo para WhatsApp** de cada vendedor.
+- **Regenerar el enlace** (el código anterior deja de servir) y **desactivar / reactivar**.
+- Copiar el **enlace personal de la facturadora**.
+
+Lo que se cambia ahí vive en la base (tabla `vendors`) y se junta con los vendedores del
+secreto `USERS`; lo de la base gana. La página de la facturadora toma de ahí su lista.
+
+Activarlo (una sola vez; tras actualizar el código del buzón):
+
+1. `node scripts/provision.mjs --admin "Tu nombre"`: agrega al administrador a
+   `worker/.usuarios.secret.json` **sin cambiar** los códigos que ya se entregaron, e
+   imprime su enlace personal (`…/admin.html#CÓDIGO`) si pasas `--url`.
+2. Vuelve a guardar el secreto `USERS` (paso 6; ahora lleva al administrador).
+3. Aplica la tabla nueva: `npx wrangler d1 execute procovar-buzon --remote --file=schema.sql`
+   (se puede repetir sin problema).
+4. Publica el buzón: `npx wrangler deploy`.
+
+El enlace del administrador es **solo tuyo**: con él se pueden cambiar todos los códigos.
+
 ## Cambiar o quitar a alguien
 
-Vuelve a correr el paso 5 con otra lista (borra antes `worker/.usuarios.secret.json`),
-repite el 6 y entrega los códigos nuevos. Los códigos anteriores dejan de servir.
+Desde el sitio de administración (ver arriba). Solo si hace falta rehacerlo todo desde
+cero: vuelve a correr el paso 5 con otra lista (borra antes `worker/.usuarios.secret.json`),
+repite el 6 y entrega los códigos nuevos; los anteriores dejan de servir.
 
 ## Qué guarda el buzón
 
