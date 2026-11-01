@@ -196,17 +196,28 @@ describe("facturadora: título de la pestaña", () => {
   });
 });
 
-// Página de inicio: siempre los vendedores actuales, alfabéticamente.
+// Página de inicio: lo primero es la contraseña; ya adentro, los vendedores actuales,
+// alfabéticamente.
 describe("facturadora: inicio con los vendedores actuales", () => {
   const CURRENT = ["Eddy", "Leodanis", "Lorenzo", "Melisa", "Niurka", "Raul"];
   const shownNames = () => [...document.querySelectorAll("[data-seller-name]")].map((el) => el.getAttribute("data-seller-name"));
 
-  it("sin enlazar ya muestra a los seis en orden alfabético, y debajo el formulario para enlazar", async () => {
+  it("sin enlazar solo pide la contraseña: no se ve ningún vendedor ni otra información", async () => {
     render(<FacturadoraApp />);
     await screen.findByLabelText("Contraseña o código de enlace");
-    expect(shownNames()).toEqual(CURRENT);
+    expect(shownNames()).toEqual([]);
+    expect(screen.queryByText("Sin enlazar")).toBeNull();
+    CURRENT.forEach((name) => expect(screen.queryByText(name)).toBeNull());
     expect(screen.getByRole("button", { name: "Entrar" })).toBeTruthy();
     expect(calls).toEqual([]);
+  });
+
+  it("al entrar con la contraseña correcta aparecen los vendedores", async () => {
+    render(<FacturadoraApp />);
+    fireEvent.change(await screen.findByLabelText("Contraseña o código de enlace"), { target: { value: TOKEN } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
+    expect(screen.queryByLabelText("Contraseña o código de enlace")).toBeNull();
   });
 
   // Con la lista del buzón en mano, esa manda: es la que arma el administrador

@@ -128,16 +128,98 @@ describe("useCloudSync: esperar a que la app cargue", () => {
   });
 });
 
-// El vendedor decide cuándo mirar: la app no consulta sola lo que confirmó la
-// facturadora, solo cuando se pulsa "Comprobar" (syncNow).
-describe("useCloudSync: solo comprueba cuando se pide", () => {
-  it("ni al enlazar, ni cada rato, ni al volver a la app, ni al volver la conexión", async () => {
-    const ctx = setup({ intervalMs: 10 });
+// La app comprueba sola lo que confirmó la facturadora cada hora (intervalMs, 1 h
+// por defecto) con la app abierta, y al volver a ella si ya pasó más de una hora.
+// El botón "Comprobar" (syncNow) sigue ahí para hacerlo al momento.
+describe("useCloudSync: comprobación automática cada hora", () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  it("por defecto el intervalo es de una hora", async () => {
+    const timers = vi.spyOn(globalThis, "setInterval");
+    const cloud = fakeCloud();
+    const { intervalMs: _ignored, ...rest } = { orders: [order()], products, setOrdersConfirmed: vi.fn(), createApi: cloud.createApi, debounceMs: 0, today: "2026-10-30" };
+    const hook = renderHook((props) => useCloudSync(props), { initialProps: rest });
+    await act(async () => { await hook.result.current.linkWith(CODE); });
+    expect(timers.mock.calls.some(([, ms]) => ms === 3600000)).toBe(true);
+    timers.mockRestore();
+  });
+
+  it("al enlazar no consulta enseguida, ni al volver la conexión", async () => {
+    const ctx = setup();
     await linked(ctx);
-    await new Promise((r) => setTimeout(r, 120));
-    act(() => { document.dispatchEvent(new Event("visibilitychange")); window.dispatchEvent(new Event("online")); });
-    await new Promise((r) => setTimeout(r, 50));
+    act(() => { window.dispatchEvent(new Event("online")); document.dispatchEvent(new Event("visibilitychange")); });
+    await wait(50);
     expect(ctx.api.statusSince).not.toHaveBeenCalled();
+  });
+
+  it("cuando se cumple el intervalo consulta sola y marca lo confirmado", async () => {
+    const ctx = setup({ intervalMs: 60 });
+    ctx.state.rows = [{ id: "o1", status: "confirmado", rev: 1, modified: false, confirmedAt: new Date(2026, 9, 30, 10, 42).toISOString(), confirmedBy: "facturadora", updatedAt: "2026-10-30T15:42:00.000Z" }];
+    await linked(ctx);
+    await waitFor(() => expect(ctx.api.statusSince).toHaveBeenCalled());
+    await waitFor(() => expect(ctx.setOrdersConfirmed).toHaveBeenCalledWith(["o1"], true));
+    expect(ctx.hook.result.current.lastCheck).toBeTruthy();
+  });
+
+  it("la comprobación automática no enciende 'Comprobando…'", async () => {
+    const ctx = setup({ intervalMs: 3600000 });
+    await linked(ctx);
+    let release;
+    ctx.api.statusSince.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ now: ctx.state.now, orders: [] }); }));
+    ctx.hook.rerender({ ...ctx.props, intervalMs: 40 });
+    await waitFor(() => expect(ctx.api.statusSince).toHaveBeenCalled());
+    expect(ctx.hook.result.current.checking).toBe(false);
+    await act(async () => { release(); });
+  });
+
+  it("con la nube apagada no comprueba sola", async () => {
+    const ctx = setup({ intervalMs: 3600000 });
+    await linked(ctx);
+    act(() => ctx.hook.result.current.setEnabled(false));
+    ctx.hook.rerender({ ...ctx.props, intervalMs: 40 });
+    await wait(150);
+    expect(ctx.api.statusSince).not.toHaveBeenCalled();
+  });
+
+  it("sin enlace no comprueba sola", async () => {
+    const ctx = setup({ intervalMs: 40 });
+    await wait(150);
+    expect(ctx.createApi).not.toHaveBeenCalled();
+  });
+
+  it("al volver a la app después de más de una hora, comprueba", async () => {
+    const ctx = setup({ intervalMs: 3600000 });
+    await linked(ctx);
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 3600000 + 1000);
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await waitFor(() => expect(ctx.api.statusSince).toHaveBeenCalledTimes(1));
+    clock.mockRestore();
+  });
+
+  it("al volver a la app antes de la hora, no comprueba", async () => {
+    const ctx = setup({ intervalMs: 3600000 });
+    await linked(ctx);
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 30 * 60000);
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await wait(60);
+    expect(ctx.api.statusSince).not.toHaveBeenCalled();
+    clock.mockRestore();
+  });
+
+  it("tras comprobar con el botón, la hora se cuenta desde ahí", async () => {
+    const ctx = setup({ intervalMs: 3600000 });
+    await linked(ctx);
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 50 * 60000);
+    await act(async () => { await ctx.hook.result.current.syncNow(); });
+    expect(ctx.api.statusSince).toHaveBeenCalledTimes(1);
+    clock.mockReturnValue(now + 80 * 60000);
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await wait(60);
+    expect(ctx.api.statusSince).toHaveBeenCalledTimes(1);
+    clock.mockRestore();
   });
 
   it("los cambios en los pedidos siguen subiéndose solos, sin consultar", async () => {

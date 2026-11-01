@@ -48,8 +48,9 @@ que falta el secreto `USERS` o tiene un error (el mensaje dice cuál).
 ## Cada persona usa su código
 
 - **Vendedor:** Configuración → "Nube de facturación" → pegar el código → Enlazar.
-  Para ver lo que confirmó la facturadora, pulsa **Comprobar** (en Pedidos o en
-  Configuración); la app no lo hace sola.
+  La app comprueba sola lo que confirmó la facturadora **cada hora** (con la app abierta, y
+  al volver a ella si ya pasó una hora). Para verlo ya, pulsa **Comprobar** (en Pedidos o en
+  Configuración).
 - **Facturadora con contraseña:** abre `…/facturadora.html`, escribe su contraseña y pulsa
   **Entrar** (el navegador puede recordarla). La contraseña es el código de su usuario en
   `USERS` (mínimo 20 caracteres; puede ser una frase fácil de recordar). Para cambiarla:

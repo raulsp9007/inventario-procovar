@@ -109,7 +109,8 @@ describe("vendedor: pedidos y nube", () => {
   });
 });
 
-// El vendedor decide cuándo mirar: la app no consulta sola, hay un botón.
+// El botón "Comprobar" mira al momento; sola, la app comprueba cada hora (ver
+// useCloudSync.test.jsx), así que al abrir no consulta.
 describe("vendedor: botón Comprobar (Pedidos)", () => {
   const confirmedRow = () => ({
     id: "o1", status: "confirmado", rev: 1, modified: false,
@@ -125,7 +126,7 @@ describe("vendedor: botón Comprobar (Pedidos)", () => {
     expect(screen.queryByRole("button", { name: "Comprobar" })).toBeNull();
   });
 
-  it("con enlace está en Pedidos y la app no consulta hasta que se pulsa", async () => {
+  it("con enlace está en Pedidos y no consulta al abrir, solo al pulsar", async () => {
     seed();
     render(<InventoryApp />);
     expect(await screen.findByRole("button", { name: "Comprobar" })).toBeTruthy();

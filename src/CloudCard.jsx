@@ -33,7 +33,7 @@ export default function CloudCard({ cloud, billToCloud = false, onBillToCloudCha
   const statusText = !cloud.enabled
     ? "Sincronización apagada."
     : cloud.phase === "ok" && cloud.lastSyncAt ? `Comprobado a las ${clock(cloud.lastSyncAt)}.`
-      : cloud.message || (cloud.phase === "idle" ? "Aún no has comprobado. Pulsa Comprobar." : "");
+      : cloud.message || (cloud.phase === "idle" ? "Aún no has comprobado. Se comprueba solo cada hora, o pulsa Comprobar." : "");
 
   return (
     <div role="group" aria-label="Nube de facturación" style={cardStyle}>
@@ -42,7 +42,7 @@ export default function CloudCard({ cloud, billToCloud = false, onBillToCloudCha
         Nube de facturación
       </div>
       <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
-        Los pedidos que envías a facturación le llegan a la facturadora. Cuando ella los confirma con 👍, pulsa Comprobar (en Pedidos o aquí) y se marcan en tu app (CONF.). Los domicilios no se envían.
+        Los pedidos que envías a facturación le llegan a la facturadora. Cuando ella los confirma con 👍, se marcan en tu app (CONF.): la app lo comprueba sola cada hora, o pulsa Comprobar (en Pedidos o aquí) para verlo ya. Los domicilios no se envían.
       </div>
 
       {!cloud.link ? (

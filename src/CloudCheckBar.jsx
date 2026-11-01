@@ -1,8 +1,8 @@
 import { RefreshCw } from "lucide-react";
 
-// Barra de Pedidos: botón "Comprobar" para ver si la facturadora ya confirmó los
-// pedidos enviados a facturación. La app no lo hace sola; la lógica vive en
-// useCloudSync (cloud = lo que ese hook devuelve).
+// Barra de Pedidos: botón "Comprobar" para ver al momento si la facturadora ya confirmó
+// los pedidos enviados a facturación (la app también comprueba sola cada hora); la
+// lógica vive en useCloudSync (cloud = lo que ese hook devuelve).
 
 const pad = (n) => String(n).padStart(2, "0");
 const clock = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -11,7 +11,7 @@ const plural = (n, one, many) => (n === 1 ? one : many);
 export function checkText(cloud) {
   if (cloud.checking) return "Comprobando…";
   if (cloud.phase === "offline" || cloud.phase === "auth" || cloud.phase === "error") return cloud.message;
-  if (!cloud.lastCheck) return "Mira si la facturadora ya confirmó tus pedidos.";
+  if (!cloud.lastCheck) return "Mira si la facturadora ya confirmó tus pedidos (también se comprueba solo cada hora).";
   const { at, confirmed, unconfirmed } = cloud.lastCheck;
   const news = [];
   if (confirmed > 0) news.push(`${confirmed} ${plural(confirmed, "pedido confirmado", "pedidos confirmados")}`);

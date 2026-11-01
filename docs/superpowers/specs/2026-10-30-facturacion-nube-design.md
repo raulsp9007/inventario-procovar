@@ -8,9 +8,10 @@ sola el paso **CONF.** de ese pedido. Antes lo marcaba el vendedor a mano.
 1. **Buzón** (`worker/`): API pequeña en un Cloudflare Worker con base D1 (gratis
    a este volumen: 6 vendedores, 1 facturadora). Cloudflare ya sirve el portal de
    pedidos y abre desde donde se trabaja.
-2. **App del vendedor** (la actual): sube cada pedido enviado a facturación y, solo
-   cuando el vendedor pulsa **Comprobar** (barra en Pedidos y en Configuración),
-   consulta qué confirmó la facturadora y marca CONF. No consulta por su cuenta.
+2. **App del vendedor** (la actual): sube cada pedido enviado a facturación y consulta
+   qué confirmó la facturadora (marca CONF.) **cada hora** con la app abierta, al volver a
+   ella si pasó más de una hora, o al momento con el botón **Comprobar** (barra en Pedidos
+   y en Configuración). No consulta al enlazar ni al volver la conexión.
 3. **Sitio web de la facturadora** (`facturadora.html`, publicado con la misma
    GitHub Pages; sin APK ni service worker). Entra con su enlace personal
    (`…/facturadora.html#código`: se guarda y se quita de la barra). Vendedores →

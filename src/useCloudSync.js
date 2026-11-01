@@ -7,10 +7,10 @@ import { todayStr } from "./dateUtils";
 
 // Sincronización del vendedor con la nube de facturación. Orquesta las piezas
 // puras de cloudSync.js: sube lo enviado a facturación, vacía la cola cuando hay
-// conexión y, SOLO cuando el vendedor pulsa "Comprobar" (syncNow), consulta lo
-// que confirmó la facturadora y lo marca en la app (CONF.). No consulta por su
-// cuenta: ni al enlazar, ni cada rato, ni al volver a la app. Todo se guarda aparte
-// del estado de la app (cloudStorage.js).
+// conexión y consulta lo que confirmó la facturadora para marcarlo en la app (CONF.):
+// al pulsar "Comprobar" (syncNow), y solo cada hora (intervalMs) mientras la app está
+// abierta o al volver a ella si ya pasó más de una hora. No consulta al enlazar ni al
+// volver la conexión. Todo se guarda aparte del estado de la app (cloudStorage.js).
 
 // Solo se suben los pedidos de "Hoy" (los que ve la facturadora; a las 12 am se limpia).
 
@@ -23,7 +23,7 @@ const MESSAGES = {
 // `ready`: la app ya cargó sus datos. Mientras no, la lista de pedidos está vacía
 // y sincronizar sería consultar la nube sin nada que subir.
 export function useCloudSync({
-  orders, products, customers = [], setOrdersConfirmed, createApi = createCloudApi, debounceMs = 400, today, ready = true,
+  orders, products, customers = [], setOrdersConfirmed, createApi = createCloudApi, debounceMs = 400, today, ready = true, intervalMs = 3600000,
 }) {
   const [cloud, setCloud] = useState(() => loadCloud());
   const [status, setStatus] = useState({ phase: "idle", message: "", lastSyncAt: null, rejected: [], lastCheck: null });
@@ -32,6 +32,8 @@ export function useCloudSync({
   const propsRef = useRef({});
   propsRef.current = { orders, products, customers, setOrdersConfirmed, createApi, today, ready };
   const busyRef = useRef(false);
+  // Cuándo se consultó por última vez la nube (para contar la hora de la comprobación automática).
+  const lastPullRef = useRef(Date.now());
   const rerunRef = useRef(null);
 
   const commit = useCallback((patch) => {
@@ -70,6 +72,7 @@ export function useCloudSync({
         if (result.toUnconfirm.length > 0) confirmOrders(result.toUnconfirm, false);
         commit({ map: result.nextMap, since: data.now });
         pulled = true;
+        lastPullRef.current = Date.now();
         lastCheck = { at: Date.now(), confirmed: result.toConfirm.length, unconfirmed: result.toUnconfirm.length };
       } catch (e) {
         stopped = e instanceof CloudError ? e.kind : "server";
@@ -113,6 +116,22 @@ export function useCloudSync({
     const timeoutId = setTimeout(() => { sync({ pull: false }); }, debounceMs);
     return () => clearTimeout(timeoutId);
   }, [orders, products, linked, debounceMs, sync]);
+
+  // Comprobación automática: cada hora con la app abierta, y al volver a ella (el teléfono
+  // pausa los temporizadores con la app en segundo plano) si ya pasó más de una hora.
+  useEffect(() => {
+    if (!linked) return undefined;
+    lastPullRef.current = Date.now();
+    const intervalId = setInterval(() => { sync({ pull: true }); }, intervalMs);
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastPullRef.current >= intervalMs) sync({ pull: true });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [linked, intervalMs, sync]);
 
   const linkWith = useCallback(async (code) => {
     const { url, token } = parseLinkCode(code);

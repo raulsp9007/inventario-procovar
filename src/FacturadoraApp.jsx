@@ -68,7 +68,8 @@ function Header({ title, subtitle, onBack, backLabel, children }) {
   );
 }
 
-function LinkScreen({ onLink, sellers = [], notice = "", onNoticeClear }) {
+// Lo primero es la contraseña: no se muestra nada más hasta entrar.
+function LinkScreen({ onLink, notice = "", onNoticeClear }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -87,9 +88,8 @@ function LinkScreen({ onLink, sellers = [], notice = "", onNoticeClear }) {
 
   return (
     <div style={pageStyle}>
-      <Header title="Pedidos por confirmar" subtitle="Escribe tu contraseña para ver los pedidos de cada vendedor." />
+      <Header title="Acceso" subtitle="Escribe tu contraseña para entrar." />
       <div style={{ ...column, padding: "14px 16px 16px" }}>
-        {sellers.map((seller) => <SellerCard key={seller.id} seller={seller} />)}
         <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, margin: "16px 0 8px" }}>Contraseña</div>
         <input
@@ -352,7 +352,7 @@ export default function FacturadoraApp() {
     document.title = f.link && f.totalPending > 0 ? `(${f.totalPending}) ${TITLE}` : TITLE;
   }, [f.link, f.totalPending]);
 
-  if (!f.link) return <LinkScreen onLink={f.linkWith} sellers={sellers} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
+  if (!f.link) return <LinkScreen onLink={f.linkWith} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
   // Computadora de escritorio: barra de vendedores y tabla con todos los pedidos.
   if (desktop) return <FacturadoraDesktop f={f} sellers={sellers} connection={{ text: connectionText(f), online: f.phase === "ok" || f.phase === "idle" }} />;
   if (selected) return <SellerScreen f={f} seller={selected} onBack={() => setSelectedId(null)} />;
