@@ -521,6 +521,8 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
   // pedidos): así reflejan el teléfono y negocio editados en Clientes, y un
   // cliente sin pedidos también se sugiere.
   const customerNamesList = registryNames(customers);
+  // Código del cliente por nombre, para mostrarlo en cada tarjeta de pedido.
+  const codeByName = useMemo(() => new Map(customers.filter((c) => c.code).map((c) => [c.name, c.code])), [customers]);
   const suggestions = showSuggestions
     ? matchCustomerNames(customerNamesList, customerName).map((name) => ({ name, count: getCustomerOrders(movements, name).length }))
     : [];
@@ -1077,6 +1079,12 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
               {sendBusinessName && order.businessName && (
                 <div style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {businessLabel(order.businessName)}
+                </div>
+              )}
+              {/* Código del cliente (el del portal), debajo del negocio y con las mismas letras. */}
+              {codeByName.get(order.customerName) && (
+                <div style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {`Cód. ${codeByName.get(order.customerName)}`}
                 </div>
               )}
             </div>
