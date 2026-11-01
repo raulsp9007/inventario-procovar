@@ -6,6 +6,7 @@ import { formatDate, todayStr } from "./dateUtils";
 import { openPortalSearch } from "./portalLink";
 import { mergeKnownSellers } from "./facturadoraData";
 import { KNOWN_SELLERS } from "./facturadoraSellers";
+import FacturadoraDesktop from "./FacturadoraDesktop.jsx";
 
 // App de la facturadora (mismo código que la del vendedor, modo ?rol=facturadora):
 // vendedores → pedidos del vendedor → 👍. Ver
@@ -299,11 +300,33 @@ function SellerScreen({ f, seller, onBack }) {
 
 const TITLE = "Facturación Procovar";
 
+// Pantalla ancha (computadora de escritorio): se usa la tabla en vez de las tarjetas.
+// Sin matchMedia (p. ej. en pruebas) se queda con la vista de teléfono.
+const DESKTOP_QUERY = "(min-width: 900px)";
+function useIsDesktop() {
+  const read = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(DESKTOP_QUERY).matches;
+  const [desktop, setDesktop] = useState(read);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia(DESKTOP_QUERY);
+    const onChange = () => setDesktop(media.matches);
+    onChange();
+    if (media.addEventListener) media.addEventListener("change", onChange);
+    else if (media.addListener) media.addListener(onChange);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", onChange);
+      else if (media.removeListener) media.removeListener(onChange);
+    };
+  }, []);
+  return desktop;
+}
+
 export default function FacturadoraApp() {
   useTheme();
   const f = useFacturadora();
   const [selectedId, setSelectedId] = useState(null);
   const [linkNotice, setLinkNotice] = useState("");
+  const desktop = useIsDesktop();
   // Siempre los vendedores actuales (con o sin pedidos), alfabéticamente.
   const sellers = useMemo(() => mergeKnownSellers(f.sellers, KNOWN_SELLERS), [f.sellers]);
   const selected = useMemo(() => sellers.find((s) => s.id === selectedId) || null, [sellers, selectedId]);
@@ -326,6 +349,8 @@ export default function FacturadoraApp() {
   }, [f.link, f.totalPending]);
 
   if (!f.link) return <LinkScreen onLink={f.linkWith} sellers={sellers} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
+  // Computadora de escritorio: barra de vendedores y tabla con todos los pedidos.
+  if (desktop) return <FacturadoraDesktop f={f} sellers={sellers} connection={{ text: connectionText(f), online: f.phase === "ok" || f.phase === "idle" }} />;
   if (selected) return <SellerScreen f={f} seller={selected} onBack={() => setSelectedId(null)} />;
   return <SellersScreen f={f} sellers={sellers} onOpen={setSelectedId} />;
 }

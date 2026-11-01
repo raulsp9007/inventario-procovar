@@ -32,6 +32,36 @@ export function overlayOps(sellers, queue, nowIso) {
   return sellers.map((s) => recount({ ...s, orders: s.orders.map((o) => orders.get(o.id)) }));
 }
 
+// ----- Vista de escritorio: una tabla con los pedidos de todos los vendedores -----
+
+// Todos los pedidos juntos, cada uno con su vendedor, del más viejo al más nuevo.
+export function flattenOrders(sellers) {
+  const all = sellers.flatMap((s) => s.orders.map((o) => ({ ...o, sellerId: s.id, sellerName: s.name })));
+  return all.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")) || String(a.id).localeCompare(String(b.id)));
+}
+
+const inTab = (o, tab) => (tab === "sin" ? o.status === "pendiente" : tab === "ok" ? o.status === "confirmado" : true);
+
+// Filtra por vendedor ("todos" o vacío = todos), pestaña ("sin" | "ok" | "todos") y
+// texto (cliente, negocio, código o vendedor; sin importar tildes ni mayúsculas; todas
+// las palabras escritas deben aparecer, en cualquier orden).
+export function filterOrders(orders, { sellerId = "", tab = "todos", query = "" } = {}) {
+  const words = keyOf(query).split(" ").filter(Boolean);
+  return orders.filter((o) => {
+    if (sellerId && sellerId !== "todos" && o.sellerId !== sellerId) return false;
+    if (!inTab(o, tab)) return false;
+    if (words.length === 0) return true;
+    const haystack = keyOf(`${o.customerName} ${o.businessName || ""} ${o.customerCode || ""} ${o.sellerName || ""}`);
+    return words.every((w) => haystack.includes(w));
+  });
+}
+
+// Cuántos pedidos hay en cada pestaña, dentro del vendedor elegido.
+export function tabCounts(orders, sellerId = "") {
+  const mine = filterOrders(orders, { sellerId, tab: "todos" });
+  return { sin: mine.filter((o) => inTab(o, "sin")).length, todos: mine.length, ok: mine.filter((o) => inTab(o, "ok")).length };
+}
+
 // Deja solo los pedidos de un día (AAAA-MM-DD) y vuelve a contar. No modifica lo que recibe.
 export function onlyDay(sellers, day) {
   return sellers.map((s) => recount({ ...s, orders: s.orders.filter((o) => o.date === day) }));

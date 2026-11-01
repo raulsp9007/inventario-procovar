@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { overlayOps, totalPending, mergeFactOps, mergeKnownSellers } from "./facturadoraData";
+import { overlayOps, totalPending, mergeFactOps, mergeKnownSellers, flattenOrders, filterOrders, tabCounts } from "./facturadoraData";
 
 // Datos de la app de la facturadora: lo que ve ya incluye sus 👍 pendientes de
 // enviar (para que al confirmar sin internet el pedido se vea confirmado).
@@ -93,6 +93,78 @@ describe("mergeKnownSellers", () => {
     const snapshot = JSON.stringify(input);
     mergeKnownSellers(input, KNOWN);
     expect(JSON.stringify(input)).toBe(snapshot);
+  });
+});
+
+// Vista de escritorio: todos los pedidos juntos en una tabla, con filtro por vendedor,
+// pestaña (sin confirmar / todos / confirmados) y búsqueda.
+describe("vista de escritorio: tabla de pedidos", () => {
+  const ord = (id, over = {}) => ({
+    id, customerName: `Cliente ${id}`, businessName: "", customerCode: "", total: 100, lines: [], date: "2026-10-30",
+    status: "pendiente", modified: false, createdAt: `2026-10-30T0${id.length}:00:00.000Z`, ...over,
+  });
+  const seller = (id, name, orders) => ({ id, name, orders, pending: orders.filter((o) => o.status === "pendiente").length, confirmed: orders.filter((o) => o.status === "confirmado").length });
+  const sellers = () => [
+    seller("eddy", "Eddy", []),
+    seller("raul", "Raul", [ord("b", { createdAt: "2026-10-30T10:00:00.000Z", customerCode: "LT05TCP0932", businessName: "Kiosco El Sol", customerName: "Ana López" }), ord("a", { createdAt: "2026-10-30T08:00:00.000Z", status: "confirmado" })]),
+    seller("melisa", "Melisa", [ord("c", { createdAt: "2026-10-30T09:00:00.000Z", customerName: "Beto Ruiz", customerCode: "LT05TCP0483" })]),
+  ];
+
+  describe("flattenOrders", () => {
+    it("junta los pedidos de todos, cada uno con su vendedor, del más viejo al más nuevo", () => {
+      const list = flattenOrders(sellers());
+      expect(list.map((o) => o.id)).toEqual(["a", "c", "b"]);
+      expect(list.map((o) => o.sellerName)).toEqual(["Raul", "Melisa", "Raul"]);
+      expect(list.map((o) => o.sellerId)).toEqual(["raul", "melisa", "raul"]);
+    });
+
+    it("sin pedidos da una lista vacía y no modifica lo que recibe", () => {
+      expect(flattenOrders([seller("eddy", "Eddy", [])])).toEqual([]);
+      const input = sellers();
+      const snapshot = JSON.stringify(input);
+      flattenOrders(input);
+      expect(JSON.stringify(input)).toBe(snapshot);
+    });
+  });
+
+  describe("filterOrders", () => {
+    const all = () => flattenOrders(sellers());
+
+    it("pestañas: sin confirmar, confirmados y todos", () => {
+      expect(filterOrders(all(), { tab: "sin" }).map((o) => o.id)).toEqual(["c", "b"]);
+      expect(filterOrders(all(), { tab: "ok" }).map((o) => o.id)).toEqual(["a"]);
+      expect(filterOrders(all(), { tab: "todos" }).map((o) => o.id)).toEqual(["a", "c", "b"]);
+    });
+
+    it("por vendedor (y 'todos' o vacío deja a todos)", () => {
+      expect(filterOrders(all(), { tab: "todos", sellerId: "raul" }).map((o) => o.id)).toEqual(["a", "b"]);
+      expect(filterOrders(all(), { tab: "todos", sellerId: "todos" })).toHaveLength(3);
+      expect(filterOrders(all(), { tab: "todos", sellerId: "" })).toHaveLength(3);
+    });
+
+    it("la búsqueda mira cliente, negocio, código y vendedor, sin importar tildes ni mayúsculas", () => {
+      const q = (query) => filterOrders(all(), { tab: "todos", query }).map((o) => o.id);
+      expect(q("lopez")).toEqual(["b"]);
+      expect(q("KIOSCO sol")).toEqual(["b"]);
+      expect(q("lt05tcp0483")).toEqual(["c"]);
+      expect(q("melisa")).toEqual(["c"]);
+      expect(q("  ")).toEqual(["a", "c", "b"]);
+      expect(q("nadie")).toEqual([]);
+    });
+
+    it("se combinan: vendedor + pestaña + búsqueda", () => {
+      expect(filterOrders(all(), { tab: "sin", sellerId: "raul", query: "ana" }).map((o) => o.id)).toEqual(["b"]);
+      expect(filterOrders(all(), { tab: "ok", sellerId: "melisa" })).toEqual([]);
+    });
+  });
+
+  describe("tabCounts", () => {
+    it("cuenta cada pestaña dentro del vendedor elegido", () => {
+      const all = flattenOrders(sellers());
+      expect(tabCounts(all, "todos")).toEqual({ sin: 2, todos: 3, ok: 1 });
+      expect(tabCounts(all, "raul")).toEqual({ sin: 1, todos: 2, ok: 1 });
+      expect(tabCounts(all, "eddy")).toEqual({ sin: 0, todos: 0, ok: 0 });
+    });
   });
 });
 
