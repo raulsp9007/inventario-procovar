@@ -28,7 +28,35 @@ export function createD1Store(db) {
   const vendorUpsert = "INSERT INTO vendors (id, name, token, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) "
     + "ON CONFLICT(id) DO UPDATE SET name = excluded.name, token = excluded.token, active = excluded.active, updated_at = excluded.updated_at";
 
+  const accountUpsert = "INSERT INTO accounts (role, username, username_key, salt, hash, active, fail_count, locked_until, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+    + "ON CONFLICT(role) DO UPDATE SET username = excluded.username, username_key = excluded.username_key, salt = excluded.salt, hash = excluded.hash, "
+    + "active = excluded.active, fail_count = excluded.fail_count, locked_until = excluded.locked_until, updated_at = excluded.updated_at";
+
   return {
+    // Cuentas de facturación y supervisión (ver accounts.js): una por rol.
+    async listAccounts() {
+      const { results } = await db.prepare("SELECT * FROM accounts ORDER BY role").bind().all();
+      return results.map((r) => ({
+        role: r.role, username: r.username, usernameKey: r.username_key, salt: r.salt, hash: r.hash, active: !!r.active,
+        failCount: r.fail_count, lockedUntil: r.locked_until || null, createdAt: r.created_at, updatedAt: r.updated_at,
+      }));
+    },
+    async putAccount(a) {
+      await db.prepare(accountUpsert).bind(a.role, a.username, a.usernameKey, a.salt, a.hash, a.active ? 1 : 0, a.failCount || 0, a.lockedUntil || null, a.createdAt, a.updatedAt).run();
+    },
+    async putSession(s) {
+      await db.prepare("INSERT OR REPLACE INTO sessions (token_hash, role, created_at, expires_at) VALUES (?, ?, ?, ?)").bind(s.tokenHash, s.role, s.createdAt, s.expiresAt).run();
+    },
+    async getSession(tokenHash) {
+      const r = await db.prepare("SELECT * FROM sessions WHERE token_hash = ?").bind(tokenHash).first();
+      return r ? { tokenHash: r.token_hash, role: r.role, createdAt: r.created_at, expiresAt: r.expires_at } : null;
+    },
+    async deleteSessionsByRole(role) {
+      await db.prepare("DELETE FROM sessions WHERE role = ?").bind(role).run();
+    },
+    async purgeSessions(nowIso) {
+      await db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(nowIso).run();
+    },
     // Vendedores que maneja el administrador (ver roster.js).
     async listVendors() {
       const { results } = await db.prepare("SELECT * FROM vendors ORDER BY created_at, id").bind().all();

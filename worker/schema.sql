@@ -27,5 +27,26 @@ CREATE TABLE IF NOT EXISTS vendors (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+-- Cuentas con usuario y contraseña de la facturación y la supervisión (una por rol; las
+-- maneja el administrador). Solo se guarda la huella de la contraseña.
+CREATE TABLE IF NOT EXISTS accounts (
+  role         TEXT PRIMARY KEY,
+  username     TEXT NOT NULL,
+  username_key TEXT NOT NULL UNIQUE,
+  salt         TEXT NOT NULL,
+  hash         TEXT NOT NULL,
+  active       INTEGER NOT NULL DEFAULT 1,
+  fail_count   INTEGER NOT NULL DEFAULT 0,
+  locked_until TEXT,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+-- Sesiones abiertas con usuario y contraseña (se guarda la huella del código, no el código).
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  role       TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS orders_seller_updated ON orders (seller_id, updated_at);
 CREATE INDEX IF NOT EXISTS orders_date ON orders (date);

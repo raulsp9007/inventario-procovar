@@ -12,7 +12,9 @@ sola el paso **CONF.** de ese pedido. Antes lo marcaba el vendedor a mano.
    qué confirmó la facturadora (marca CONF.) **cada hora** con la app abierta, al volver a
    ella si pasó más de una hora, o al momento con el botón **Comprobar** (barra en Pedidos
    y en Configuración). No consulta al enlazar ni al volver la conexión.
-3. **Sitio web de la facturadora** (`facturadora.html`, publicado con la misma
+3. **Sitio web de la facturadora** (también para la supervisión: entra con usuario y
+   contraseña que define el administrador; la cuenta de **supervisión** es de solo lectura y el
+   buzón le niega confirmar o deshacer) (`facturadora.html`, publicado con la misma
    GitHub Pages; sin APK ni service worker). Entra con su enlace personal
    (`…/facturadora.html#código`: se guarda y se quita de la barra). Vendedores →
    pedidos (con negocio y código del cliente) → 👍. Se refresca solo cada 30 s y

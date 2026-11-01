@@ -27,3 +27,15 @@ ${code}
 
 Cualquier duda me escribes.`;
 }
+
+// Datos de acceso de la facturación o la supervisión, para pasárselos por WhatsApp.
+// Sin `clave` (ya guardada, el buzón no la devuelve) dice que se pasa aparte.
+export function buildAccessMessage({ title, usuario, clave, url }) {
+  return `Hola 👋 Este es tu acceso a *${title}* de Procovar:
+
+Sitio: ${url}
+Usuario: ${usuario}
+Contraseña: ${clave || "te la paso aparte"}
+
+Guárdalo y no lo compartas.`;
+}

@@ -3,6 +3,9 @@
 // Ver docs/superpowers/specs/2026-10-30-facturacion-nube-design.md.
 
 import { mergeUsers, vendorsView, freeId, nameKey } from "./roster.js";
+import {
+  ACCOUNT_ROLES, MAX_FAILS, LOCK_MS, SESSION_MS, accountView, hashPassword, hashToken, parseAccountInput, usernameKey, verifyPassword,
+} from "./accounts.js";
 
 const ALLOWED_ORIGINS = ["https://raulsp9007.github.io"];
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -130,12 +133,49 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
 
   if (method === "OPTIONS") return reply(origin, null, 204);
 
+  const stamp = now();
+  const accounts = await store.listAccounts();
+
+  // Entrar con usuario y contraseña (facturación o supervisión): da una sesión.
+  if (method === "POST" && path === "/login") {
+    const read = await readJson(request);
+    const body = (!read.error && read.body && typeof read.body === "object") ? read.body : {};
+    const wrong = () => fail(origin, 401, "Usuario o contraseña incorrectos.");
+    const key = typeof body.usuario === "string" ? usernameKey(body.usuario) : "";
+    const clave = typeof body.clave === "string" ? body.clave : "";
+    const account = key ? accounts.find((a) => a.usernameKey === key) : null;
+    if (!account || !account.active || !clave) return wrong();
+    if (account.lockedUntil && account.lockedUntil > stamp) return fail(origin, 429, "Demasiados intentos. Espera unos minutos.");
+    if (!(await verifyPassword(clave, account))) {
+      const failCount = (account.failCount || 0) + 1;
+      const locked = failCount >= MAX_FAILS;
+      await store.putAccount({ ...account, failCount: locked ? 0 : failCount, lockedUntil: locked ? new Date(new Date(stamp).getTime() + LOCK_MS).toISOString() : null });
+      return wrong();
+    }
+    if (account.failCount || account.lockedUntil) await store.putAccount({ ...account, failCount: 0, lockedUntil: null });
+    let token = makeToken();
+    while (await store.getSession(await hashToken(token))) token = makeToken();
+    const expiresAt = new Date(new Date(stamp).getTime() + SESSION_MS).toISOString();
+    await store.purgeSessions(stamp);
+    await store.putSession({ tokenHash: await hashToken(token), role: account.role, createdAt: stamp, expiresAt });
+    return reply(origin, { token, role: account.role, name: account.username, expiresAt });
+  }
+
   // Quién tiene acceso: los del secreto + los vendedores que maneja el administrador.
-  const roster = mergeUsers(users, await store.listVendors());
-  const user = authenticate(request, roster.filter((u) => u.active));
+  // Una cuenta de facturación o supervisión con usuario y contraseña reemplaza al
+  // usuario de ese rol que venga del secreto.
+  const accountRoles = new Set(accounts.map((a) => a.role));
+  const roster = mergeUsers(users.filter((u) => !accountRoles.has(u.role)), await store.listVendors());
+  let user = authenticate(request, roster.filter((u) => u.active));
+  if (!user) {
+    const header = request.headers.get("Authorization") || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    const session = token ? await store.getSession(await hashToken(token)) : null;
+    const account = session && session.expiresAt > stamp ? accounts.find((a) => a.role === session.role) : null;
+    if (account && account.active) user = { id: `cuenta-${account.role}`, name: account.username, role: account.role, token: "" };
+  }
   if (!user) return fail(origin, 401, "Código no válido.");
   const only = (role) => (user.role === role ? null : fail(origin, 403, "Esto no es para tu usuario."));
-  const stamp = now();
 
   if (method === "GET" && path === "/me") return reply(origin, { id: user.id, name: user.name, role: user.role });
 
@@ -210,7 +250,8 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
 
   // ----- facturadora -----
   if (method === "GET" && path === "/orders") {
-    const denied = only("facturadora");
+    // La supervisión solo mira: ve la lista pero no puede confirmar nada.
+    const denied = user.role === "facturadora" || user.role === "supervisor" ? null : fail(origin, 403, "Esto no es para tu usuario.");
     if (denied) return denied;
     const requested = url.searchParams.get("desde");
     const desde = requested && DATE_PATTERN.test(requested)
@@ -255,9 +296,39 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   }
 
   // ----- administrador: la lista de vendedores -----
-  if (path === "/admin/vendors" || path.startsWith("/admin/vendors/")) {
+  if (path.startsWith("/admin/")) {
     const denied = only("admin");
     if (denied) return denied;
+
+    if (path === "/admin/accounts" || path.startsWith("/admin/accounts/")) {
+      if (method === "GET" && path === "/admin/accounts") {
+        const byRole = (role) => accountView(accounts.find((a) => a.role === role));
+        return reply(origin, { facturacion: byRole(ACCOUNT_ROLES.facturacion), supervision: byRole(ACCOUNT_ROLES.supervision) });
+      }
+      const target = path.match(/^\/admin\/accounts\/([^/]+)$/);
+      const role = target ? ACCOUNT_ROLES[decodeURIComponent(target[1])] : null;
+      if (method === "PUT" && role) {
+        const read = await readJson(request);
+        if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
+        const current = accounts.find((a) => a.role === role) || null;
+        const parsed = parseAccountInput(read.body, current);
+        if (parsed.error) return fail(origin, 400, parsed.error);
+        if (parsed.usuario && accounts.some((a) => a.role !== role && a.usernameKey === usernameKey(parsed.usuario))) {
+          return fail(origin, 409, "Ya hay una cuenta con ese usuario.");
+        }
+        const next = current
+          ? { ...current, updatedAt: stamp }
+          : { role, createdAt: stamp, updatedAt: stamp, active: true, failCount: 0, lockedUntil: null };
+        if (parsed.usuario) { next.username = parsed.usuario; next.usernameKey = usernameKey(parsed.usuario); }
+        if (parsed.clave) { Object.assign(next, await hashPassword(parsed.clave), { failCount: 0, lockedUntil: null }); }
+        if (parsed.activo !== undefined) next.active = parsed.activo;
+        await store.putAccount(next);
+        // Nueva contraseña o cuenta desactivada: las sesiones abiertas dejan de servir.
+        if (parsed.clave || parsed.activo === false) await store.deleteSessionsByRole(role);
+        return reply(origin, accountView(next));
+      }
+      return fail(origin, 404, "No existe esa ruta.");
+    }
 
     const view = (id) => vendorsView(mergeUsers(users, vendorsSnapshot)).find((v) => v.id === id);
     // La lista tal como estaba al empezar, más lo que se guarde en esta petición.

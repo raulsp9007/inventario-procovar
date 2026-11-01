@@ -52,6 +52,37 @@ describe("createCloudApi: administración de vendedores", () => {
   });
 });
 
+describe("createCloudApi: usuario y contraseña", () => {
+  it("login, y las cuentas de facturación y supervisión del administrador, con sus rutas", async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push([init.method, url.replace(URL_OK, ""), init.body ? JSON.parse(init.body) : undefined]);
+      return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+    });
+    const cloud = createCloudApi({ url: URL_OK, token: TOKEN, fetchImpl });
+    await cloud.login("maria", "clave-12345");
+    await cloud.adminAccounts();
+    await cloud.saveAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+    await cloud.saveAccount("supervision", { activo: false });
+    expect(calls).toEqual([
+      ["POST", "/login", { usuario: "maria", clave: "clave-12345" }],
+      ["GET", "/admin/accounts", undefined],
+      ["PUT", "/admin/accounts/facturacion", { usuario: "maria", clave: "clave-12345" }],
+      ["PUT", "/admin/accounts/supervision", { activo: false }],
+    ]);
+  });
+
+  it("un usuario o contraseña mal llega como error con el mensaje del buzón", async () => {
+    const { api: cloud } = api({ status: 401, body: { error: "Usuario o contraseña incorrectos." } });
+    await expect(cloud.login("maria", "x")).rejects.toMatchObject({ kind: "auth", message: "Usuario o contraseña incorrectos." });
+  });
+
+  it("demasiados intentos (429) llega con el mensaje del buzón", async () => {
+    const { api: cloud } = api({ status: 429, body: { error: "Demasiados intentos. Espera unos minutos." } });
+    await expect(cloud.login("maria", "x")).rejects.toMatchObject({ status: 429, message: "Demasiados intentos. Espera unos minutos." });
+  });
+});
+
 describe("createCloudApi: peticiones", () => {
   it("me: GET /me con el código", async () => {
     const { api: cloud, fetchImpl } = api({ status: 200, body: { id: "carlos", name: "Carlos", role: "vendedor" } });

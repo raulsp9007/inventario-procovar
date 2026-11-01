@@ -69,6 +69,11 @@ export function createCloudApi({ url, token, fetchImpl }) {
     confirmMany: (ids) => request("POST", "/orders/confirm", { ids }),
     unconfirmMany: (ids) => request("POST", "/orders/unconfirm", { ids }),
     // administrador (lista de vendedores)
+    // Entrar con usuario y contraseña (facturación o supervisión): devuelve la sesión.
+    login: (usuario, clave) => request("POST", "/login", { usuario, clave }),
+    // Cuentas de facturación y supervisión (administrador).
+    adminAccounts: () => request("GET", "/admin/accounts"),
+    saveAccount: (slug, body) => request("PUT", `/admin/accounts/${enc(slug)}`, body),
     adminVendors: () => request("GET", "/admin/vendors"),
     addVendor: (name) => request("POST", "/admin/vendors", { name }),
     updateVendor: (id, patch) => request("PUT", `/admin/vendors/${enc(id)}`, patch),

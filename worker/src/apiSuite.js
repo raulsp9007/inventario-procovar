@@ -458,6 +458,199 @@ export function apiSuite(label, makeStore) {
       });
     });
 
+    describe("cuentas de facturación y supervisión (usuario y contraseña)", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const setAccount = (slug, body) => admin("PUT", `/accounts/${slug}`, body);
+      const login = (usuario, clave) => call("POST", "/login", { body: { usuario, clave } });
+      const DAY = 24 * 60 * 60 * 1000;
+      const later = (ms) => new Date(new Date(NOW).getTime() + ms).toISOString();
+
+      it("al principio no hay cuentas; solo el administrador las ve y las cambia", async () => {
+        expect((await admin("GET", "/accounts")).json).toEqual({ facturacion: null, supervision: null });
+        expect((await call("GET", "/admin/accounts")).status).toBe(401);
+        for (const token of ["tok-carlos", "tok-fact"]) {
+          expect((await call("GET", "/admin/accounts", { token })).status).toBe(403);
+          expect((await call("PUT", "/admin/accounts/facturacion", { token, body: { usuario: "maria", clave: "clave-12345" } })).status).toBe(403);
+        }
+      });
+
+      it("crea la cuenta de facturación y la de supervisión, sin devolver nunca la contraseña", async () => {
+        const created = await setAccount("facturacion", { usuario: "Maria.Fact", clave: "clave-de-maria" });
+        expect(created.status).toBe(200);
+        expect(created.json).toEqual({ usuario: "Maria.Fact", activo: true });
+        expect((await setAccount("supervision", { usuario: "supervisor1", clave: "otra-clave-9" })).json).toEqual({ usuario: "supervisor1", activo: true });
+        expect((await admin("GET", "/accounts")).json).toEqual({
+          facturacion: { usuario: "Maria.Fact", activo: true },
+          supervision: { usuario: "supervisor1", activo: true },
+        });
+        expect(JSON.stringify((await admin("GET", "/accounts")).json)).not.toContain("clave");
+      });
+
+      it("la contraseña no queda guardada tal cual (solo su huella)", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-de-maria" });
+        const [account] = await store.listAccounts();
+        expect(JSON.stringify(account)).not.toContain("clave-de-maria");
+        expect(account.hash).toBeTruthy();
+        expect(account.salt).toBeTruthy();
+      });
+
+      it("valida usuario y contraseña (400 con el motivo)", async () => {
+        const bad = async (body, text) => {
+          const r = await setAccount("facturacion", body);
+          expect(r.status).toBe(400);
+          expect(r.json.error).toMatch(text);
+        };
+        await bad({ clave: "clave-12345" }, /usuario/i);
+        await bad({ usuario: "ab", clave: "clave-12345" }, /usuario/i);
+        await bad({ usuario: "con espacios", clave: "clave-12345" }, /usuario/i);
+        await bad({ usuario: "a".repeat(41), clave: "clave-12345" }, /usuario/i);
+        await bad({ usuario: "maria" }, /contraseña/i);
+        await bad({ usuario: "maria", clave: "corta" }, /contraseña/i);
+        await bad({ usuario: "maria", clave: "x".repeat(101) }, /contraseña/i);
+      });
+
+      it("el usuario no se puede repetir entre las dos cuentas (sin importar mayúsculas ni tildes)", async () => {
+        await setAccount("facturacion", { usuario: "María", clave: "clave-12345" });
+        const dup = await setAccount("supervision", { usuario: "maria", clave: "clave-67890" });
+        expect(dup.status).toBe(409);
+      });
+
+      it("una cuenta que no existe: 404", async () => {
+        expect((await setAccount("otra", { usuario: "maria", clave: "clave-12345" })).status).toBe(404);
+      });
+
+      it("al cambiar solo el usuario o solo la contraseña, lo demás se conserva", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        expect((await setAccount("facturacion", { usuario: "maria2" })).json).toEqual({ usuario: "maria2", activo: true });
+        expect((await login("maria2", "clave-12345")).status).toBe(200);
+        await setAccount("facturacion", { clave: "nueva-clave-1" });
+        expect((await login("maria2", "clave-12345")).status).toBe(401);
+        expect((await login("maria2", "nueva-clave-1")).status).toBe(200);
+      });
+
+      it("entrar con usuario y contraseña da una sesión con su rol (sin importar mayúsculas ni espacios en el usuario)", async () => {
+        await setAccount("facturacion", { usuario: "Maria", clave: "clave-12345" });
+        const { status, json } = await login("  maRIA ", "clave-12345");
+        expect(status).toBe(200);
+        expect(json.role).toBe("facturadora");
+        expect(json.name).toBe("Maria");
+        expect(json.token.length).toBeGreaterThan(10);
+        expect((await call("GET", "/me", { token: json.token })).json).toMatchObject({ name: "Maria", role: "facturadora" });
+      });
+
+      it("usuario o contraseña mal: 401 con el mismo mensaje y sin sesión", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        const wrongPass = await login("maria", "clave-incorrecta");
+        const wrongUser = await login("nadie", "clave-12345");
+        expect(wrongPass.status).toBe(401);
+        expect(wrongUser.status).toBe(401);
+        expect(wrongPass.json).toEqual(wrongUser.json);
+        expect(wrongPass.json.token).toBeUndefined();
+        expect((await login("maria", "")).status).toBe(401);
+        expect((await call("POST", "/login", { body: {} })).status).toBe(401);
+      });
+
+      it("la sesión de facturación hace todo lo de la facturadora", async () => {
+        await put("o1", order());
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        const { token } = (await login("maria", "clave-12345")).json;
+        expect((await call("GET", "/orders?desde=2026-10-01", { token })).status).toBe(200);
+        expect((await call("POST", "/orders/confirm", { token, body: { ids: ["o1"] } })).json.confirmed).toEqual(["o1"]);
+        expect((await call("POST", "/orders/unconfirm", { token, body: { ids: ["o1"] } })).json.unconfirmed).toEqual(["o1"]);
+        expect((await call("GET", "/admin/accounts", { token })).status).toBe(403);
+        expect((await put("o2", order(), token)).status).toBe(403);
+      });
+
+      it("la supervisión solo mira: ve los pedidos con sus estados y nada más", async () => {
+        await put("o1", order());
+        await put("o2", order({ customerName: "Beto" }));
+        await call("POST", "/orders/confirm", { token: "tok-fact", body: { ids: ["o2"] } });
+        await setAccount("supervision", { usuario: "super", clave: "clave-12345" });
+        const { token, role } = (await login("super", "clave-12345")).json;
+        expect(role).toBe("supervisor");
+        const list = await call("GET", "/orders?desde=2026-10-01", { token });
+        expect(list.status).toBe(200);
+        const carlos = list.json.sellers.find((s) => s.id === "carlos");
+        expect([carlos.pending, carlos.confirmed]).toEqual([1, 1]);
+        expect(carlos.orders.map((o) => [o.id, o.status]).sort()).toEqual([["o1", "pendiente"], ["o2", "confirmado"]]);
+
+        expect((await call("POST", "/orders/confirm", { token, body: { ids: ["o1"] } })).status).toBe(403);
+        expect((await call("POST", "/orders/unconfirm", { token, body: { ids: ["o2"] } })).status).toBe(403);
+        expect((await put("o3", order(), token)).status).toBe(403);
+        expect((await call("DELETE", "/orders/o1", { token })).status).toBe(403);
+        expect((await call("GET", "/orders/status", { token })).status).toBe(403);
+        expect((await call("GET", "/admin/accounts", { token })).status).toBe(403);
+        expect((await call("GET", "/admin/vendors", { token })).status).toBe(403);
+        const after = await call("GET", "/orders?desde=2026-10-01", { token: "tok-fact" });
+        expect(after.json.sellers.find((s) => s.id === "carlos").confirmed).toBe(1);
+      });
+
+      it("tras 5 intentos fallidos se bloquea 5 minutos (429), aunque acierte; después vuelve a servir", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        for (let i = 0; i < 5; i += 1) expect((await login("maria", "mal-mal-mal")).status).toBe(401);
+        expect((await login("maria", "clave-12345")).status).toBe(429);
+        clock = later(4 * 60 * 1000);
+        expect((await login("maria", "clave-12345")).status).toBe(429);
+        clock = later(5 * 60 * 1000 + 1000);
+        expect((await login("maria", "clave-12345")).status).toBe(200);
+      });
+
+      it("un acierto borra los fallos anteriores", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        for (let i = 0; i < 4; i += 1) await login("maria", "mal-mal-mal");
+        expect((await login("maria", "clave-12345")).status).toBe(200);
+        for (let i = 0; i < 4; i += 1) expect((await login("maria", "mal-mal-mal")).status).toBe(401);
+        expect((await login("maria", "clave-12345")).status).toBe(200);
+      });
+
+      it("cambiar la contraseña cierra las sesiones abiertas y quita el bloqueo", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        const { token } = (await login("maria", "clave-12345")).json;
+        expect((await call("GET", "/me", { token })).status).toBe(200);
+        for (let i = 0; i < 5; i += 1) await login("maria", "mal-mal-mal");
+        await setAccount("facturacion", { clave: "nueva-clave-1" });
+        expect((await call("GET", "/me", { token })).status).toBe(401);
+        expect((await login("maria", "nueva-clave-1")).status).toBe(200);
+      });
+
+      it("desactivar la cuenta cierra las sesiones y no deja entrar; reactivar la devuelve", async () => {
+        await setAccount("supervision", { usuario: "super", clave: "clave-12345" });
+        const { token } = (await login("super", "clave-12345")).json;
+        expect((await setAccount("supervision", { activo: false })).json).toEqual({ usuario: "super", activo: false });
+        expect((await call("GET", "/orders", { token })).status).toBe(401);
+        expect((await login("super", "clave-12345")).status).toBe(401);
+        await setAccount("supervision", { activo: true });
+        expect((await login("super", "clave-12345")).status).toBe(200);
+      });
+
+      it("una sesión vence a los 30 días", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        const { token } = (await login("maria", "clave-12345")).json;
+        clock = later(29 * DAY);
+        expect((await call("GET", "/me", { token })).status).toBe(200);
+        clock = later(31 * DAY);
+        expect((await call("GET", "/me", { token })).status).toBe(401);
+      });
+
+      it("con una cuenta de facturación creada, el código viejo de la facturadora deja de servir", async () => {
+        expect((await call("GET", "/me", { token: "tok-fact" })).status).toBe(200);
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        expect((await call("GET", "/me", { token: "tok-fact" })).status).toBe(401);
+        expect((await call("GET", "/me", { token: "tok-carlos" })).status).toBe(200);
+      });
+
+      it("la lista de vendedores del administrador ya no muestra a la facturadora vieja cuando hay cuenta nueva", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        expect((await admin("GET", "/vendors")).json.facturadora).toBeNull();
+      });
+
+      it("CORS: el sitio recibe sus cabeceras al entrar", async () => {
+        await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
+        const r = await call("POST", "/login", { body: { usuario: "maria", clave: "clave-12345" }, origin: ORIGIN });
+        expect(r.headers.get("Access-Control-Allow-Origin")).toBe(ORIGIN);
+      });
+    });
+
     describe("limpieza", () => {
       it("al subir un pedido se borran los de más de 60 días", async () => {
         clock = "2026-08-01T10:00:00.000Z";

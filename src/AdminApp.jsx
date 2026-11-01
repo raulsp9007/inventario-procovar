@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Copy, RefreshCw, Power, Check } from "lucide-react";
 import { useAdmin } from "./useAdmin";
 import { makeLinkCode } from "./linkCode";
-import { buildVendorMessage } from "./vendorMessage";
+import { buildVendorMessage, buildAccessMessage } from "./vendorMessage";
 
 // Sitio de administración (admin.html): el administrador maneja los nombres y los
 // enlaces de los vendedores. La lógica vive en useAdmin; acá solo está la pantalla.
@@ -140,6 +140,117 @@ function VendorRow({ vendor, busy, codeOf, onRename, onToggle, onRegenerate, onC
   );
 }
 
+const PASSWORD_MIN = 8;
+
+// Acceso con usuario y contraseña de una persona de facturación o de supervisión (una por
+// rol). La contraseña no vuelve del buzón: solo se conoce mientras se acaba de escribir.
+function AccountCard({ slug, title, blurb, account, busy, siteUrl, onSave, onCopy }) {
+  const [usuario, setUsuario] = useState(account ? account.usuario : "");
+  const [clave, setClave] = useState("");
+  const [changing, setChanging] = useState(false);
+  const [error, setError] = useState("");
+  const [known, setKnown] = useState("");
+  useEffect(() => { setUsuario(account ? account.usuario : ""); }, [account && account.usuario]);
+
+  async function create() {
+    setError("");
+    if (!usuario.trim()) return setError("Escribe el usuario.");
+    if (clave.length < PASSWORD_MIN) return setError(`La contraseña debe tener al menos ${PASSWORD_MIN} caracteres.`);
+    if (await onSave(slug, { usuario: usuario.trim(), clave })) { setKnown(clave); setClave(""); }
+    return undefined;
+  }
+
+  async function changePassword() {
+    setError("");
+    if (clave.length < PASSWORD_MIN) return setError(`La contraseña debe tener al menos ${PASSWORD_MIN} caracteres.`);
+    if (await onSave(slug, { clave })) { setKnown(clave); setClave(""); setChanging(false); }
+    return undefined;
+  }
+
+  const on = account ? account.activo : true;
+  const changedName = account && usuario.trim() !== account.usuario;
+
+  return (
+    <div role="group" aria-label={`Acceso de ${title.toLowerCase()}`} style={{ ...card, opacity: on ? 1 : 0.7 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>
+        {account && (
+          <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", border: `1px solid ${on ? "var(--green)" : "var(--border-strong)"}`, color: on ? "var(--green)" : "var(--text-muted)" }}>
+            {on ? "Activo" : "Desactivado"}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>{blurb}</div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          aria-label="Usuario"
+          placeholder="Usuario"
+          value={usuario}
+          maxLength={40}
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          onChange={(e) => { setUsuario(e.target.value); setError(""); }}
+          style={{ ...inputStyle, flex: "1 1 180px", minWidth: 0 }}
+        />
+        {!account && (
+          <>
+            <input
+              aria-label="Contraseña"
+              placeholder="Contraseña (mínimo 8)"
+              value={clave}
+              maxLength={100}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => { setClave(e.target.value); setError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") create(); }}
+              style={{ ...inputStyle, flex: "1 1 180px", minWidth: 0 }}
+            />
+            <button type="button" disabled={busy} onClick={create} style={primary}>Crear acceso</button>
+          </>
+        )}
+        {changedName && (
+          <button type="button" disabled={busy} onClick={() => onSave(slug, { usuario: usuario.trim() })} style={primary}>
+            <Check size={14} strokeWidth={2.6} aria-hidden="true" /> Guardar usuario
+          </button>
+        )}
+      </div>
+
+      {account && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <button type="button" onClick={() => { setChanging((v) => !v); setClave(""); setError(""); }} style={button}>Cambiar contraseña</button>
+          <button type="button" disabled={busy} onClick={() => onSave(slug, { activo: !on })} style={button}>
+            <Power size={13} strokeWidth={2.2} aria-hidden="true" /> {on ? "Desactivar" : "Reactivar"}
+          </button>
+          <button type="button" onClick={() => onCopy(buildAccessMessage({ title, usuario: account.usuario, clave: known, url: siteUrl }), "Datos copiados")} style={button}>
+            <Copy size={13} strokeWidth={2.2} aria-hidden="true" /> Copiar datos de acceso
+          </button>
+        </div>
+      )}
+
+      {account && changing && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <input
+            aria-label="Contraseña nueva"
+            placeholder="Contraseña nueva (mínimo 8)"
+            value={clave}
+            maxLength={100}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => { setClave(e.target.value); setError(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter") changePassword(); }}
+            style={{ ...inputStyle, flex: "1 1 220px", minWidth: 0 }}
+          />
+          <button type="button" disabled={busy} onClick={changePassword} style={primary}>Guardar contraseña</button>
+        </div>
+      )}
+
+      {error && <div role="alert" style={{ fontSize: 13, color: "var(--error-text)", marginTop: 8 }}>{error}</div>}
+    </div>
+  );
+}
+
 export default function AdminApp() {
   useTheme();
   const admin = useAdmin();
@@ -173,6 +284,7 @@ export default function AdminApp() {
   if (!admin.link) return <LinkScreen onLink={admin.linkWith} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
 
   const codeOf = (vendor) => makeLinkCode({ url: admin.link.url, token: vendor.token });
+  const siteUrl = new URL("facturadora.html", window.location.href).href;
   const factLink = admin.facturadora
     ? `${new URL("facturadora.html", window.location.href).href}#${makeLinkCode({ url: admin.link.url, token: admin.facturadora.token })}`
     : "";
@@ -235,6 +347,32 @@ export default function AdminApp() {
           />
           <button type="button" onClick={add} disabled={admin.busy} style={primary}>Agregar</button>
         </div>
+
+        {admin.accounts && (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "18px 2px 8px" }}>ACCESO CON USUARIO Y CONTRASEÑA</div>
+            <AccountCard
+              slug="facturacion"
+              title="Facturación"
+              blurb="Hace todo: ve y confirma pedidos, y los deshace."
+              account={admin.accounts.facturacion}
+              busy={admin.busy}
+              siteUrl={siteUrl}
+              onSave={admin.saveAccount}
+              onCopy={copy}
+            />
+            <AccountCard
+              slug="supervision"
+              title="Supervisión"
+              blurb="Solo lectura: ve los pedidos con sus estados, sin poder confirmar nada."
+              account={admin.accounts.supervision}
+              busy={admin.busy}
+              siteUrl={siteUrl}
+              onSave={admin.saveAccount}
+              onCopy={copy}
+            />
+          </>
+        )}
 
         {admin.facturadora && (
           <>

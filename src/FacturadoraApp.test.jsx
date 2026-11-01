@@ -51,6 +51,10 @@ function installFetch() {
     calls.push({ method: init.method, path, body: init.body ? JSON.parse(init.body) : undefined });
     if (server.offline) throw new TypeError("Failed to fetch");
     const ok = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) });
+    if (path === "/login") {
+      if (server.badLogin) return { ok: false, status: 401, json: async () => ({ error: "Usuario o contraseña incorrectos." }), text: async () => "x" };
+      return ok({ token: TOKEN, role: server.loginRole || "facturadora", name: "maria", expiresAt: "2026-11-30T00:00:00.000Z" });
+    }
     if (server.unauthorized) return { ok: false, status: 401, json: async () => ({ error: "x" }), text: async () => "x" };
     if (path === "/me") return ok({ id: "fact", name: "Facturadora", role: server.role });
     if (path.startsWith("/orders/confirm") || path.startsWith("/orders/unconfirm")) {
@@ -95,26 +99,26 @@ const openSeller = async (name) => {
 describe("facturadora: enlazar", () => {
   it("sin enlace pide el código", async () => {
     render(<FacturadoraApp />);
-    expect(await screen.findByLabelText("Contraseña o código de enlace")).toBeTruthy();
+    expect(await screen.findByLabelText("Contraseña")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Entrar" })).toBeTruthy();
     expect(calls).toEqual([]);
   });
 
   it("un código dañado o de un vendedor dice por qué", async () => {
     render(<FacturadoraApp />);
-    fireEvent.change(await screen.findByLabelText("Contraseña o código de enlace"), { target: { value: "procovar1:xxxx" } });
+    fireEvent.change(await screen.findByLabelText("Contraseña"), { target: { value: "procovar1:xxxx" } });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByText("El código de enlace está dañado.")).toBeTruthy();
 
     server.role = "vendedor";
-    fireEvent.change(screen.getByLabelText("Contraseña o código de enlace"), { target: { value: SELLER_CODE } });
+    fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: SELLER_CODE } });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByText("Este código es de un vendedor. Úsalo en la app de ventas.")).toBeTruthy();
   });
 
   it("la contraseña se escribe oculta y se entra con Enter", async () => {
     render(<FacturadoraApp />);
-    const field = await screen.findByLabelText("Contraseña o código de enlace");
+    const field = await screen.findByLabelText("Contraseña");
     expect(field.getAttribute("type")).toBe("password");
     fireEvent.change(field, { target: { value: TOKEN } });
     fireEvent.submit(field.closest("form"));
@@ -123,10 +127,42 @@ describe("facturadora: enlazar", () => {
     expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toMatchObject({ url: URL_OK, token: TOKEN, role: "facturadora" });
   });
 
+  it("entra con usuario y contraseña (el usuario va antes)", async () => {
+    render(<FacturadoraApp />);
+    fireEvent.change(await screen.findByLabelText("Usuario"), { target: { value: "maria" } });
+    fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "clave-12345" } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
+    const login = calls.find((c) => c.path === "/login");
+    expect(login.body).toEqual({ usuario: "maria", clave: "clave-12345" });
+    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toMatchObject({ token: TOKEN, role: "facturadora" });
+  });
+
+  it("usuario o contraseña mal: lo dice y no entra", async () => {
+    server.badLogin = true;
+    render(<FacturadoraApp />);
+    fireEvent.change(await screen.findByLabelText("Usuario"), { target: { value: "maria" } });
+    fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "mala-clave-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByText("Usuario o contraseña incorrectos.")).toBeTruthy();
+    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+  });
+
+  it("si la sesión deja de servir, vuelve a pedir usuario y contraseña", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    server.unauthorized = true;
+    fireEvent(document, new Event("visibilitychange"));
+    expect(await screen.findByText("La sesión terminó. Entra de nuevo.")).toBeTruthy();
+    expect(screen.getByLabelText("Usuario")).toBeTruthy();
+    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+  });
+
   it("una contraseña equivocada avisa y deja intentar otra vez", async () => {
     server.unauthorized = true;
     render(<FacturadoraApp />);
-    const field = await screen.findByLabelText("Contraseña o código de enlace");
+    const field = await screen.findByLabelText("Contraseña");
     fireEvent.change(field, { target: { value: "x".repeat(24) } });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByText("La contraseña no es correcta.")).toBeTruthy();
@@ -135,7 +171,7 @@ describe("facturadora: enlazar", () => {
 
   it("con el código bueno entra y ve a los vendedores", async () => {
     render(<FacturadoraApp />);
-    fireEvent.change(await screen.findByLabelText("Contraseña o código de enlace"), { target: { value: FACT_CODE } });
+    fireEvent.change(await screen.findByLabelText("Contraseña"), { target: { value: FACT_CODE } });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
   });
@@ -159,7 +195,7 @@ describe("facturadora: enlace personal en la dirección", () => {
     window.location.hash = `#${SELLER_CODE}`;
     render(<FacturadoraApp />);
     expect(await screen.findByText("Este código es de un vendedor. Úsalo en la app de ventas.")).toBeTruthy();
-    expect(screen.getByLabelText("Contraseña o código de enlace")).toBeTruthy();
+    expect(screen.getByLabelText("Contraseña")).toBeTruthy();
     expect(window.location.hash).toBe("");
   });
 
@@ -167,7 +203,7 @@ describe("facturadora: enlace personal en la dirección", () => {
     window.location.hash = "#procovar1:xxxx";
     render(<FacturadoraApp />);
     expect(await screen.findByRole("alert")).toBeTruthy();
-    expect(screen.getByLabelText("Contraseña o código de enlace")).toBeTruthy();
+    expect(screen.getByLabelText("Contraseña")).toBeTruthy();
   });
 
   it("si ya estaba enlazada, no vuelve a enlazar con una dirección vieja", async () => {
@@ -204,7 +240,7 @@ describe("facturadora: inicio con los vendedores actuales", () => {
 
   it("sin enlazar solo pide la contraseña: no se ve ningún vendedor ni otra información", async () => {
     render(<FacturadoraApp />);
-    await screen.findByLabelText("Contraseña o código de enlace");
+    await screen.findByLabelText("Contraseña");
     expect(shownNames()).toEqual([]);
     expect(screen.queryByText("Sin enlazar")).toBeNull();
     CURRENT.forEach((name) => expect(screen.queryByText(name)).toBeNull());
@@ -214,10 +250,10 @@ describe("facturadora: inicio con los vendedores actuales", () => {
 
   it("al entrar con la contraseña correcta aparecen los vendedores", async () => {
     render(<FacturadoraApp />);
-    fireEvent.change(await screen.findByLabelText("Contraseña o código de enlace"), { target: { value: TOKEN } });
+    fireEvent.change(await screen.findByLabelText("Contraseña"), { target: { value: TOKEN } });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
-    expect(screen.queryByLabelText("Contraseña o código de enlace")).toBeNull();
+    expect(screen.queryByLabelText("Contraseña")).toBeNull();
   });
 
   // Con la lista del buzón en mano, esa manda: es la que arma el administrador
@@ -284,7 +320,7 @@ describe("facturadora: vendedores", () => {
     render(<FacturadoraApp />);
     await screen.findByRole("button", { name: /Carlos Pérez/ });
     fireEvent.click(screen.getByRole("button", { name: "Desenlazar" }));
-    expect(await screen.findByLabelText("Contraseña o código de enlace")).toBeTruthy();
+    expect(await screen.findByLabelText("Contraseña")).toBeTruthy();
     expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
   });
 });
@@ -451,5 +487,40 @@ describe("facturadora: sin internet", () => {
     fireEvent.click(within(card).getByRole("button", { name: "👍 Confirmar" }));
     await waitFor(() => expect(screen.queryByText("Ana López")).toBeNull());
     expect(await screen.findByText(/1 pendiente de enviar/)).toBeTruthy();
+  });
+});
+
+// La supervisión solo mira: ve los vendedores y sus pedidos con su estado, sin ningún
+// botón para confirmar ni deshacer.
+describe("facturadora: cuenta de supervisión (solo lectura)", () => {
+  const supervisorStorage = () => localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "super", role: "supervisor" }));
+
+  it("ve a los vendedores y el aviso de solo lectura", async () => {
+    supervisorStorage();
+    render(<FacturadoraApp />);
+    expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
+    expect(screen.getByText("Solo lectura")).toBeTruthy();
+  });
+
+  it("en los pedidos de un vendedor no hay confirmar, confirmar todos ni quitar 👍, pero sí el estado", async () => {
+    supervisorStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos");
+    await screen.findByText("Ana López");
+    fireEvent.click(screen.getByRole("button", { name: "Todos" }));
+    expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Quitar/ })).toBeNull();
+    expect(screen.getAllByText(/Pendiente de confirmar/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Confirmado a las/)).toBeTruthy();
+    expect(screen.getByText("Solo lectura")).toBeTruthy();
+    expect(calls.some((c) => c.path.startsWith("/orders/confirm") || c.path.startsWith("/orders/unconfirm"))).toBe(false);
+  });
+
+  it("la facturadora sigue viendo todos sus botones", async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await openSeller("Carlos");
+    expect((await screen.findAllByRole("button", { name: /Confirmar/ })).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Solo lectura")).toBeNull();
   });
 });

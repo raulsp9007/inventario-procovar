@@ -88,6 +88,33 @@ Activarlo (una sola vez; tras actualizar el código del buzón):
 
 El enlace del administrador es **solo tuyo**: con él se pueden cambiar todos los códigos.
 
+## Usuario y contraseña de facturación y supervisión
+
+Además de los vendedores, el administrador define desde `admin.html` dos accesos con
+**usuario y contraseña** (sección "Acceso con usuario y contraseña"):
+
+- **Facturación:** hace todo lo de la facturadora (ver pedidos, confirmar y deshacer).
+- **Supervisión:** **solo lectura**. Ve los pedidos por vendedor con sus estados; el buzón le
+  responde 403 si intenta confirmar, deshacer o cambiar algo.
+
+Hay uno de cada. Entran en `…/facturadora.html` escribiendo su usuario y contraseña; la página
+muestra solo el acceso hasta entrar. La contraseña (8 a 100 caracteres) no se guarda: el buzón
+solo guarda su huella, y no se puede volver a leer (se puede cambiar). Tras 5 intentos fallidos
+la cuenta se bloquea 5 minutos. Entrar da una sesión de 30 días; cambiar la contraseña o
+desactivar el acceso cierra las sesiones abiertas. El usuario no puede repetirse entre las dos
+cuentas.
+
+Mientras no se cree la cuenta de facturación, sigue sirviendo el código de la facturadora del
+secreto `USERS` (o su contraseña/enlace de antes: se escribe sin usuario). Al crearla, la cuenta
+nueva **reemplaza** a ese código.
+
+Activarlo (una sola vez, en este orden):
+
+1. Aplica la tabla nueva: `npx wrangler d1 execute procovar-buzon --remote --file=schema.sql`
+   (crea `accounts` y `sessions`; se puede repetir sin problema).
+2. Publica el buzón: `npx wrangler deploy`.
+3. Publica la página (push). Después entra a `admin.html` y crea los accesos.
+
 ## Cambiar o quitar a alguien
 
 Desde el sitio de administración (ver arriba). Solo si hace falta rehacerlo todo desde

@@ -11,6 +11,8 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
   const [link, setLink] = useState(() => loadAdminLink());
   const [vendors, setVendors] = useState([]);
   const [facturadora, setFacturadora] = useState(null);
+  // Cuentas con usuario y contraseña de facturación y supervisión (null si el buzón no las tiene).
+  const [accounts, setAccounts] = useState(null);
   const [phase, setPhase] = useState("idle"); // idle | loading | ok | error | auth
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,9 +33,10 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
     if (!linkRef.current) return false;
     setPhase((p) => (p === "ok" ? p : "loading"));
     try {
-      const data = await api().adminVendors();
+      const [data, accountData] = await Promise.all([api().adminVendors(), api().adminAccounts().catch(() => null)]);
       setVendors(data.vendors || []);
       setFacturadora(data.facturadora || null);
+      setAccounts(accountData);
       setPhase("ok");
       setError("");
       return true;
@@ -79,15 +82,17 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
     setLink(null);
     setVendors([]);
     setFacturadora(null);
+    setAccounts(null);
     setPhase("idle");
     setError("");
   }, []);
 
   return {
-    link, vendors, facturadora, phase, error, busy, refresh, linkWith, unlink, clearError: () => setError(""),
+    link, vendors, facturadora, accounts, phase, error, busy, refresh, linkWith, unlink, clearError: () => setError(""),
     addVendor: (name) => act((a) => a.addVendor(name)),
     renameVendor: (id, name) => act((a) => a.updateVendor(id, { name })),
     setActive: (id, active) => act((a) => a.updateVendor(id, { active })),
     regenerate: (id) => act((a) => a.regenerateVendor(id)),
+    saveAccount: (slug, body) => act((a) => a.saveAccount(slug, body)),
   };
 }

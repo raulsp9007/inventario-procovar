@@ -70,6 +70,7 @@ function Header({ title, subtitle, onBack, backLabel, children }) {
 
 // Lo primero es la contraseña: no se muestra nada más hasta entrar.
 function LinkScreen({ onLink, notice = "", onNoticeClear }) {
+  const [usuario, setUsuario] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,7 +79,7 @@ function LinkScreen({ onLink, notice = "", onNoticeClear }) {
     setBusy(true);
     setError("");
     try {
-      await onLink(code);
+      await onLink({ usuario, clave: code });
     } catch (e) {
       setError(e && e.message ? e.message : "No se pudo enlazar.");
     } finally {
@@ -88,13 +89,24 @@ function LinkScreen({ onLink, notice = "", onNoticeClear }) {
 
   return (
     <div style={pageStyle}>
-      <Header title="Acceso" subtitle="Escribe tu contraseña para entrar." />
+      <Header title="Acceso" subtitle="Escribe tu usuario y contraseña para entrar." />
       <div style={{ ...column, padding: "14px 16px 16px" }}>
         <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, margin: "16px 0 8px" }}>Contraseña</div>
+        <input
+          type="text"
+          aria-label="Usuario"
+          placeholder="Usuario"
+          name="username"
+          autoComplete="username"
+          value={usuario}
+          autoCapitalize="off"
+          spellCheck={false}
+          onChange={(e) => { setUsuario(e.target.value); setError(""); if (onNoticeClear) onNoticeClear(); }}
+          style={{ width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 9, padding: "11px 12px", fontSize: 14, background: "var(--surface)", color: "var(--text)", margin: "16px 0 10px" }}
+        />
         <input
           type="password"
-          aria-label="Contraseña o código de enlace"
+          aria-label="Contraseña"
           placeholder="Contraseña"
           name="password"
           autoComplete="current-password"
@@ -120,6 +132,14 @@ function connectionText(f) {
   else parts.push("Conectando…");
   if (f.pendingOps > 0) parts.push(`${f.pendingOps} ${plural(f.pendingOps, "pendiente", "pendientes")} de enviar`);
   return parts.join(" · ");
+}
+
+function ReadOnlyBadge() {
+  return (
+    <div data-readonly style={{ display: "inline-block", marginTop: 8, fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "var(--warn-tint)", border: "1px solid var(--border-warn)", color: "var(--orange)" }}>
+      Solo lectura
+    </div>
+  );
 }
 
 function ConnectionLine({ f }) {
@@ -166,6 +186,7 @@ function SellersScreen({ f, sellers, onOpen }) {
           {total === 0 ? "Todo confirmado" : `${total} ${plural(total, "pedido", "pedidos")} por confirmar`}
         </div>
         <ConnectionLine f={f} />
+        {f.readOnly && <ReadOnlyBadge />}
       </Header>
       <div style={{ ...column, padding: "14px 16px" }}>
         {sellers.map((seller) => <SellerCard key={seller.id} seller={seller} onOpen={() => onOpen(seller.id)} />)}
@@ -177,7 +198,7 @@ function SellersScreen({ f, sellers, onOpen }) {
   );
 }
 
-function OrderCard({ order, today, onConfirm, onUndo }) {
+function OrderCard({ order, today, onConfirm, onUndo, readOnly = false }) {
   const done = order.status === "confirmado";
   return (
     <div data-order-id={order.id} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
@@ -219,10 +240,12 @@ function OrderCard({ order, today, onConfirm, onUndo }) {
           <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--green)" }}>
             {`✓ Confirmado${order.confirmedAt ? ` a las ${clock(order.confirmedAt)}` : ""}${order.confirmedBy === "vendedor" ? " (por el vendedor)" : ""}`}
           </span>
-          {order.confirmedBy === "facturadora" && (
+          {!readOnly && order.confirmedBy === "facturadora" && (
             <button type="button" onClick={() => onUndo(order.id)} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12.5, textDecoration: "underline", fontFamily: "inherit", cursor: "pointer" }}>Quitar 👍</button>
           )}
         </div>
+      ) : readOnly ? (
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--orange-text)" }}>Pendiente de confirmar</div>
       ) : (
         <button type="button" onClick={() => onConfirm(order.id)} style={primaryButton}>👍 Confirmar</button>
       )}
@@ -256,6 +279,7 @@ function SellerScreen({ f, seller, onBack }) {
     <div style={pageStyle}>
       <Header title={seller.name} onBack={onBack} backLabel="Vendedores" subtitle={`${pending.length} sin confirmar · ${seller.confirmed} confirmados`}>
         <ConnectionLine f={f} />
+        {f.readOnly && <ReadOnlyBadge />}
       </Header>
       <div style={{ ...column, padding: "14px 16px" }}>
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -273,7 +297,7 @@ function SellerScreen({ f, seller, onBack }) {
             </button>
           ))}
         </div>
-        {shown.map((order) => <OrderCard key={order.id} order={order} today={today} onConfirm={(id) => confirm([id])} onUndo={(id) => f.unconfirm([id])} />)}
+        {shown.map((order) => <OrderCard key={order.id} order={order} today={today} onConfirm={(id) => confirm([id])} onUndo={(id) => f.unconfirm([id])} readOnly={f.readOnly} />)}
         {shown.length === 0 && (
           <div style={{ fontSize: 13.5, color: "var(--text-muted)", textAlign: "center", padding: "30px 0" }}>
             {seller.orders.length === 0 ? "Sin pedidos por ahora." : "Todo confirmado por hoy."}
@@ -288,7 +312,7 @@ function SellerScreen({ f, seller, onBack }) {
         </div>
       )}
 
-      {pending.length > 0 && (
+      {pending.length > 0 && !f.readOnly && (
         <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 90, background: "var(--surface)", borderTop: "1px solid var(--border)", padding: "10px 14px calc(14px + env(safe-area-inset-bottom, 0px))" }}>
           <div style={column}>
             <button type="button" onClick={() => confirm(pending.map((o) => o.id))} style={{ ...primaryButton, height: 46, background: "var(--on-ink-accent)", color: "#111" }}>
@@ -347,12 +371,20 @@ export default function FacturadoraApp() {
     // Solo al abrir la página.
   }, []);
 
+  // Si la sesión ya no sirve (cambiaron la contraseña, se venció), se vuelve a pedir el acceso.
+  useEffect(() => {
+    if (f.link && f.phase === "auth") {
+      f.unlink();
+      setLinkNotice("La sesión terminó. Entra de nuevo.");
+    }
+  }, [f.link, f.phase]);
+
   // El número de pendientes en la pestaña avisa aunque esté en segundo plano.
   useEffect(() => {
     document.title = f.link && f.totalPending > 0 ? `(${f.totalPending}) ${TITLE}` : TITLE;
   }, [f.link, f.totalPending]);
 
-  if (!f.link) return <LinkScreen onLink={f.linkWith} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
+  if (!f.link) return <LinkScreen onLink={f.signIn} notice={linkNotice} onNoticeClear={() => setLinkNotice("")} />;
   // Computadora de escritorio: barra de vendedores y tabla con todos los pedidos.
   if (desktop) return <FacturadoraDesktop f={f} sellers={sellers} connection={{ text: connectionText(f), online: f.phase === "ok" || f.phase === "idle" }} />;
   if (selected) return <SellerScreen f={f} seller={selected} onBack={() => setSelectedId(null)} />;

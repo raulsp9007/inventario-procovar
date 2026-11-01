@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildVendorMessage } from "./vendorMessage";
+import { buildVendorMessage, buildAccessMessage } from "./vendorMessage";
 
 // Mensaje para mandarle a cada vendedor su código de enlace (WhatsApp: los asteriscos
 // ponen negrita).
@@ -33,5 +33,24 @@ describe("buildVendorMessage", () => {
 
   it("el código aparece una sola vez", () => {
     expect(message.split("procovar1:abc123")).toHaveLength(2);
+  });
+});
+
+describe("buildAccessMessage (datos de acceso de facturación o supervisión)", () => {
+  const url = "https://raulsp9007.github.io/inventario-procovar/facturadora.html";
+
+  it("lleva el sitio, el usuario y la contraseña", () => {
+    const message = buildAccessMessage({ title: "Facturación", usuario: "maria", clave: "clave-12345", url });
+    expect(message).toContain("Facturación");
+    expect(message).toContain(url);
+    expect(message).toContain("Usuario: maria");
+    expect(message).toContain("Contraseña: clave-12345");
+  });
+
+  it("sin la contraseña a mano (ya guardada), avisa que se pasa aparte", () => {
+    const message = buildAccessMessage({ title: "Supervisión", usuario: "super", url });
+    expect(message).toContain("Usuario: super");
+    expect(message).toContain("Contraseña: te la paso aparte");
+    expect(message).not.toContain("undefined");
   });
 });

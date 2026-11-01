@@ -24,6 +24,7 @@ function installFetch() {
     role: "admin",
     vendors: [vendor("raul", "Raul"), vendor("eddy", "Eddy"), vendor("melisa", "Melisa", { active: false })],
     facturadora: { id: "fact", name: "Facturadora", token: "f".repeat(24) },
+    accounts: { facturacion: null, supervision: null },
     nextToken: 1,
   };
   const sorted = () => [...server.vendors].sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -39,6 +40,14 @@ function installFetch() {
       const v = vendor(body.name.trim().toLowerCase(), body.name.trim(), { source: "db", token: `nuevo-token-${String(server.nextToken++).padStart(4, "0")}-0123456789` });
       server.vendors.push(v);
       return reply(v);
+    }
+    if (path === "/admin/accounts" && init.method === "GET") return reply(server.accounts);
+    const acc = path.match(/^\/admin\/accounts\/([^/]+)$/);
+    if (acc && init.method === "PUT") {
+      if (body.usuario === "repetido") return reply({ error: "Ya hay una cuenta con ese usuario." }, 409);
+      const current = server.accounts[acc[1]];
+      server.accounts[acc[1]] = { usuario: body.usuario !== undefined ? body.usuario : current.usuario, activo: body.activo !== undefined ? body.activo : (current ? current.activo : true) };
+      return reply(server.accounts[acc[1]]);
     }
     const regen = path.match(/^\/admin\/vendors\/([^/]+)\/regenerate$/);
     if (regen && init.method === "POST") {
@@ -266,5 +275,145 @@ describe("administración: enlaces", () => {
     fireEvent.click(within(rowOf("Raul")).getByRole("button", { name: "Copiar código de Raul" }));
     const box = await screen.findByLabelText("Texto para copiar");
     expect(box.value).toMatch(/^procovar1:/);
+  });
+});
+
+// Usuario y contraseña de la facturación y de la supervisión (solo lectura), que
+// define el administrador. La contraseña nunca vuelve del buzón: solo se ve al escribirla.
+describe("administración: acceso de facturación y supervisión", () => {
+  const group = (name) => screen.findByRole("group", { name });
+  const putCalls = () => calls.filter((c) => c.method === "PUT" && c.path.startsWith("/admin/accounts/"));
+
+  async function create(name, usuario, clave) {
+    const card = await group(name);
+    fireEvent.change(within(card).getByLabelText("Usuario"), { target: { value: usuario } });
+    fireEvent.change(within(card).getByLabelText("Contraseña"), { target: { value: clave } });
+    fireEvent.click(within(card).getByRole("button", { name: "Crear acceso" }));
+    return card;
+  }
+
+  it("muestra las dos tarjetas, sin cuenta todavía, y para qué sirve cada una", async () => {
+    link();
+    render(<AdminApp />);
+    const fact = await group("Acceso de facturación");
+    const sup = await group("Acceso de supervisión");
+    expect(within(fact).getByText(/confirma pedidos/i)).toBeTruthy();
+    expect(within(sup).getByText(/solo lectura/i)).toBeTruthy();
+    expect(within(fact).getByRole("button", { name: "Crear acceso" })).toBeTruthy();
+    expect(within(sup).getByRole("button", { name: "Crear acceso" })).toBeTruthy();
+  });
+
+  it("crea la cuenta de facturación con usuario y contraseña", async () => {
+    link();
+    render(<AdminApp />);
+    await create("Acceso de facturación", "  maria  ", "clave-12345");
+    await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/facturacion", body: { usuario: "maria", clave: "clave-12345" } }]));
+    const card = await group("Acceso de facturación");
+    await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+    expect(within(card).getByText("Activo")).toBeTruthy();
+    expect(within(card).queryByLabelText("Contraseña")).toBeNull();
+  });
+
+  it("crea la de supervisión en su propia ruta", async () => {
+    link();
+    render(<AdminApp />);
+    await create("Acceso de supervisión", "super", "otra-clave-9");
+    await waitFor(() => expect(putCalls().map((c) => c.path)).toEqual(["/admin/accounts/supervision"]));
+  });
+
+  it("valida antes de mandar: usuario vacío y contraseña corta", async () => {
+    link();
+    render(<AdminApp />);
+    const card = await create("Acceso de facturación", "  ", "clave-12345");
+    expect(await within(card).findByText("Escribe el usuario.")).toBeTruthy();
+    fireEvent.change(within(card).getByLabelText("Usuario"), { target: { value: "maria" } });
+    fireEvent.change(within(card).getByLabelText("Contraseña"), { target: { value: "corta" } });
+    fireEvent.click(within(card).getByRole("button", { name: "Crear acceso" }));
+    expect(await within(card).findByText("La contraseña debe tener al menos 8 caracteres.")).toBeTruthy();
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  it("un usuario repetido muestra el aviso del buzón", async () => {
+    link();
+    render(<AdminApp />);
+    await create("Acceso de supervisión", "repetido", "clave-12345");
+    expect(await screen.findByText("Ya hay una cuenta con ese usuario.")).toBeTruthy();
+  });
+
+  describe("con la cuenta ya creada", () => {
+    beforeEach(() => { server.accounts.facturacion = { usuario: "maria", activo: true }; });
+
+    it("cambiar el usuario: aparece Guardar solo si cambió, y manda solo el usuario", async () => {
+      link();
+      render(<AdminApp />);
+      const card = await group("Acceso de facturación");
+      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      expect(within(card).queryByRole("button", { name: "Guardar usuario" })).toBeNull();
+      fireEvent.change(within(card).getByLabelText("Usuario"), { target: { value: "maria2" } });
+      fireEvent.click(within(card).getByRole("button", { name: "Guardar usuario" }));
+      await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/facturacion", body: { usuario: "maria2" } }]));
+    });
+
+    it("cambiar la contraseña: se abre el campo, se guarda y manda solo la contraseña", async () => {
+      link();
+      render(<AdminApp />);
+      const card = await group("Acceso de facturación");
+      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      fireEvent.click(within(card).getByRole("button", { name: "Cambiar contraseña" }));
+      fireEvent.change(within(card).getByLabelText("Contraseña nueva"), { target: { value: "nueva-clave-1" } });
+      fireEvent.click(within(card).getByRole("button", { name: "Guardar contraseña" }));
+      await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/facturacion", body: { clave: "nueva-clave-1" } }]));
+      await waitFor(() => expect(within(card).queryByLabelText("Contraseña nueva")).toBeNull());
+    });
+
+    it("una contraseña nueva muy corta no se manda", async () => {
+      link();
+      render(<AdminApp />);
+      const card = await group("Acceso de facturación");
+      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      fireEvent.click(within(card).getByRole("button", { name: "Cambiar contraseña" }));
+      fireEvent.change(within(card).getByLabelText("Contraseña nueva"), { target: { value: "corta" } });
+      fireEvent.click(within(card).getByRole("button", { name: "Guardar contraseña" }));
+      expect(await within(card).findByText("La contraseña debe tener al menos 8 caracteres.")).toBeTruthy();
+      expect(putCalls()).toHaveLength(0);
+    });
+
+    it("desactivar y reactivar el acceso", async () => {
+      link();
+      render(<AdminApp />);
+      const card = await group("Acceso de facturación");
+      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      fireEvent.click(within(card).getByRole("button", { name: "Desactivar" }));
+      await waitFor(() => expect(within(card).getByText("Desactivado")).toBeTruthy());
+      fireEvent.click(within(card).getByRole("button", { name: "Reactivar" }));
+      await waitFor(() => expect(within(card).getByText("Activo")).toBeTruthy());
+      expect(putCalls().map((c) => c.body)).toEqual([{ activo: false }, { activo: true }]);
+    });
+
+    it("copiar los datos de acceso: sin la contraseña a mano dice que se pasa aparte", async () => {
+      link();
+      render(<AdminApp />);
+      const card = await group("Acceso de facturación");
+      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      fireEvent.click(within(card).getByRole("button", { name: "Copiar datos de acceso" }));
+      await waitFor(() => expect(copied).toHaveLength(1));
+      expect(copied[0]).toContain("Usuario: maria");
+      expect(copied[0]).toContain("facturadora.html");
+      expect(copied[0]).toContain("te la paso aparte");
+    });
+
+    it("recién puesta la contraseña, los datos copiados la llevan", async () => {
+      link();
+      render(<AdminApp />);
+      const card = await group("Acceso de facturación");
+      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      fireEvent.click(within(card).getByRole("button", { name: "Cambiar contraseña" }));
+      fireEvent.change(within(card).getByLabelText("Contraseña nueva"), { target: { value: "nueva-clave-1" } });
+      fireEvent.click(within(card).getByRole("button", { name: "Guardar contraseña" }));
+      await waitFor(() => expect(within(card).queryByLabelText("Contraseña nueva")).toBeNull());
+      fireEvent.click(within(card).getByRole("button", { name: "Copiar datos de acceso" }));
+      await waitFor(() => expect(copied).toHaveLength(1));
+      expect(copied[0]).toContain("Contraseña: nueva-clave-1");
+    });
   });
 });

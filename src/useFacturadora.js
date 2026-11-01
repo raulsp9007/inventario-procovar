@@ -12,7 +12,7 @@ import { todayStr } from "./dateUtils";
 
 const MESSAGES = {
   network: "Sin conexión. Se muestra lo último que se vio.",
-  auth: "El código de enlace ya no sirve. Vuelve a enlazar.",
+  auth: "La sesión ya no sirve. Vuelve a entrar.",
   server: "La nube tuvo un problema. Se reintentará.",
 };
 
@@ -121,6 +121,8 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
 
   const operate = useCallback(async (kind, ids) => {
     if (!ids || ids.length === 0) return;
+    // La supervisión solo mira: no confirma ni deshace nada.
+    if (cloudRef.current.link && cloudRef.current.link.role === "supervisor") return;
     commit({ queue: mergeFactOps(cloudRef.current.queue, { kind, ids }) });
     await refresh();
   }, [commit, refresh]);
@@ -143,6 +145,19 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     setStatus({ phase: "idle", message: "", lastSyncAt: null });
   }, [commit, cloudUrl]);
 
+  // Entrar con usuario y contraseña (cuenta de facturación o de supervisión). Sin
+  // usuario, lo escrito se toma como el código de siempre (enlace o contraseña vieja).
+  const signIn = useCallback(async ({ usuario = "", clave = "" } = {}) => {
+    const user = String(usuario).trim();
+    if (!user) return linkWith(clave);
+    const session = await createApiRef.current({ url: cloudUrl, token: "" }).login(user, clave);
+    if (session.role !== "facturadora" && session.role !== "supervisor") throw new Error("Esta cuenta no es de facturación ni de supervisión.");
+    commit({ link: { url: cloudUrl, token: session.token, name: session.name, role: session.role }, queue: [], data: null });
+    setSellersRaw([]);
+    setStatus({ phase: "idle", message: "", lastSyncAt: null });
+    return undefined;
+  }, [commit, cloudUrl, linkWith]);
+
   const unlink = useCallback(() => {
     clearCloud();
     cloudRef.current = loadCloud();
@@ -160,6 +175,7 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
 
   return {
     link: cloud.link,
+    readOnly: !!cloud.link && cloud.link.role === "supervisor",
     sellers,
     totalPending: totalPending(sellers),
     phase: status.phase,
@@ -170,6 +186,7 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     unconfirm,
     refresh,
     linkWith,
+    signIn,
     unlink,
   };
 }

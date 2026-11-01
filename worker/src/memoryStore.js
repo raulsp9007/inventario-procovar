@@ -3,6 +3,8 @@
 export function createMemoryStore() {
   const orders = new Map();
   const vendors = new Map();
+  const accounts = new Map();
+  const sessions = new Map();
   const copy = (o) => (o ? JSON.parse(JSON.stringify(o)) : null);
 
   return {
@@ -12,6 +14,25 @@ export function createMemoryStore() {
     },
     async putVendor(vendor) {
       vendors.set(vendor.id, copy(vendor));
+    },
+    // Cuentas de facturación y supervisión (ver accounts.js): una por rol.
+    async listAccounts() {
+      return [...accounts.values()].map(copy);
+    },
+    async putAccount(account) {
+      accounts.set(account.role, copy(account));
+    },
+    async putSession(session) {
+      sessions.set(session.tokenHash, copy(session));
+    },
+    async getSession(tokenHash) {
+      return copy(sessions.get(tokenHash));
+    },
+    async deleteSessionsByRole(role) {
+      for (const [hash, s] of sessions) if (s.role === role) sessions.delete(hash);
+    },
+    async purgeSessions(nowIso) {
+      for (const [hash, s] of sessions) if (s.expiresAt <= nowIso) sessions.delete(hash);
     },
     async get(id) {
       return copy(orders.get(id));

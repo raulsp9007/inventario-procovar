@@ -83,6 +83,43 @@ const rowOf = (name) => screen.getAllByRole("row").find((r) => r.textContent.inc
 const sidebar = () => screen.getByRole("navigation", { name: "Vendedores" });
 const names = () => within(screen.getByRole("table", { name: "Pedidos" })).getAllByRole("row").slice(1).map((r) => r.getAttribute("data-order-name"));
 
+describe("escritorio: cuenta de supervisión (solo lectura)", () => {
+  beforeEach(() => {
+    localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "super", role: "supervisor" }));
+  });
+
+  it("ve la tabla y el aviso, sin casillas ni botones de confirmar", async () => {
+    render(<FacturadoraApp />);
+    await table();
+    expect(screen.getByText("Solo lectura")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /Todos/ }));
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Quitar/ })).toBeNull();
+    expect(names()).toContain("Ana López");
+    expect(within(rowOf("Marta Gil")).getByText(/✓/)).toBeTruthy();
+  });
+
+  it("Enter y Espacio no confirman ni marcan; moverse y buscar sí funcionan", async () => {
+    render(<FacturadoraApp />);
+    await table();
+    fireEvent.keyDown(window, { key: "j" });
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(calls.some((c) => c.path.startsWith("/orders/confirm"))).toBe(false);
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.getByRole("searchbox", { name: "Buscar" })).toBeTruthy();
+  });
+
+  it("la facturadora sigue con casillas y botones", async () => {
+    localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
+    render(<FacturadoraApp />);
+    await table();
+    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Solo lectura")).toBeNull();
+  });
+});
+
 describe("escritorio: barra de vendedores", () => {
   it("lista Todos y a los vendedores del buzón con sus pendientes, alfabéticamente", async () => {
     render(<FacturadoraApp />);
@@ -283,6 +320,6 @@ describe("escritorio: sigue habiendo vista de teléfono", () => {
   it("sin enlazar, en escritorio también se ve la pantalla para enlazar", async () => {
     localStorage.clear();
     render(<FacturadoraApp />);
-    expect(await screen.findByLabelText("Contraseña o código de enlace")).toBeTruthy();
+    expect(await screen.findByLabelText("Contraseña")).toBeTruthy();
   });
 });

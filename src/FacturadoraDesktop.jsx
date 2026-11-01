@@ -40,6 +40,8 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
   const [activeId, setActiveId] = useState(null);
   const [undo, setUndo] = useState(null);
   const searchRef = useRef(null);
+  // La supervisión solo mira: sin casillas, sin confirmar, sin deshacer.
+  const readOnly = !!f.readOnly;
 
   const all = useMemo(() => flattenOrders(sellers), [sellers]);
   const visible = useMemo(() => filterOrders(all, { sellerId, tab, query }), [all, sellerId, tab, query]);
@@ -58,7 +60,7 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
   }, [undo]);
 
   function confirm(ids) {
-    if (ids.length === 0) return;
+    if (ids.length === 0 || readOnly) return;
     f.confirm(ids);
     setSelected((prev) => {
       const next = { ...prev };
@@ -98,8 +100,8 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
         setActiveId(visible[Math.max(0, activeIndex - 1)].id);
       } else if (e.key === " " && !(e.target && e.target.type === "checkbox")) {
         e.preventDefault();
-        if (active && active.status === "pendiente") toggle(active.id);
-      } else if (e.key === "Enter" && active && active.status === "pendiente" && !(e.target && e.target.tagName === "BUTTON")) {
+        if (!readOnly && active && active.status === "pendiente") toggle(active.id);
+      } else if (e.key === "Enter" && !readOnly && active && active.status === "pendiente" && !(e.target && e.target.tagName === "BUTTON")) {
         e.preventDefault();
         confirm([active.id]);
       }
@@ -115,6 +117,7 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
       <header style={{ position: "sticky", top: 0, zIndex: 30, height: TOP, boxSizing: "border-box", display: "flex", alignItems: "center", gap: 14, padding: "0 20px", background: "var(--ink)", color: "var(--cream)" }}>
         <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap" }}>Facturación Procovar</div>
         <span style={{ ...pill, background: "rgba(255,255,255,0.08)", color: "var(--on-ink-subtitle)" }}>{`Hoy · ${formatDateShort(todayStr())}`}</span>
+        {readOnly && <span style={{ ...pill, background: "var(--warn-tint)", border: "1px solid var(--border-warn)", color: "var(--orange)" }}>Solo lectura</span>}
         <label style={{ flex: 1, maxWidth: 520, display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 12px", borderRadius: 9, background: "rgba(255,255,255,0.1)" }}>
           <Search size={15} strokeWidth={2.2} aria-hidden="true" />
           <input
@@ -200,9 +203,9 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
                 <tr>
                   {COLUMNS.map((label, i) => (
                     <th key={i} style={{ position: "sticky", top: TOP, zIndex: 5, background: "var(--surface-subtle)", textAlign: i === 5 ? "right" : "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--text-muted)", borderBottom: "1px solid var(--border)" }}>
-                      {i === 0 ? (
+                      {i === 0 ? (readOnly ? null : (
                         <input type="checkbox" aria-label="Seleccionar todos" checked={allSelected} disabled={pendingVisible.length === 0} onChange={(e) => toggleAll(e.target.checked)} />
-                      ) : label}
+                      )) : label}
                     </th>
                   ))}
                 </tr>
@@ -214,7 +217,7 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
                   return (
                     <tr key={o.id} data-order-id={o.id} data-order-name={o.customerName} data-active={isActive ? "true" : "false"} style={{ background: isActive ? "var(--surface-subtle)" : "transparent", opacity: done ? 0.62 : 1, boxShadow: isActive ? "inset 3px 0 0 var(--ink)" : "none" }}>
                       <td style={{ padding: "10px", borderBottom: "1px solid var(--border)", verticalAlign: "top" }}>
-                        <input type="checkbox" aria-label={`Seleccionar pedido de ${o.customerName}`} checked={!!selected[o.id] && !done} disabled={done} onChange={() => toggle(o.id)} />
+                        {!readOnly && <input type="checkbox" aria-label={`Seleccionar pedido de ${o.customerName}`} checked={!!selected[o.id] && !done} disabled={done} onChange={() => toggle(o.id)} />}
                       </td>
                       <td style={{ padding: "10px", borderBottom: "1px solid var(--border)", verticalAlign: "top", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{clock(o.createdAt)}</td>
                       <td style={{ padding: "10px", borderBottom: "1px solid var(--border)", verticalAlign: "top", overflowWrap: "anywhere" }}>
@@ -247,11 +250,13 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
                         {done ? (
                           <div>
                             <div style={{ color: "var(--green)", fontWeight: 600, fontSize: 12.5 }}>{`✓ ${clock(o.confirmedAt)}${o.confirmedBy === "vendedor" ? " (vendedor)" : ""}`}</div>
-                            {o.confirmedBy === "facturadora" && (
+                            {!readOnly && o.confirmedBy === "facturadora" && (
                               <button type="button" aria-label={`Quitar 👍 de ${o.customerName}`} onClick={() => f.unconfirm([o.id])} style={{ background: "none", border: "none", padding: 0, color: "var(--text-muted)", fontSize: 12, textDecoration: "underline", fontFamily: "inherit", cursor: "pointer" }}>Quitar 👍</button>
                             )}
                           </div>
-                        ) : (
+                        ) : readOnly ? (
+                          <span style={{ color: "var(--text-muted)", fontSize: 12.5 }}>Pendiente de confirmar</span>
+                          ) : (
                           <button type="button" aria-label={`Confirmar pedido de ${o.customerName}`} onClick={() => confirm([o.id])} style={{ height: 32, padding: "0 14px", borderRadius: 8, border: "none", background: "var(--ink)", color: "var(--cream)", fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>👍 Confirmar</button>
                         )}
                       </td>
@@ -276,10 +281,14 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
 
           <div style={{ position: "sticky", bottom: 0, zIndex: 20, display: "flex", alignItems: "center", gap: 16, padding: "10px 20px", background: "var(--surface-subtle)", borderTop: "1px solid var(--border)" }}>
             <span style={{ flex: 1, fontSize: 12.5, color: "var(--text-muted)" }}>
-              {selectedIds.length > 0 ? `${selectedIds.length} ${plural(selectedIds.length, "seleccionado", "seleccionados")}` : "Marca varios pedidos para confirmarlos de una vez"}
+              {selectedIds.length > 0 ? `${selectedIds.length} ${plural(selectedIds.length, "seleccionado", "seleccionados")}` : readOnly ? "Solo puedes ver y buscar los pedidos; no puedes confirmarlos." : "Marca varios pedidos para confirmarlos de una vez"}
             </span>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              <kbd style={kbd}>J</kbd> <kbd style={kbd}>K</kbd> moverse · <kbd style={kbd}>Espacio</kbd> marcar · <kbd style={kbd}>Enter</kbd> confirmar · <kbd style={kbd}>/</kbd> buscar
+              {readOnly ? (
+                <><kbd style={kbd}>J</kbd> <kbd style={kbd}>K</kbd> moverse · <kbd style={kbd}>/</kbd> buscar</>
+              ) : (
+                <><kbd style={kbd}>J</kbd> <kbd style={kbd}>K</kbd> moverse · <kbd style={kbd}>Espacio</kbd> marcar · <kbd style={kbd}>Enter</kbd> confirmar · <kbd style={kbd}>/</kbd> buscar</>
+              )}
             </span>
             {selectedIds.length > 0 && (
               <button type="button" onClick={() => confirm(selectedIds)} style={{ height: 36, padding: "0 18px", borderRadius: 9, border: "none", background: "var(--on-ink-accent)", color: "#111", fontSize: 13.5, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>

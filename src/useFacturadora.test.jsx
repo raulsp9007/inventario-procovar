@@ -23,9 +23,13 @@ const sellersData = () => [
 ];
 
 function fakeCloud() {
-  const state = { role: "facturadora", sellers: sellersData() };
+  const state = { role: "facturadora", loginRole: "facturadora", badLogin: false, sellers: sellersData() };
   const api = {
     me: vi.fn(async () => ({ id: "fact", name: "Facturadora", role: state.role })),
+    login: vi.fn(async (usuario) => {
+      if (state.badLogin) throw new CloudError("auth", 401, "Usuario o contraseña incorrectos.");
+      return { token: "sesion-abc-123", role: state.loginRole, name: usuario, expiresAt: "2026-11-30T00:00:00.000Z" };
+    }),
     listOrders: vi.fn(async () => ({ now: "2026-10-30T16:00:00.000Z", sellers: state.sellers })),
     confirmMany: vi.fn(async (ids) => ({ confirmed: ids, missing: [] })),
     unconfirmMany: vi.fn(async (ids) => ({ unconfirmed: ids, missing: [] })),
@@ -105,6 +109,51 @@ describe("useFacturadora: enlazar", () => {
     const ctx = setup({ cloudUrl: URL_OK });
     ctx.api.me.mockRejectedValueOnce(new CloudError("auth", 401, "El código de enlace ya no sirve."));
     await expect(act(async () => { await ctx.hook.result.current.linkWith("otra cosa"); })).rejects.toThrow("La contraseña no es correcta.");
+    expect(ctx.hook.result.current.link).toBeNull();
+  });
+
+  it("con usuario y contraseña entra con la sesión que da el buzón", async () => {
+    const ctx = setup({ cloudUrl: URL_OK });
+    await act(async () => { await ctx.hook.result.current.signIn({ usuario: " maria ", clave: "clave-12345" }); });
+    expect(ctx.createApi).toHaveBeenCalledWith({ url: URL_OK, token: "" });
+    expect(ctx.api.login).toHaveBeenCalledWith("maria", "clave-12345");
+    expect(ctx.hook.result.current.link).toMatchObject({ url: URL_OK, token: "sesion-abc-123", name: "maria", role: "facturadora" });
+    expect(loadCloud().link.token).toBe("sesion-abc-123");
+    expect(ctx.hook.result.current.readOnly).toBe(false);
+  });
+
+  it("usuario o contraseña mal: avisa con el mensaje del buzón y no entra", async () => {
+    const ctx = setup({ cloudUrl: URL_OK });
+    ctx.state.badLogin = true;
+    await expect(act(async () => { await ctx.hook.result.current.signIn({ usuario: "maria", clave: "mala" }); })).rejects.toThrow("Usuario o contraseña incorrectos.");
+    expect(ctx.hook.result.current.link).toBeNull();
+  });
+
+  it("sin usuario, lo escrito se toma como el código de siempre", async () => {
+    const ctx = setup({ cloudUrl: URL_OK });
+    await act(async () => { await ctx.hook.result.current.signIn({ usuario: "  ", clave: "frase de la facturadora 2026" }); });
+    expect(ctx.api.login).not.toHaveBeenCalled();
+    expect(ctx.hook.result.current.link).toMatchObject({ token: "frase de la facturadora 2026", role: "facturadora" });
+  });
+
+  it("la cuenta de supervisión entra en solo lectura: ve los pedidos pero no puede confirmar ni deshacer", async () => {
+    const ctx = setup({ cloudUrl: URL_OK });
+    ctx.state.loginRole = "supervisor";
+    await act(async () => { await ctx.hook.result.current.signIn({ usuario: "super", clave: "clave-12345" }); });
+    await waitFor(() => expect(ctx.hook.result.current.sellers.length).toBeGreaterThan(0));
+    expect(ctx.hook.result.current.readOnly).toBe(true);
+    expect(ctx.hook.result.current.totalPending).toBe(2);
+    await act(async () => { await ctx.hook.result.current.confirm(["a"]); await ctx.hook.result.current.unconfirm(["a"]); });
+    expect(ctx.api.confirmMany).not.toHaveBeenCalled();
+    expect(ctx.api.unconfirmMany).not.toHaveBeenCalled();
+    expect(ctx.hook.result.current.pendingOps).toBe(0);
+    expect(ctx.hook.result.current.sellers[0].orders.every((o) => o.status === "pendiente")).toBe(true);
+  });
+
+  it("una sesión de otro tipo (vendedor) no entra acá", async () => {
+    const ctx = setup({ cloudUrl: URL_OK });
+    ctx.state.loginRole = "vendedor";
+    await expect(act(async () => { await ctx.hook.result.current.signIn({ usuario: "carlos", clave: "clave-12345" }); })).rejects.toThrow("Esta cuenta no es de facturación ni de supervisión.");
     expect(ctx.hook.result.current.link).toBeNull();
   });
 
@@ -203,12 +252,12 @@ describe("useFacturadora: sin conexión y código vencido", () => {
     expect(offline.hook.result.current.sellers).toHaveLength(2);
   });
 
-  it("si el código ya no sirve, avisa para volver a enlazar", async () => {
+  it("si el código ya no sirve, avisa para volver a entrar", async () => {
     const ctx = setup();
     await linked(ctx);
     ctx.api.listOrders.mockRejectedValue(new CloudError("auth", 401, "x"));
     await act(async () => { await ctx.hook.result.current.refresh(); });
     expect(ctx.hook.result.current.phase).toBe("auth");
-    expect(ctx.hook.result.current.message).toMatch(/enlazar/i);
+    expect(ctx.hook.result.current.message).toMatch(/entrar/i);
   });
 });
