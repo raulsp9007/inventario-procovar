@@ -6,7 +6,7 @@ import { sendSupervisorSummary } from "./supervisorSummary";
 import ReorderSuggestions from "./ReorderSuggestions.jsx";
 import { openPortalSearch } from "./portalLink";
 import { customersToContact, buildCustomerProfile, availableTypical, formatReorderMessage } from "./recommendations";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending, findSameDayOrders } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness, findCustomerByCode } from "./customerRegistry";
 import { productChipColors } from "./colorUtils";
@@ -223,6 +223,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
   const [draftBucket, setDraftBucket] = useState("hoy");
   const [draftDate, setDraftDate] = useState(() => nextBusinessDayStr());
   const [pendingReserveConfirm, setPendingReserveConfirm] = useState(null); // { draft, reserveDips } | null
+  const [pendingDuplicateConfirm, setPendingDuplicateConfirm] = useState(null); // { draft, reserveDips, orders, date } | null
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -844,15 +845,40 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
       return;
     }
     const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), ...(wantedCode !== undefined ? { customerCode: wantedCode } : {}), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
-    // Si alguna línea solo entra usando la reserva, no se manda directo --
-    // se avisa primero y se confirma acá mismo (submitDraft con el draft ya
-    // armado), en vez de bloquear como si no hubiera stock.
+    // Pedido nuevo: si ese cliente ya tiene un pedido ese mismo día, se avisa antes
+    // para no duplicarlo sin querer (se puede seguir igual). Al editar no se avisa.
+    if (!editingOrderId) {
+      const orderDate = draftBucket === "hoy" ? today : draftDate;
+      const sameDay = findSameDayOrders(allOrders, customers, { name: typedName, code: shownCode, date: orderDate });
+      if (sameDay.length > 0) {
+        setPendingDuplicateConfirm({ draft, reserveDips, orders: sameDay, dayLabel: orderDate === today ? "hoy" : "el " + formatDate(orderDate) });
+        return;
+      }
+    }
+    continueSubmit(draft, reserveDips);
+  }
+
+  // Si alguna línea solo entra usando la reserva, no se manda directo --
+  // se avisa primero y se confirma acá mismo (submitDraft con el draft ya
+  // armado), en vez de bloquear como si no hubiera stock.
+  function continueSubmit(draft, reserveDips) {
     if (reserveDips.length > 0) {
       setPendingReserveConfirm({ draft, reserveDips });
       return;
     }
     submittingRef.current = true;
     submitDraft(draft);
+  }
+
+  function confirmDuplicate() {
+    if (!pendingDuplicateConfirm) return;
+    const { draft, reserveDips } = pendingDuplicateConfirm;
+    setPendingDuplicateConfirm(null);
+    continueSubmit(draft, reserveDips);
+  }
+
+  function cancelDuplicateConfirm() {
+    setPendingDuplicateConfirm(null);
   }
 
   function confirmUseReserve() {
@@ -1807,6 +1833,9 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         pendingReserveConfirm={pendingReserveConfirm}
         onConfirmUseReserve={confirmUseReserve}
         onCancelReserveConfirm={cancelReserveConfirm}
+        pendingDuplicateConfirm={pendingDuplicateConfirm}
+        onConfirmDuplicate={confirmDuplicate}
+        onCancelDuplicateConfirm={cancelDuplicateConfirm}
       />
     </div>
   );

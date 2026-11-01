@@ -1014,7 +1014,10 @@ export function useInventoryStore() {
       });
     }
 
-    const nextSent = forceSent !== undefined ? forceSent : wasSent;
+    // Un pedido de Hoy que se pasa a "Para mañana" deja de estar facturado: lo facturado
+    // era para hoy (igual que al posponerlo desde el aviso de cierre).
+    const postponedFromToday = (originalMovements[0].bucket || "hoy") === "hoy" && bucket === "manana";
+    const nextSent = forceSent !== undefined ? forceSent : postponedFromToday ? false : wasSent;
     const willBeCommitted = bucket === "hoy" || (bucket === "manana" && nextSent);
     const date = bucket === "hoy" ? todayStr() : (chosenDate || nextBusinessDayStr());
     // Si el pedido cambia de día (pospuesto, o editado a otra fecha) toma el

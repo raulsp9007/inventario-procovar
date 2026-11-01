@@ -264,3 +264,17 @@ export function reservedForTomorrow(orders, code, excludeOrderId = null) {
       return sum + (line ? line.qty : 0);
     }, 0);
 }
+
+// Pedidos que ese cliente ya tiene en `date` (para avisar antes de duplicarlo). Se
+// reconoce por su código: cuenta cualquier cliente del registro con el mismo código
+// (sin importar mayúsculas ni espacios) y, además, el mismo nombre. Sin código, por
+// el nombre. No cuentan las ventas manuales ni `excludeOrderId` (el que se edita).
+export function findSameDayOrders(orders, customers, { name, code, date, excludeOrderId } = {}) {
+  const key = (s) => String(s || "").trim().toLowerCase();
+  const names = new Set();
+  if (key(name)) names.add(key(name));
+  const wantedCode = key(code);
+  if (wantedCode) customers.forEach((c) => { if (key(c.code) === wantedCode) names.add(key(c.name)); });
+  if (names.size === 0) return [];
+  return orders.filter((o) => !o.manual && o.orderId !== excludeOrderId && o.date === date && names.has(key(o.customerName)));
+}

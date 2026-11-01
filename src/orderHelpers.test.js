@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, isPastCierre, getCierrePending, fixSundayScheduledOrders } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, isPastCierre, getCierrePending, fixSundayScheduledOrders, findSameDayOrders } from "./orderHelpers";
 
 function makeMovement(overrides = {}) {
   return {
@@ -463,5 +463,44 @@ describe("fixSundayScheduledOrders", () => {
     ];
     const next = fixSundayScheduledOrders(movements);
     expect(next.every((m) => m.date === "2026-09-28")).toBe(true);
+  });
+});
+
+describe("findSameDayOrders (¿ese cliente ya tiene pedido ese día?)", () => {
+  const orderOf = (over = {}) => ({ orderId: "o1", customerName: "Ana López", date: "2026-10-30", manual: false, ...over });
+  const customers = [{ id: "a", name: "Ana López", code: "LT05TCP0001" }, { id: "b", name: "Beto Ruiz", code: "LT05TCP0002" }];
+
+  it("encuentra el pedido del mismo cliente el mismo día", () => {
+    const found = findSameDayOrders([orderOf()], customers, { name: "Ana López", code: "LT05TCP0001", date: "2026-10-30" });
+    expect(found.map((o) => o.orderId)).toEqual(["o1"]);
+  });
+
+  it("otro día no cuenta", () => {
+    expect(findSameDayOrders([orderOf({ date: "2026-10-29" })], customers, { name: "Ana López", code: "LT05TCP0001", date: "2026-10-30" })).toEqual([]);
+  });
+
+  it("otro cliente no cuenta", () => {
+    expect(findSameDayOrders([orderOf({ customerName: "Beto Ruiz" })], customers, { name: "Ana López", code: "LT05TCP0001", date: "2026-10-30" })).toEqual([]);
+  });
+
+  it("por el código: un pedido guardado con otro nombre del mismo código también cuenta", () => {
+    const shared = [{ id: "a", name: "Ana López", code: "LT05TCP0001" }, { id: "x", name: "Ana Lopez (viejo)", code: " lt05tcp0001 " }];
+    const found = findSameDayOrders([orderOf({ customerName: "Ana Lopez (viejo)" })], shared, { name: "Ana López", code: "LT05TCP0001", date: "2026-10-30" });
+    expect(found).toHaveLength(1);
+  });
+
+  it("sin código busca por el nombre (sin importar mayúsculas ni espacios)", () => {
+    const found = findSameDayOrders([orderOf({ customerName: "Gina Paz" })], customers, { name: "  gina paz ", code: "", date: "2026-10-30" });
+    expect(found).toHaveLength(1);
+  });
+
+  it("no cuentan las ventas manuales ni el pedido que se está editando", () => {
+    const orders = [orderOf({ manual: true }), orderOf({ orderId: "o2" })];
+    const found = findSameDayOrders(orders, customers, { name: "Ana López", code: "LT05TCP0001", date: "2026-10-30", excludeOrderId: "o2" });
+    expect(found).toEqual([]);
+  });
+
+  it("sin nombre ni código no encuentra nada", () => {
+    expect(findSameDayOrders([orderOf()], customers, { name: "", code: "", date: "2026-10-30" })).toEqual([]);
   });
 });

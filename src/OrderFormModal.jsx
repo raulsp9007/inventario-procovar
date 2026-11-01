@@ -45,6 +45,7 @@ export default function OrderFormModal({
   pendingQty, onPendingQtyChange, onAddDraftLine,
   onConfirmOrder,
   pendingReserveConfirm, onConfirmUseReserve, onCancelReserveConfirm,
+  pendingDuplicateConfirm, onConfirmDuplicate, onCancelDuplicateConfirm,
   suggestion, onUseSuggestion, onCheckPortal,
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
@@ -630,6 +631,66 @@ export default function OrderFormModal({
             </button>
         </div>
       </div>
+
+      {pendingDuplicateConfirm && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(20,17,12,.5)", zIndex: 70,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-label="Cliente con pedido repetido"
+            style={{ width: "100%", maxWidth: 310, background: "var(--surface)", borderRadius: 16, padding: 20, boxShadow: "0 12px 30px rgba(0,0,0,.3)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <AlertTriangle size={18} strokeWidth={2} color="var(--orange)" />
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Pedido repetido</span>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.4 }}>
+              {customerName.trim()} ya tiene {pendingDuplicateConfirm.orders.length === 1 ? "un pedido" : `${pendingDuplicateConfirm.orders.length} pedidos`}{" "}
+              {pendingDuplicateConfirm.dayLabel}:
+            </div>
+            <div style={{ border: "1px solid var(--border-warn)", background: "var(--banner-bg)", borderRadius: 10, padding: "4px 12px", marginBottom: 16 }}>
+              {pendingDuplicateConfirm.orders.map((order, i) => (
+                <div
+                  key={order.orderId}
+                  style={{ padding: "9px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-warn)", fontSize: 13, color: "var(--text)" }}
+                >
+                  {order.orderSeq ? <strong>{`#${order.orderSeq}`}</strong> : null}
+                  {order.orderSeq ? " · " : ""}
+                  {order.lines.map((line) => {
+                    const product = products.find((p) => p.code === line.code);
+                    return `${product ? product.name : line.code} × ${line.qty}`;
+                  }).join(", ")}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={onCancelDuplicateConfirm}
+                style={{
+                  flex: 1, height: 44, borderRadius: 10, border: "1px solid var(--border-strong)",
+                  background: "var(--surface)", color: "var(--text)", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={onConfirmDuplicate}
+                style={{
+                  flex: 1, height: 44, borderRadius: 10, border: "none",
+                  background: "var(--ink)", color: "var(--cream)", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                Hacer otro pedido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingReserveConfirm && (
         <div
