@@ -51,7 +51,8 @@ export function reconcile({ orders, products, customers = [], map, today }) {
     const content = toCloudContent(order, products, customers);
     const hash = JSON.stringify(content);
     let entry = nextMap[id];
-    if (!entry || !entry.published || entry.hash !== hash) {
+    // Uno que la nube rechazó no se reenvía igual: solo si el vendedor lo cambia.
+    if (!entry || entry.hash !== hash || (!entry.published && !entry.rejected)) {
       ops.push({ kind: "put", orderId: id, content });
       entry = { hash, published: true, status: "pendiente", confirmedBy: null, confirmedAt: null, appliedAt: null, autoConfirmed: false };
       nextMap[id] = entry;
@@ -64,6 +65,7 @@ export function reconcile({ orders, products, customers = [], map, today }) {
 
   Object.keys(map).forEach((id) => {
     const entry = map[id];
+    if (entry.rejected && !wanted.has(id)) nextMap[id] = { ...entry, rejected: null };
     if (entry.published && !wanted.has(id)) {
       ops.push({ kind: "delete", orderId: id });
       nextMap[id] = { ...entry, published: false, status: "cancelado" };
@@ -71,6 +73,16 @@ export function reconcile({ orders, products, customers = [], map, today }) {
   });
 
   return { ops, nextMap };
+}
+
+// Marca en el mapa los pedidos cuyo envío la nube rechazó (datos inválidos), con el motivo.
+// Devuelve el mismo mapa si no hay nada que marcar.
+export function markRejected(map, rejected) {
+  const puts = rejected.filter((r) => r.kind === "put" && map[r.orderId]);
+  if (puts.length === 0) return map;
+  const next = { ...map };
+  puts.forEach((r) => { next[r.orderId] = { ...next[r.orderId], published: false, rejected: r.message || "Datos no válidos." }; });
+  return next;
 }
 
 // Qué cambió en la nube desde la última vez: confirma (o des-confirma) en la app
@@ -160,6 +172,7 @@ const pad = (n) => String(n).padStart(2, "0");
 
 // Lo que se ve en la tarjeta del pedido. null si no está en la nube.
 export function chipFor({ entry, queued }) {
+  if (entry && entry.rejected) return { state: "rejected", text: entry.rejected };
   if (!entry || !entry.published) return null;
   if (queued) return { state: "queued", text: "En cola" };
   if (entry.status === "confirmado" && entry.confirmedBy === "facturadora") {

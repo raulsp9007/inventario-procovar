@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCloudApi, CloudError } from "./cloudApi";
 import { parseLinkCode } from "./linkCode";
 import { loadCloud, saveCloud, clearCloud } from "./cloudStorage";
-import { reconcile, applyStatuses, mergeOps, flushQueue, chipFor } from "./cloudSync";
+import { reconcile, applyStatuses, mergeOps, flushQueue, chipFor, markRejected } from "./cloudSync";
 import { todayStr } from "./dateUtils";
 
 // Sincronización del vendedor con la nube de facturación. Orquesta las piezas
@@ -56,7 +56,8 @@ export function useCloudSync({
     let rejected = [];
     if (queue.length > 0) {
       const out = await flushQueue({ queue, api });
-      commit({ queue: out.remaining });
+      // Lo que la nube rechazó se marca en el pedido (aviso rojo) con el motivo.
+      commit({ queue: out.remaining, map: markRejected(cloudRef.current.map, out.rejected) });
       stopped = out.stopped;
       rejected = out.rejected;
     }

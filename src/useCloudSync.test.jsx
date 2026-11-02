@@ -131,6 +131,32 @@ describe("useCloudSync: esperar a que la app cargue", () => {
 // La app comprueba sola lo que confirmó la facturadora cada hora (intervalMs, 1 h
 // por defecto) con la app abierta, y al volver a ella si ya pasó más de una hora.
 // El botón "Comprobar" (syncNow) sigue ahí para hacerlo al momento.
+describe("useCloudSync: pedido rechazado por la nube", () => {
+  const rejection = () => new CloudError("invalid", 400, "Falta el nombre del cliente.");
+
+  it("el pedido queda marcado como rechazado, con el motivo, y no se reenvía igual", async () => {
+    const ctx = setup();
+    ctx.api.putOrder.mockRejectedValue(rejection());
+    await linked(ctx);
+    await waitFor(() => expect(ctx.hook.result.current.chips.o1).toEqual({ state: "rejected", text: "Falta el nombre del cliente." }));
+    expect(ctx.hook.result.current.pendingCount).toBe(0);
+    expect(ctx.hook.result.current.rejected).toHaveLength(1);
+    await act(async () => { await ctx.hook.result.current.syncNow(); });
+    expect(ctx.api.putOrder).toHaveBeenCalledTimes(1);
+    expect(ctx.hook.result.current.chips.o1.state).toBe("rejected");
+  });
+
+  it("al corregir el pedido se manda de nuevo y, si la nube lo acepta, el aviso desaparece", async () => {
+    const ctx = setup();
+    ctx.api.putOrder.mockRejectedValueOnce(rejection());
+    await linked(ctx);
+    await waitFor(() => expect(ctx.hook.result.current.chips.o1.state).toBe("rejected"));
+    ctx.hook.rerender({ ...ctx.props, orders: [order({ lines: [{ code: "P500", qty: 41, unitPrice: 120 }] })] });
+    await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(ctx.hook.result.current.chips.o1).toEqual({ state: "cloud", text: "En nube" }));
+  });
+});
+
 describe("useCloudSync: comprobación automática cada hora", () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CloudError } from "./cloudApi";
-import { toCloudContent, reconcile, applyStatuses, mergeOps, flushQueue, chipFor } from "./cloudSync";
+import { toCloudContent, reconcile, applyStatuses, mergeOps, flushQueue, chipFor, markRejected } from "./cloudSync";
 
 // Sincronización del vendedor con la nube de facturación. Piezas puras:
 //  - reconcile: qué hay que subir, borrar o confirmar según los pedidos de hoy.
@@ -335,5 +335,57 @@ describe("chipFor: el estado que se ve en el pedido", () => {
 
   it("confirmado por el propio vendedor no dice facturación", () => {
     expect(chipFor({ entry: entry({ status: "confirmado", confirmedBy: "vendedor" }), queued: false })).toEqual({ state: "cloud", text: "En nube" });
+  });
+});
+
+// Un pedido que la nube rechaza (datos inválidos) se marca en su tarjeta, en rojo, con el
+// motivo; no se reintenta igual, solo cuando el vendedor lo cambia.
+describe("pedidos rechazados por la nube", () => {
+  const rejectedEntry = (hash) => ({ hash, published: false, status: "pendiente", rejected: "Falta el nombre del cliente." });
+
+  it("markRejected marca solo los envíos rechazados de pedidos conocidos", () => {
+    const map = { a: { hash: "h", published: true, status: "pendiente" }, b: { hash: "h", published: true, status: "pendiente" } };
+    const next = markRejected(map, [
+      { orderId: "a", kind: "put", message: "Falta el nombre del cliente." },
+      { orderId: "b", kind: "confirm", message: "otra cosa" },
+      { orderId: "zz", kind: "put", message: "no existe en el mapa" },
+    ]);
+    expect(next.a).toMatchObject({ published: false, rejected: "Falta el nombre del cliente." });
+    expect(next.b).toEqual(map.b);
+    expect(next.zz).toBeUndefined();
+    expect(map.a.rejected).toBeUndefined();
+  });
+
+  it("sin rechazos devuelve el mismo mapa", () => {
+    const map = { a: { hash: "h", published: true } };
+    expect(markRejected(map, [])).toBe(map);
+  });
+
+  it("chipFor: rechazado va primero y trae el motivo", () => {
+    expect(chipFor({ entry: rejectedEntry("h"), queued: false })).toEqual({ state: "rejected", text: "Falta el nombre del cliente." });
+  });
+
+  it("reconcile no vuelve a mandar un pedido rechazado mientras no cambie", () => {
+    const o = order();
+    const hash = JSON.stringify(toCloudContent(o, products));
+    const out = reconcile({ orders: [o], products, map: { o1: rejectedEntry(hash) }, today: "2026-10-30" });
+    expect(out.ops).toEqual([]);
+    expect(out.nextMap.o1.rejected).toBe("Falta el nombre del cliente.");
+  });
+
+  it("si el vendedor lo cambia, se manda de nuevo y el rechazo se borra", () => {
+    const o = order({ lines: [{ code: "P500", qty: 41, unitPrice: 120 }] });
+    const out = reconcile({ orders: [o], products, map: { o1: rejectedEntry("hash-viejo") }, today: "2026-10-30" });
+    expect(out.ops).toEqual([expect.objectContaining({ kind: "put", orderId: "o1" })]);
+    expect(out.nextMap.o1.rejected).toBeUndefined();
+    expect(out.nextMap.o1.published).toBe(true);
+  });
+
+  it("si deja de estar enviado a facturación, el aviso de rechazo se quita", () => {
+    const o = order({ sent: false });
+    const out = reconcile({ orders: [o], products, map: { o1: rejectedEntry("h") }, today: "2026-10-30" });
+    expect(out.ops).toEqual([]);
+    expect(out.nextMap.o1.rejected).toBeFalsy();
+    expect(chipFor({ entry: out.nextMap.o1, queued: false })).toBeNull();
   });
 });

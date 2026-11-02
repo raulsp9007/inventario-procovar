@@ -43,6 +43,7 @@ function installFetch() {
     calls.push({ method: init.method, path: url.replace(URL_OK, ""), headers: init.headers, body: init.body ? JSON.parse(init.body) : undefined });
     const path = url.replace(URL_OK, "");
     const ok = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) });
+    if (server.rejectPut && init.method === "PUT") return { ok: false, status: 400, json: async () => ({ error: server.rejectPut }), text: async () => "x" };
     if (path === "/me") return ok({ id: "carlos", name: "Carlos Pérez", role: server.role });
     if (path.startsWith("/orders/status")) return ok({ now: server.now, orders: server.rows });
     return ok({});
@@ -314,5 +315,43 @@ describe("vendedor: pedidos para mañana ya facturados", () => {
     render(<InventoryApp />);
     await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.path === "/orders/o1")).toBe(true));
     expect(calls.find((c) => c.method === "PUT").body.date).toBe("2026-09-22");
+  });
+});
+
+// Si la nube rechaza un pedido, se avisa en rojo sobre su tarjeta, con el motivo.
+describe("vendedor: pedido rechazado por la nube", () => {
+  const banner = () => screen.findByText(/La nube rechazó este pedido/);
+
+  it("sale una notificación roja en la tarjeta del pedido, con el motivo", async () => {
+    seed();
+    server.rejectPut = "Falta el nombre del cliente.";
+    render(<InventoryApp />);
+    const text = await banner();
+    const alert = text.closest("[role='alert']");
+    expect(alert).toBeTruthy();
+    expect(alert.textContent).toContain("Falta el nombre del cliente.");
+    expect(alert.getAttribute("data-cloud-rejected")).not.toBeNull();
+    expect(screen.queryByText("En nube")).toBeNull();
+  });
+
+  it("no sale en los pedidos que la nube aceptó", async () => {
+    seed();
+    render(<InventoryApp />);
+    await screen.findByText("En nube");
+    expect(screen.queryByText(/La nube rechazó este pedido/)).toBeNull();
+  });
+
+  it("al corregir el pedido y aceptarlo la nube, la notificación desaparece", async () => {
+    seed({ prices: { P500: 120 } });
+    server.rejectPut = "Falta el nombre del cliente.";
+    render(<InventoryApp />);
+    await banner();
+    server.rejectPut = null;
+    fireEvent.click(await screen.findByRole("button", { name: "Editar pedido" }));
+    await screen.findByRole("button", { name: /Guardar cambios/ });
+    fireEvent.click(screen.getByRole("button", { name: "+" }));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar cambios/ }));
+    await waitFor(() => expect(screen.queryByText(/La nube rechazó este pedido/)).toBeNull());
+    expect(await screen.findByText("En nube")).toBeTruthy();
   });
 });
