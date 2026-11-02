@@ -170,7 +170,7 @@ describe("escritorio: la tabla", () => {
     render(<FacturadoraApp />);
     await table();
     fireEvent.click(within(rowOf("Ana López")).getByRole("button", { name: "Comprobar código LT05TCP0932" }));
-    expect(open.mock.calls[0]).toEqual(["https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=LT05TCP0932", "procovar-portal"]);
+    expect(open.mock.calls[0]).toEqual(["https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=LT05TCP0932", "procovar-portal", "popup,width=1000,height=800"]);
   });
 
   it("sin código lo dice y Comprobar busca por el nombre", async () => {

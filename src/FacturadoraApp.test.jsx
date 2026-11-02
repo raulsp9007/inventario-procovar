@@ -369,7 +369,7 @@ describe("facturadora: pedidos de un vendedor", () => {
       expect(button.textContent).toBe("Comprobar");
       fireEvent.click(button);
       expect(open).toHaveBeenCalledTimes(1);
-      expect(open.mock.calls[0]).toEqual(["https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=AB1001", "procovar-portal"]);
+      expect(open.mock.calls[0]).toEqual(["https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=AB1001", "procovar-portal", "popup,width=1000,height=800"]);
     });
 
     it("el botón de confirmar está en la misma tarjeta", async () => {

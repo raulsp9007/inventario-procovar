@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { portalSearchUrl, openPortalSearch, PORTAL_BASE, PORTAL_WINDOW_NAME, PORTAL_WINDOW_FEATURES } from "./portalLink";
+import { portalSearchUrl, openPortalSearch, PORTAL_BASE, PORTAL_WINDOW_NAME, PORTAL_WINDOW_FEATURES, PORTAL_WINDOW_FEATURES_WIDE } from "./portalLink";
 
 // Dirección del portal de pedidos con la búsqueda ya hecha: la pantalla de
 // Pedidos del portal lee el parámetro "buscar" y lo pone en su buscador.
@@ -63,7 +63,24 @@ describe("openPortalSearch", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  // La facturadora trabaja en una computadora: una pestaña normal (sin medidas de
+  // La facturadora trabaja en una computadora: ventana emergente más ancha (el portal es
+  // un sitio de escritorio), con el mismo nombre para reutilizarla.
+  it("ventana emergente ancha: mismo nombre y medidas de computadora", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    openPortalSearch("AB1001", { wide: true });
+    expect(PORTAL_WINDOW_FEATURES_WIDE).toBe("popup,width=1000,height=800");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=AB1001", "procovar-portal", "popup,width=1000,height=800");
+  });
+
+  it("la ancha también suelta el opener", () => {
+    const win = { opener: window };
+    vi.spyOn(window, "open").mockImplementation(() => win);
+    openPortalSearch("AB1001", { wide: true });
+    expect(win.opener).toBeNull();
+  });
+
+  // Una pestaña normal (sin medidas de
   // popup), siempre la misma, para ir cambiando de código sin apilar ventanas.
   it("como pestaña normal: mismo nombre y sin medidas de popup", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);

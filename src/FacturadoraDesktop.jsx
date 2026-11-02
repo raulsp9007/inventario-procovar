@@ -235,7 +235,7 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
                           type="button"
                           aria-label={o.customerCode ? `Comprobar código ${o.customerCode}` : `Comprobar a ${o.customerName}`}
                           title="Buscar en el portal de pedidos"
-                          onClick={() => openPortalSearch(o.customerCode || o.customerName, { popup: false })}
+                          onClick={() => openPortalSearch(o.customerCode || o.customerName, { wide: true })}
                           style={{ ...smallButton, marginTop: 4, height: 24 }}
                         >
                           <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />

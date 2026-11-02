@@ -15,17 +15,21 @@ export function portalSearchUrl(customerName) {
 // que otro toque cambie la búsqueda en la misma ventana en vez de apilar otra.
 export const PORTAL_WINDOW_NAME = "procovar-portal";
 export const PORTAL_WINDOW_FEATURES = "popup,width=480,height=820";
+// La facturadora trabaja en computadora: una ventana emergente más ancha (el portal es un
+// sitio de escritorio).
+export const PORTAL_WINDOW_FEATURES_WIDE = "popup,width=1000,height=800";
 
 // No se usa "noopener": crea un grupo de ventanas aparte y la app ya no
 // encontraría la ventana por su nombre para reutilizarla. En su lugar se suelta
 // `opener` justo al abrirla, con el mismo efecto de aislar el portal de la app.
 // `text`: el cliente o su código (el portal busca por lo que se le ponga en `buscar`).
-// `popup: false` abre una pestaña normal (la facturadora trabaja en computadora),
-// también siempre la misma.
-export function openPortalSearch(text, { popup = true } = {}) {
+// `wide: true` abre la ventana emergente ancha (la de la facturadora, en computadora);
+// `popup: false` abre una pestaña normal, también siempre la misma.
+export function openPortalSearch(text, { popup = true, wide = false } = {}) {
   const url = portalSearchUrl(text);
   if (!url) return;
-  const win = popup ? window.open(url, PORTAL_WINDOW_NAME, PORTAL_WINDOW_FEATURES) : window.open(url, PORTAL_WINDOW_NAME);
+  const features = wide ? PORTAL_WINDOW_FEATURES_WIDE : PORTAL_WINDOW_FEATURES;
+  const win = popup ? window.open(url, PORTAL_WINDOW_NAME, features) : window.open(url, PORTAL_WINDOW_NAME);
   if (win) {
     try { win.opener = null; } catch { /* ya aislada */ }
   }

@@ -218,7 +218,7 @@ function OrderCard({ order, today, onConfirm, onUndo, readOnly = false }) {
               type="button"
               aria-label={order.customerCode ? `Comprobar código ${order.customerCode}` : `Comprobar a ${order.customerName}`}
               title="Buscar en el portal de pedidos"
-              onClick={() => openPortalSearch(order.customerCode || order.customerName, { popup: false })}
+              onClick={() => openPortalSearch(order.customerCode || order.customerName, { wide: true })}
               style={{ flexShrink: 0, height: 26, padding: "0 10px", borderRadius: 999, border: "1px solid var(--border-strong)", background: "var(--surface-subtle)", color: "var(--text)", fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}
             >
               Comprobar
