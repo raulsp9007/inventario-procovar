@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Receipt, UserCheck, ClipboardCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff, Cloud, AlertTriangle } from "lucide-react";
+import { Trash2, Receipt, UserCheck, ClipboardCheck, Pencil, ChevronDown, Check, Search, X, Plus, PhoneOff, Cloud, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, getDateNDaysAgoStr, formatHour12 } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { sendSupervisorSummary } from "./supervisorSummary";
@@ -1068,6 +1068,8 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     const isDeleting = confirmingDeleteId === order.orderId;
     const allStepsDone = order.sentToCustomer && order.sent && order.confirmed;
     const cloudRejected = cloudChips[order.orderId] && cloudChips[order.orderId].state === "rejected" ? cloudChips[order.orderId].text : "";
+    // Confirmado por la facturadora desde su plataforma (no el que marcó el propio vendedor).
+    const cloudConfirmed = cloudChips[order.orderId] && cloudChips[order.orderId].state === "confirmed" ? cloudChips[order.orderId].text : "";
     const statusColor = isDeleting || cloudRejected ? "var(--red)" : allStepsDone ? "var(--green)" : "var(--orange-2)";
     const totalStr = formatCUP(orderTotal(order));
     const [totalNumber, totalUnit] = totalStr.split(" ");
@@ -1081,12 +1083,22 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         style={{
           ...riseStyle(i),
           display: "flex", alignItems: "stretch", background: "var(--surface)",
-          border: `1px solid ${isDeleting || cloudRejected ? "var(--danger)" : "var(--border)"}`,
+          border: `1px solid ${isDeleting || cloudRejected ? "var(--danger)" : cloudConfirmed ? "var(--green)" : "var(--border)"}`,
           borderRadius: 12, overflow: "hidden",
         }}
       >
         <div style={{ width: 4, flexShrink: 0, background: statusColor }} />
         <div style={{ flex: 1, minWidth: 0, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {cloudConfirmed && !cloudRejected && (
+            <div
+              role="status"
+              data-cloud-confirmed
+              style={{ margin: "-10px -12px 0", padding: "8px 12px", background: "var(--green)", color: "var(--on-green)", fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, display: "flex", alignItems: "flex-start", gap: 7 }}
+            >
+              <CheckCircle2 size={15} strokeWidth={2.2} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{cloudConfirmed}</span>
+            </div>
+          )}
           {cloudRejected && (
             <div
               role="alert"
@@ -1180,7 +1192,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
             </span>
           </div>
 
-          {cloudChips[order.orderId] && cloudChips[order.orderId].state !== "rejected" && (
+          {cloudChips[order.orderId] && cloudChips[order.orderId].state !== "rejected" && cloudChips[order.orderId].state !== "confirmed" && (
             <div
               data-cloud-state={cloudChips[order.orderId].state}
               style={{

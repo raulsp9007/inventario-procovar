@@ -355,3 +355,63 @@ describe("vendedor: pedido rechazado por la nube", () => {
     expect(await screen.findByText("En nube")).toBeTruthy();
   });
 });
+
+// Un pedido que la facturadora confirmó muestra una notificación verde en su tarjeta,
+// con el mismo estilo que el aviso rojo de un rechazo.
+describe("vendedor: pedido confirmado por facturación", () => {
+  const confirmedRow = (over = {}) => ({
+    id: "o1", status: "confirmado", rev: 1, modified: false,
+    confirmedAt: new Date(2026, 8, 21, 10, 42).toISOString(), confirmedBy: "facturadora", updatedAt: "2026-09-21T15:42:00.000Z", ...over,
+  });
+  const check = () => screen.findByRole("button", { name: "Comprobar" });
+
+  it("al comprobar, la tarjeta muestra la notificación 'Confirmado por facturación' con la hora", async () => {
+    seed();
+    server.rows = [confirmedRow()];
+    render(<InventoryApp />);
+    expect(document.querySelector("[data-cloud-confirmed]")).toBeNull();
+    fireEvent.click(await check());
+    const text = await screen.findByText("Confirmado por facturación a las 10:42");
+    const banner = text.closest("[data-cloud-confirmed]");
+    expect(banner).toBeTruthy();
+    expect(banner.getAttribute("role")).toBe("status");
+    expect(document.querySelectorAll("[data-cloud-confirmed]")).toHaveLength(1);
+    expect(screen.queryByText("En nube")).toBeNull();
+  });
+
+  it("antes de que la facturadora confirme, no hay notificación verde (sigue 'En nube')", async () => {
+    seed();
+    render(<InventoryApp />);
+    expect(await screen.findByText("En nube")).toBeTruthy();
+    expect(document.querySelector("[data-cloud-confirmed]")).toBeNull();
+  });
+
+  it("si lo confirmó el propio vendedor, no sale como confirmado por facturación", async () => {
+    seed();
+    server.rows = [confirmedRow({ confirmedBy: "vendedor" })];
+    render(<InventoryApp />);
+    fireEvent.click(await check());
+    await screen.findByText(/sin novedades|Comprobado a las/);
+    expect(document.querySelector("[data-cloud-confirmed]")).toBeNull();
+  });
+
+  it("si ella deshace la confirmación, la notificación desaparece", async () => {
+    seed();
+    server.rows = [confirmedRow()];
+    render(<InventoryApp />);
+    fireEvent.click(await check());
+    await screen.findByText("Confirmado por facturación a las 10:42");
+    server.rows = [{ id: "o1", status: "pendiente", rev: 1, modified: false, confirmedAt: null, confirmedBy: null, updatedAt: "2026-09-21T16:00:00.000Z" }];
+    fireEvent.click(await check());
+    await waitFor(() => expect(document.querySelector("[data-cloud-confirmed]")).toBeNull());
+    expect(await screen.findByText("En nube")).toBeTruthy();
+  });
+
+  it("un pedido rechazado sigue en rojo y no sale en verde", async () => {
+    seed();
+    server.rejectPut = "Falta el nombre del cliente.";
+    render(<InventoryApp />);
+    await screen.findByText(/La nube rechazó este pedido/);
+    expect(document.querySelector("[data-cloud-confirmed]")).toBeNull();
+  });
+});
