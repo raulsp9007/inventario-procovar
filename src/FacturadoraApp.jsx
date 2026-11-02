@@ -20,17 +20,11 @@ const clock = (value) => {
 };
 const plural = (n, one, many) => (n === 1 ? one : many);
 
+// La página de la facturadora va siempre en modo claro: no sigue el tema del navegador ni el
+// que se eligió en la app de ventas (que comparte el sitio).
 function useTheme() {
   useEffect(() => {
-    let theme = "light";
-    try {
-      const saved = localStorage.getItem("procovar-theme");
-      if (saved === "dark" || saved === "light") theme = saved;
-      else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark";
-    } catch {
-      theme = "light";
-    }
-    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", "light");
     document.title = "Facturación Procovar";
   }, []);
 }

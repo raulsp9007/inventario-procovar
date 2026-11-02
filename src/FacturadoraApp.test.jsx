@@ -560,3 +560,40 @@ describe("facturadora: no pisa el enlace del vendedor", () => {
     expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
   });
 });
+
+// La página de la facturadora siempre va en modo claro, sin importar el tema del navegador
+// ni el que se haya elegido en la app de ventas (que comparte el sitio).
+describe("facturadora: modo claro", () => {
+  afterEach(() => { document.documentElement.removeAttribute("data-theme"); });
+
+  it("usa el tema claro", async () => {
+    render(<FacturadoraApp />);
+    await screen.findByLabelText("Usuario");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+
+  it("aunque la app de ventas tenga guardado el tema oscuro", async () => {
+    localStorage.setItem("procovar-theme", "dark");
+    render(<FacturadoraApp />);
+    await screen.findByLabelText("Usuario");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+
+  it("aunque el sistema o el navegador estén en modo oscuro", async () => {
+    window.matchMedia = vi.fn().mockImplementation((query) => ({
+      matches: query.includes("prefers-color-scheme: dark"), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
+    }));
+    render(<FacturadoraApp />);
+    await screen.findByLabelText("Usuario");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    delete window.matchMedia;
+  });
+
+  it("también con la sesión iniciada", async () => {
+    localStorage.setItem("procovar-theme", "dark");
+    linkStorage();
+    render(<FacturadoraApp />);
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+});

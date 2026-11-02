@@ -94,3 +94,21 @@ describe.each(PAGES)("guardián de caché en %s", (page) => {
     expect(location.reload).toHaveBeenCalledTimes(1);
   });
 });
+
+// facturadora.html va siempre en modo claro: el navegador no pinta márgenes, barras ni
+// campos en oscuro aunque el sistema esté en modo oscuro.
+describe("facturadora.html: modo claro", () => {
+  const html = () => htmlOf("facturadora.html");
+
+  it("le dice al navegador que la página es clara", () => {
+    expect(html()).toMatch(/<meta name="color-scheme" content="light"\s*\/?>/);
+  });
+
+  it("sin márgenes y con el fondo claro de la página", () => {
+    expect(html()).toMatch(/<style>[\s\S]*body\s*\{[^}]*margin:\s*0[^}]*background:\s*#F7F4EC/i);
+  });
+
+  it("el modo oscuro de admin.html no cambia", () => {
+    expect(htmlOf("admin.html")).not.toMatch(/name="color-scheme" content="light"/);
+  });
+});
