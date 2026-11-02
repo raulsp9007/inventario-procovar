@@ -58,3 +58,65 @@ describe("cloudStorage", () => {
     }
   });
 });
+
+// La app del vendedor y la página de la facturadora viven en el mismo sitio (mismo
+// navegador): cada una guarda lo suyo aparte, para que entrar a una no pise a la otra.
+describe("cloudStorage: la facturadora y el vendedor no se pisan", () => {
+  const vendorLink = { url: "https://b.test", token: "v".repeat(24), name: "Carlos", role: "vendedor" };
+  const factLink = { url: "https://b.test", token: "s".repeat(24), name: "Tania", role: "facturadora" };
+
+  it("la facturadora guarda en su propio lugar y el vendedor sigue enlazado", () => {
+    saveCloud({ link: vendorLink, queue: [{ kind: "put", orderId: "o1" }] });
+    saveCloud({ link: factLink, queue: [{ kind: "confirm", ids: ["a"] }], data: { sellers: [], at: 1 } }, "facturadora");
+    expect(loadCloud().link).toEqual(vendorLink);
+    expect(loadCloud().queue).toEqual([{ kind: "put", orderId: "o1" }]);
+    expect(loadCloud("facturadora").link).toEqual(factLink);
+    expect(loadCloud("facturadora").queue).toEqual([{ kind: "confirm", ids: ["a"] }]);
+  });
+
+  it("salir de la sesión de la facturadora no desenlaza al vendedor, y al revés", () => {
+    saveCloud({ link: vendorLink });
+    saveCloud({ link: factLink }, "facturadora");
+    clearCloud("facturadora");
+    expect(loadCloud("facturadora").link).toBeNull();
+    expect(loadCloud().link).toEqual(vendorLink);
+    saveCloud({ link: factLink }, "facturadora");
+    clearCloud();
+    expect(loadCloud().link).toBeNull();
+    expect(loadCloud("facturadora").link).toEqual(factLink);
+  });
+
+  it("la app del vendedor ignora un acceso que no es de vendedor (de antes, cuando compartían lugar)", () => {
+    for (const role of ["facturadora", "supervisor", "admin"]) {
+      localStorage.setItem(CLOUD_KEYS.link, JSON.stringify({ ...factLink, role }));
+      expect(loadCloud().link).toBeNull();
+    }
+    localStorage.setItem(CLOUD_KEYS.link, JSON.stringify({ url: "https://b.test", token: "v".repeat(24), name: "Carlos" })); // sin rol: de una versión vieja
+    expect(loadCloud().link).toMatchObject({ name: "Carlos" });
+  });
+
+  it("la facturadora que ya tenía su sesión en el lugar de antes la conserva (y se mueve)", () => {
+    localStorage.setItem(CLOUD_KEYS.link, JSON.stringify(factLink));
+    expect(loadCloud("facturadora").link).toEqual(factLink);
+    expect(localStorage.getItem(CLOUD_KEYS.link)).toBeNull();
+    expect(loadCloud("facturadora").link).toEqual(factLink);
+  });
+
+  it("la supervisión también", () => {
+    const sup = { ...factLink, name: "Maria", role: "supervisor" };
+    localStorage.setItem(CLOUD_KEYS.link, JSON.stringify(sup));
+    expect(loadCloud("facturadora").link).toEqual(sup);
+  });
+
+  it("el enlace de un vendedor en el lugar de antes no pasa a la facturadora", () => {
+    saveCloud({ link: vendorLink });
+    expect(loadCloud("facturadora").link).toBeNull();
+    expect(loadCloud().link).toEqual(vendorLink);
+  });
+
+  it("no usa los mismos nombres que el vendedor", () => {
+    saveCloud({ link: factLink, since: "x" }, "facturadora");
+    expect(localStorage.getItem(CLOUD_KEYS.link)).toBeNull();
+    expect(Object.keys(localStorage).filter((k) => k.startsWith("procovar-fact-")).length).toBeGreaterThan(0);
+  });
+});

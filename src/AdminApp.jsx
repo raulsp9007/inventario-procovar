@@ -150,7 +150,7 @@ function AccountCard({ slug, title, blurb, account, busy, siteUrl, onSave, onCop
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState("");
   const [known, setKnown] = useState("");
-  useEffect(() => { setUsuario(account ? account.usuario : ""); }, [account && account.usuario]);
+  useEffect(() => { if (account) setUsuario(account.usuario); }, [account && account.usuario]);
 
   async function create() {
     setError("");

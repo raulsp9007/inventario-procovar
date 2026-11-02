@@ -10,6 +10,9 @@ import { todayStr } from "./dateUtils";
 // (y el deshacer) y, sin internet, guarda esas operaciones en cola y las muestra
 // ya aplicadas. Lo último que vio queda guardado para verlo sin conexión.
 
+// La página de la facturadora guarda su sesión aparte de la app del vendedor (ver cloudStorage.js).
+const SCOPE = "facturadora";
+
 const MESSAGES = {
   network: "Sin conexión. Se muestra lo último que se vio.",
   auth: "La sesión ya no sirve. Vuelve a entrar.",
@@ -20,10 +23,10 @@ const MESSAGES = {
 // guardado de otro día no se muestra, así que a las 12 am la lista se limpia sola.
 // `today` (AAAA-MM-DD) se puede fijar para pruebas; por defecto es el día de hoy.
 export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000, ready = true, today, cloudUrl = CLOUD_URL } = {}) {
-  const [cloud, setCloud] = useState(() => loadCloud());
-  const [sellersRaw, setSellersRaw] = useState(() => (loadCloud().data ? loadCloud().data.sellers : []));
+  const [cloud, setCloud] = useState(() => loadCloud(SCOPE));
+  const [sellersRaw, setSellersRaw] = useState(() => (loadCloud(SCOPE).data ? loadCloud(SCOPE).data.sellers : []));
   const [status, setStatus] = useState(() => {
-    const data = loadCloud().data;
+    const data = loadCloud(SCOPE).data;
     return { phase: "idle", message: "", lastSyncAt: data ? data.at : null };
   });
   const cloudRef = useRef(cloud);
@@ -37,7 +40,7 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
   const commit = useCallback((patch) => {
     cloudRef.current = { ...cloudRef.current, ...patch };
     setCloud(cloudRef.current);
-    saveCloud(patch);
+    saveCloud(patch, SCOPE);
   }, []);
 
   const runRefresh = useCallback(async () => {
@@ -159,8 +162,8 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
   }, [commit, cloudUrl, linkWith]);
 
   const unlink = useCallback(() => {
-    clearCloud();
-    cloudRef.current = loadCloud();
+    clearCloud(SCOPE);
+    cloudRef.current = loadCloud(SCOPE);
     setCloud(cloudRef.current);
     setSellersRaw([]);
     setStatus({ phase: "idle", message: "", lastSyncAt: null });

@@ -64,7 +64,7 @@ function setDesktop(on) {
 
 beforeEach(() => {
   localStorage.clear();
-  localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
+  localStorage.setItem("procovar-fact-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date("2026-10-30T11:00:00"));
   installFetch();
@@ -85,7 +85,7 @@ const names = () => within(screen.getByRole("table", { name: "Pedidos" })).getAl
 
 describe("escritorio: cuenta de supervisión (solo lectura)", () => {
   beforeEach(() => {
-    localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "super", role: "supervisor" }));
+    localStorage.setItem("procovar-fact-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "super", role: "supervisor" }));
   });
 
   it("ve la tabla y el aviso, sin casillas ni botones de confirmar", async () => {
@@ -112,7 +112,7 @@ describe("escritorio: cuenta de supervisión (solo lectura)", () => {
   });
 
   it("la facturadora sigue con casillas y botones", async () => {
-    localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
+    localStorage.setItem("procovar-fact-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
     render(<FacturadoraApp />);
     await table();
     expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
@@ -331,6 +331,6 @@ describe("escritorio: salir de la sesión", () => {
     expect(screen.queryByRole("button", { name: "Desenlazar" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Salir de la sesión" }));
     expect(await screen.findByLabelText("Usuario")).toBeTruthy();
-    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+    expect(localStorage.getItem("procovar-fact-enlace")).toBeNull();
   });
 });

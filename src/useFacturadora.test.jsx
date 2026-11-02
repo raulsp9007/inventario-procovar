@@ -118,7 +118,7 @@ describe("useFacturadora: enlazar", () => {
     expect(ctx.createApi).toHaveBeenCalledWith({ url: URL_OK, token: "" });
     expect(ctx.api.login).toHaveBeenCalledWith("maria", "clave-12345");
     expect(ctx.hook.result.current.link).toMatchObject({ url: URL_OK, token: "sesion-abc-123", name: "maria", role: "facturadora" });
-    expect(loadCloud().link.token).toBe("sesion-abc-123");
+    expect(loadCloud("facturadora").link.token).toBe("sesion-abc-123");
     expect(ctx.hook.result.current.readOnly).toBe(false);
   });
 
@@ -170,7 +170,7 @@ describe("useFacturadora: enlazar", () => {
     act(() => ctx.hook.result.current.unlink());
     expect(ctx.hook.result.current.link).toBeNull();
     expect(ctx.hook.result.current.sellers).toEqual([]);
-    expect(loadCloud().link).toBeNull();
+    expect(loadCloud("facturadora").link).toBeNull();
   });
 });
 
@@ -212,7 +212,7 @@ describe("useFacturadora: el 👍", () => {
     expect(ctx.hook.result.current.pendingOps).toBe(1);
     expect(ctx.hook.result.current.phase).toBe("offline");
     expect(ctx.hook.result.current.sellers[0]).toMatchObject({ pending: 0, confirmed: 2 });
-    expect(loadCloud().queue).toEqual([{ kind: "confirm", ids: ["a", "b"] }]);
+    expect(loadCloud("facturadora").queue).toEqual([{ kind: "confirm", ids: ["a", "b"] }]);
 
     ctx.api.confirmMany.mockImplementation(async (ids) => ({ confirmed: ids, missing: [] }));
     ctx.api.listOrders.mockImplementation(async () => ({ now: "x", sellers: sellersData() }));

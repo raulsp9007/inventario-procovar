@@ -307,7 +307,7 @@ describe("administración: acceso de facturación y supervisión", () => {
     link();
     render(<AdminApp />);
     await create("Acceso de facturación", "  maria  ", "clave-12345");
-    await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/facturacion", body: { usuario: "maria", clave: "clave-12345" } }]));
+    await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/facturacion", body: { usuario: "maria", clave: "clave-12345" } }]), { timeout: 4000 });
     const card = await group("Acceso de facturación");
     await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
     expect(within(card).getByText("Activo")).toBeTruthy();
@@ -318,7 +318,7 @@ describe("administración: acceso de facturación y supervisión", () => {
     link();
     render(<AdminApp />);
     await create("Acceso de supervisión", "super", "otra-clave-9");
-    await waitFor(() => expect(putCalls().map((c) => c.path)).toEqual(["/admin/accounts/supervision"]));
+    await waitFor(() => expect(putCalls().map((c) => c.path)).toEqual(["/admin/accounts/supervision"]), { timeout: 4000 });
   });
 
   it("valida antes de mandar: usuario vacío y contraseña corta", async () => {

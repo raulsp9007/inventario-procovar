@@ -415,3 +415,31 @@ describe("vendedor: pedido confirmado por facturación", () => {
     expect(document.querySelector("[data-cloud-confirmed]")).toBeNull();
   });
 });
+
+// Un acceso de facturación o supervisión guardado en el lugar del vendedor (de antes, cuando
+// compartían lugar) no sirve para subir pedidos: la app lo ignora en vez de recibir
+// "Esto no es para tu usuario" de la nube.
+describe("vendedor: acceso que no es de vendedor", () => {
+  it("no sube nada ni lo da por enlazado", async () => {
+    seed({ linked: false });
+    localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: "s".repeat(24), name: "Tania", role: "facturadora" }));
+    render(<InventoryApp />);
+    await screen.findByRole("button", { name: /Ana López/ });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(calls.filter((c) => c.method === "PUT")).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Comprobar" })).toBeNull();
+    expect(screen.queryByText("En nube")).toBeNull();
+  });
+
+  it("al enlazar con su código de vendedor vuelve a funcionar", async () => {
+    seed({ linked: false });
+    localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: "s".repeat(24), name: "Tania", role: "facturadora" }));
+    localStorage.setItem("procovar-active-tab", "config");
+    render(<InventoryApp />);
+    const card = await screen.findByRole("group", { name: "Nube de facturación" });
+    fireEvent.change(within(card).getByLabelText("Código de enlace"), { target: { value: CODE } });
+    fireEvent.click(within(card).getByRole("button", { name: "Enlazar" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.path === "/orders/o1")).toBe(true));
+    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toMatchObject({ role: "vendedor", token: TOKEN });
+  });
+});

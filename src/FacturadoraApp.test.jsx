@@ -76,7 +76,7 @@ function installFetch() {
 }
 
 function linkStorage() {
-  localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
+  localStorage.setItem("procovar-fact-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
 }
 
 beforeEach(() => {
@@ -124,7 +124,7 @@ describe("facturadora: enlazar", () => {
     fireEvent.submit(field.closest("form"));
     expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
     expect(calls[0].path).toBe("/me");
-    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toMatchObject({ url: URL_OK, token: TOKEN, role: "facturadora" });
+    expect(JSON.parse(localStorage.getItem("procovar-fact-enlace"))).toMatchObject({ url: URL_OK, token: TOKEN, role: "facturadora" });
   });
 
   it("entra con usuario y contraseña (el usuario va antes)", async () => {
@@ -135,7 +135,7 @@ describe("facturadora: enlazar", () => {
     expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
     const login = calls.find((c) => c.path === "/login");
     expect(login.body).toEqual({ usuario: "maria", clave: "clave-12345" });
-    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toMatchObject({ token: TOKEN, role: "facturadora" });
+    expect(JSON.parse(localStorage.getItem("procovar-fact-enlace"))).toMatchObject({ token: TOKEN, role: "facturadora" });
   });
 
   it("usuario o contraseña mal: lo dice y no entra", async () => {
@@ -145,7 +145,7 @@ describe("facturadora: enlazar", () => {
     fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "mala-clave-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByText("Usuario o contraseña incorrectos.")).toBeTruthy();
-    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+    expect(localStorage.getItem("procovar-fact-enlace")).toBeNull();
   });
 
   it("si la sesión deja de servir, vuelve a pedir usuario y contraseña", async () => {
@@ -156,7 +156,7 @@ describe("facturadora: enlazar", () => {
     fireEvent(document, new Event("visibilitychange"));
     expect(await screen.findByText("La sesión terminó. Entra de nuevo.")).toBeTruthy();
     expect(screen.getByLabelText("Usuario")).toBeTruthy();
-    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+    expect(localStorage.getItem("procovar-fact-enlace")).toBeNull();
   });
 
   it("una contraseña equivocada avisa y deja intentar otra vez", async () => {
@@ -166,7 +166,7 @@ describe("facturadora: enlazar", () => {
     fireEvent.change(field, { target: { value: "x".repeat(24) } });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByText("La contraseña no es correcta.")).toBeTruthy();
-    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+    expect(localStorage.getItem("procovar-fact-enlace")).toBeNull();
   });
 
   it("con el código bueno entra y ve a los vendedores", async () => {
@@ -187,7 +187,7 @@ describe("facturadora: enlace personal en la dirección", () => {
     render(<FacturadoraApp />);
     expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
     expect(window.location.hash).toBe("");
-    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace")).token).toBe(TOKEN);
+    expect(JSON.parse(localStorage.getItem("procovar-fact-enlace")).token).toBe(TOKEN);
   });
 
   it("si el código de la dirección es de un vendedor, lo dice y deja pegar otro", async () => {
@@ -322,7 +322,7 @@ describe("facturadora: vendedores", () => {
     expect(screen.queryByRole("button", { name: "Desenlazar" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Salir de la sesión" }));
     expect(await screen.findByLabelText("Contraseña")).toBeTruthy();
-    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+    expect(localStorage.getItem("procovar-fact-enlace")).toBeNull();
   });
 });
 
@@ -494,7 +494,7 @@ describe("facturadora: sin internet", () => {
 // La supervisión solo mira: ve los vendedores y sus pedidos con su estado, sin ningún
 // botón para confirmar ni deshacer.
 describe("facturadora: cuenta de supervisión (solo lectura)", () => {
-  const supervisorStorage = () => localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "super", role: "supervisor" }));
+  const supervisorStorage = () => localStorage.setItem("procovar-fact-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "super", role: "supervisor" }));
 
   it("ve a los vendedores y el aviso de solo lectura", async () => {
     supervisorStorage();
@@ -523,5 +523,40 @@ describe("facturadora: cuenta de supervisión (solo lectura)", () => {
     await openSeller("Carlos");
     expect((await screen.findAllByRole("button", { name: /Confirmar/ })).length).toBeGreaterThan(0);
     expect(screen.queryByText("Solo lectura")).toBeNull();
+  });
+});
+
+// La página de la facturadora y la app del vendedor comparten navegador: entrar a una
+// no debe borrar ni cambiar el enlace de la otra.
+describe("facturadora: no pisa el enlace del vendedor", () => {
+  const vendorLink = { url: URL_OK, token: "v".repeat(24), name: "Carlos Pérez", role: "vendedor" };
+
+  it("entrar con usuario y contraseña deja intacto el enlace de la app del vendedor", async () => {
+    localStorage.setItem("procovar-nube-enlace", JSON.stringify(vendorLink));
+    render(<FacturadoraApp />);
+    fireEvent.change(await screen.findByLabelText("Usuario"), { target: { value: "maria" } });
+    fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "clave-12345" } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toEqual(vendorLink);
+    expect(JSON.parse(localStorage.getItem("procovar-fact-enlace"))).toMatchObject({ role: "facturadora" });
+  });
+
+  it("salir de la sesión no desenlaza al vendedor", async () => {
+    localStorage.setItem("procovar-nube-enlace", JSON.stringify(vendorLink));
+    linkStorage();
+    render(<FacturadoraApp />);
+    await screen.findByRole("button", { name: /Carlos Pérez/ });
+    fireEvent.click(screen.getByRole("button", { name: "Salir de la sesión" }));
+    await screen.findByLabelText("Usuario");
+    expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toEqual(vendorLink);
+    expect(localStorage.getItem("procovar-fact-enlace")).toBeNull();
+  });
+
+  it("la sesión que la facturadora ya tenía en el lugar de antes sigue valiendo", async () => {
+    localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Facturadora", role: "facturadora" }));
+    render(<FacturadoraApp />);
+    expect(await screen.findByRole("button", { name: /Carlos Pérez/ })).toBeTruthy();
+    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
   });
 });
