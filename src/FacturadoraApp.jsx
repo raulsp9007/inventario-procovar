@@ -191,7 +191,7 @@ function SellersScreen({ f, sellers, onOpen }) {
       <div style={{ ...column, padding: "14px 16px" }}>
         {sellers.map((seller) => <SellerCard key={seller.id} seller={seller} onOpen={() => onOpen(seller.id)} />)}
         <div style={{ textAlign: "center", marginTop: 18 }}>
-          <button type="button" onClick={f.unlink} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12.5, textDecoration: "underline", fontFamily: "inherit", cursor: "pointer" }}>Desenlazar</button>
+          <button type="button" onClick={f.unlink} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12.5, textDecoration: "underline", fontFamily: "inherit", cursor: "pointer" }}>Salir de la sesión</button>
         </div>
       </div>
     </div>

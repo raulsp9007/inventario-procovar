@@ -174,7 +174,7 @@ export default function FacturadoraDesktop({ f, sellers, connection }) {
           })}
           </nav>
           <span style={{ flex: 1 }} />
-          <button type="button" onClick={f.unlink} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, textDecoration: "underline", fontFamily: "inherit", cursor: "pointer", padding: 8, textAlign: "left" }}>Desenlazar</button>
+          <button type="button" onClick={f.unlink} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, textDecoration: "underline", fontFamily: "inherit", cursor: "pointer", padding: 8, textAlign: "left" }}>Salir de la sesión</button>
         </aside>
 
         <main style={{ minWidth: 0, display: "flex", flexDirection: "column", minHeight: `calc(100vh - ${TOP}px)` }}>

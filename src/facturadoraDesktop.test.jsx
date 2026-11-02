@@ -323,3 +323,14 @@ describe("escritorio: sigue habiendo vista de teléfono", () => {
     expect(await screen.findByLabelText("Contraseña")).toBeTruthy();
   });
 });
+
+describe("escritorio: salir de la sesión", () => {
+  it("el botón se llama 'Salir de la sesión' y vuelve a pedir usuario y contraseña", async () => {
+    render(<FacturadoraApp />);
+    await table();
+    expect(screen.queryByRole("button", { name: "Desenlazar" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Salir de la sesión" }));
+    expect(await screen.findByLabelText("Usuario")).toBeTruthy();
+    expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
+  });
+});

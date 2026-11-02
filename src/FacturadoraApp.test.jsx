@@ -315,11 +315,12 @@ describe("facturadora: vendedores", () => {
     expect(await screen.findByText("3 pedidos por confirmar")).toBeTruthy();
   });
 
-  it("se puede desenlazar", async () => {
+  it("se puede salir de la sesión", async () => {
     linkStorage();
     render(<FacturadoraApp />);
     await screen.findByRole("button", { name: /Carlos Pérez/ });
-    fireEvent.click(screen.getByRole("button", { name: "Desenlazar" }));
+    expect(screen.queryByRole("button", { name: "Desenlazar" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Salir de la sesión" }));
     expect(await screen.findByLabelText("Contraseña")).toBeTruthy();
     expect(localStorage.getItem("procovar-nube-enlace")).toBeNull();
   });

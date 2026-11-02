@@ -15,7 +15,7 @@ export const PASSWORD_MIN = 8;
 export const PASSWORD_MAX = 100;
 export const MAX_FAILS = 5;
 export const LOCK_MS = 5 * 60 * 1000;
-export const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+export const SESSION_MS = 24 * 60 * 60 * 1000;
 
 // El plan gratis de Cloudflare da ~10 ms de CPU por petición: más vueltas harían fallar el login.
 const ITERATIONS = 20000;

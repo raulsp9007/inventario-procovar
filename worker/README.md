@@ -100,7 +100,7 @@ Además de los vendedores, el administrador define desde `admin.html` dos acceso
 Hay uno de cada. Entran en `…/facturadora.html` escribiendo su usuario y contraseña; la página
 muestra solo el acceso hasta entrar. La contraseña (8 a 100 caracteres) no se guarda: el buzón
 solo guarda su huella, y no se puede volver a leer (se puede cambiar). Tras 5 intentos fallidos
-la cuenta se bloquea 5 minutos. Entrar da una sesión de 30 días; cambiar la contraseña o
+la cuenta se bloquea 5 minutos. Entrar da una sesión de 24 horas (pasado ese tiempo hay que volver a entrar); cambiar la contraseña o
 desactivar el acceso cierra las sesiones abiertas. El usuario no puede repetirse entre las dos
 cuentas.
 

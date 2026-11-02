@@ -462,7 +462,6 @@ export function apiSuite(label, makeStore) {
       const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
       const setAccount = (slug, body) => admin("PUT", `/accounts/${slug}`, body);
       const login = (usuario, clave) => call("POST", "/login", { body: { usuario, clave } });
-      const DAY = 24 * 60 * 60 * 1000;
       const later = (ms) => new Date(new Date(NOW).getTime() + ms).toISOString();
 
       it("al principio no hay cuentas; solo el administrador las ve y las cambia", async () => {
@@ -623,12 +622,12 @@ export function apiSuite(label, makeStore) {
         expect((await login("super", "clave-12345")).status).toBe(200);
       });
 
-      it("una sesión vence a los 30 días", async () => {
+      it("una sesión vence a las 24 horas", async () => {
         await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
         const { token } = (await login("maria", "clave-12345")).json;
-        clock = later(29 * DAY);
+        clock = later(23 * 60 * 60 * 1000);
         expect((await call("GET", "/me", { token })).status).toBe(200);
-        clock = later(31 * DAY);
+        clock = later(25 * 60 * 60 * 1000);
         expect((await call("GET", "/me", { token })).status).toBe(401);
       });
 
