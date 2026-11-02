@@ -152,6 +152,69 @@ describe("useCloudSync: comprobación automática cada hora", () => {
     expect(ctx.api.statusSince).not.toHaveBeenCalled();
   });
 
+  // Sin internet los pedidos quedan en cola; al volver la conexión se reenvían solos
+  // (solo se sube lo pendiente: no se consulta lo que confirmó la facturadora).
+  describe("al volver la conexión", () => {
+    const offline = () => new CloudError("network", 0, "No se pudo conectar con la nube.");
+
+    it("reenvía lo que quedó en cola, sin consultar la nube", async () => {
+      const ctx = setup();
+      ctx.api.putOrder.mockRejectedValueOnce(offline());
+      await linked(ctx);
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(1));
+      expect(ctx.api.putOrder).toHaveBeenCalledTimes(1);
+      act(() => { window.dispatchEvent(new Event("online")); });
+      await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(0));
+      expect(ctx.hook.result.current.phase).toBe("ok");
+      expect(ctx.api.statusSince).not.toHaveBeenCalled();
+    });
+
+    it("si todavía no hay conexión, sigue en cola y lo dice", async () => {
+      const ctx = setup();
+      ctx.api.putOrder.mockRejectedValue(offline());
+      await linked(ctx);
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(1));
+      act(() => { window.dispatchEvent(new Event("online")); });
+      await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledTimes(2));
+      expect(ctx.hook.result.current.pendingCount).toBe(1);
+      expect(ctx.hook.result.current.phase).toBe("offline");
+    });
+
+    it("sin nada en cola no hace nada", async () => {
+      const ctx = setup();
+      await linked(ctx);
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(0));
+      const before = ctx.createApi.mock.calls.length;
+      act(() => { window.dispatchEvent(new Event("online")); });
+      await wait(60);
+      expect(ctx.createApi.mock.calls.length).toBe(before);
+      expect(ctx.api.putOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it("con la nube apagada no reenvía", async () => {
+      const ctx = setup();
+      ctx.api.putOrder.mockRejectedValueOnce(offline());
+      await linked(ctx);
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(1));
+      act(() => ctx.hook.result.current.setEnabled(false));
+      act(() => { window.dispatchEvent(new Event("online")); });
+      await wait(80);
+      expect(ctx.api.putOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it("al desmontar deja de escuchar", async () => {
+      const ctx = setup();
+      ctx.api.putOrder.mockRejectedValueOnce(offline());
+      await linked(ctx);
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(1));
+      ctx.hook.unmount();
+      act(() => { window.dispatchEvent(new Event("online")); });
+      await wait(60);
+      expect(ctx.api.putOrder).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("cuando se cumple el intervalo consulta sola y marca lo confirmado", async () => {
     const ctx = setup({ intervalMs: 60 });
     ctx.state.rows = [{ id: "o1", status: "confirmado", rev: 1, modified: false, confirmedAt: new Date(2026, 9, 30, 10, 42).toISOString(), confirmedBy: "facturadora", updatedAt: "2026-10-30T15:42:00.000Z" }];

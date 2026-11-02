@@ -1307,6 +1307,24 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, movements: nextMovements });
   }
 
+  // Igual, para los pedidos de HOY sin facturar. A diferencia de los programados, los de
+  // Hoy ya están comprometidos (cuentan en el ingreso), así que el ingreso acumulado se
+  // ajusta por la diferencia de precio. No toca el stock, ni lo ya facturado, ni otros días.
+  function refreshTodayPricesToCurrentRate() {
+    const today = todayStr();
+    let revenueDelta = 0;
+    const nextMovements = movements.map((m) => {
+      if (m.type !== "venta" || !m.orderId || m.manual || m.sent || m.date !== today || (m.bucket || "hoy") !== "hoy") return m;
+      const unitPrice = priceToCUP(prices[m.code], exchangeRate);
+      revenueDelta += m.qty * (unitPrice - (m.unitPrice || 0));
+      return { ...m, unitPrice, exchangeRate };
+    });
+    const nextRevenue = cumulativeRevenue + revenueDelta;
+    setMovements(nextMovements);
+    setCumulativeRevenue(nextRevenue);
+    persist({ ...currentPersistedState, movements: nextMovements, cumulativeRevenue: nextRevenue });
+  }
+
   function setSendBusinessNameSetting(next) {
     setSendBusinessName(next);
     persist({ ...currentPersistedState, sendBusinessName: next });
@@ -1373,6 +1391,6 @@ export function useInventoryStore() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent, markOrdersSent,
-    updateCustomer, restoreCustomerData, importCustomers, mergeCustomers, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, reorderActiveProducts,
+    updateCustomer, restoreCustomerData, importCustomers, mergeCustomers, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, refreshTodayPricesToCurrentRate, reorderActiveProducts,
   };
 }

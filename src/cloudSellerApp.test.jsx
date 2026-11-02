@@ -22,11 +22,11 @@ const line = (over = {}) => ({
   sent: true, confirmed: false, sentToCustomer: true, ...over,
 });
 
-function seed({ movements = [line()], linked = true } = {}) {
+function seed({ movements = [line()], linked = true, prices = { P500: 1 } } = {}) {
   localStorage.setItem("procovar-active-tab", "pedidos");
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     products, movements, customers: [], orderSeqPerDay: true, lastBackupAt: new Date().toISOString(),
-    stock: { P500: 100 }, prices: { P500: 1 }, pricesAreUsd: false, exchangeRate: 0,
+    stock: { P500: 100 }, prices, pricesAreUsd: false, exchangeRate: 0,
     productFormats: [{ code: "Sixpack", units: 6 }], hlPerFormatMigrated: true, goalProductsMigrated: true,
   }));
   if (linked) localStorage.setItem("procovar-nube-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "Carlos Pérez", role: "vendedor" }));
@@ -238,5 +238,81 @@ describe("vendedor: Configuración > Nube de facturación", () => {
     seed();
     await openCard();
     expect(JSON.stringify(saved())).not.toContain(TOKEN);
+  });
+});
+
+// Corregir un pedido que ya está en la nube: se edita en la app y el mismo pedido de la
+// nube se actualiza con el cambio (la facturadora lo ve como MODIFICADO).
+describe("vendedor: corregir un pedido ya en la nube", () => {
+  const puts = () => calls.filter((c) => c.method === "PUT" && c.path === "/orders/o1");
+  async function openEdit() {
+    render(<InventoryApp />);
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Editar pedido" }));
+    await screen.findByRole("button", { name: /Guardar cambios/ });
+  }
+
+  it("al cambiar las cantidades y guardar, el mismo pedido se actualiza en la nube", async () => {
+    seed({ prices: { P500: 120 } });
+    await openEdit();
+    fireEvent.click(screen.getByRole("button", { name: "+" }));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar cambios/ }));
+    await waitFor(() => expect(puts()).toHaveLength(2));
+    expect(puts()[1].body.lines).toEqual([{ code: "P500", name: "Parranda 500ml", qty: 41, unitPrice: 120 }]);
+    expect(puts()[1].body.total).toBe(4920);
+    expect(calls.filter((c) => c.method === "PUT").every((c) => c.path === "/orders/o1")).toBe(true);
+  });
+
+  it("el pedido sigue enviado a facturación (no hace falta tocar FACT. otra vez) y sigue 'En nube'", async () => {
+    seed({ prices: { P500: 120 } });
+    await openEdit();
+    fireEvent.click(screen.getByRole("button", { name: "+" }));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar cambios/ }));
+    await waitFor(() => expect(puts()).toHaveLength(2));
+    expect(saved().movements.every((m) => m.sent === true)).toBe(true);
+    expect(await screen.findByText("En nube")).toBeTruthy();
+  });
+
+  it("guardar sin cambiar nada no vuelve a subir el pedido", async () => {
+    seed({ prices: { P500: 120 } });
+    await openEdit();
+    fireEvent.click(screen.getByRole("button", { name: /Guardar cambios/ }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Guardar cambios/ })).toBeNull());
+    await new Promise((r) => setTimeout(r, 120));
+    expect(puts()).toHaveLength(1);
+  });
+
+  it("un pedido que todavía no se envió a facturación no se sube al editarlo", async () => {
+    seed({ movements: [line({ sent: false })], prices: { P500: 120 } });
+    render(<InventoryApp />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar pedido" }));
+    await screen.findByRole("button", { name: /Guardar cambios/ });
+    fireEvent.click(screen.getByRole("button", { name: "+" }));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar cambios/ }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Guardar cambios/ })).toBeNull());
+    await new Promise((r) => setTimeout(r, 120));
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+});
+
+// Solo cuentan los pedidos de Hoy: uno facturado "para mañana" no sale a la nube hoy; sale
+// el día que le toca.
+describe("vendedor: pedidos para mañana ya facturados", () => {
+  const tomorrow = () => line({ bucket: "manana", date: "2026-09-22", sent: true, timestamp: "2026-09-20T08:00:00.000Z" });
+
+  it("hoy no se sube a la nube", async () => {
+    seed({ movements: [tomorrow()] });
+    render(<InventoryApp />);
+    await screen.findByRole("button", { name: "Comprobar" });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+
+  it("el día que le toca, sí se sube", async () => {
+    vi.setSystemTime(new Date("2026-09-22T09:00:00"));
+    seed({ movements: [tomorrow()] });
+    render(<InventoryApp />);
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.path === "/orders/o1")).toBe(true));
+    expect(calls.find((c) => c.method === "PUT").body.date).toBe("2026-09-22");
   });
 });

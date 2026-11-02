@@ -9,8 +9,8 @@ import { todayStr } from "./dateUtils";
 // puras de cloudSync.js: sube lo enviado a facturación, vacía la cola cuando hay
 // conexión y consulta lo que confirmó la facturadora para marcarlo en la app (CONF.):
 // al pulsar "Comprobar" (syncNow), y solo cada hora (intervalMs) mientras la app está
-// abierta o al volver a ella si ya pasó más de una hora. No consulta al enlazar ni al
-// volver la conexión. Todo se guarda aparte del estado de la app (cloudStorage.js).
+// abierta o al volver a ella si ya pasó más de una hora. No consulta al enlazar; al volver
+// la conexión solo reenvía lo que quedó en cola (sin consultar lo confirmado). Todo se guarda aparte del estado de la app (cloudStorage.js).
 
 // Solo se suben los pedidos de "Hoy" (los que ve la facturadora; a las 12 am se limpia).
 
@@ -126,10 +126,16 @@ export function useCloudSync({
     const onVisible = () => {
       if (document.visibilityState === "visible" && Date.now() - lastPullRef.current >= intervalMs) sync({ pull: true });
     };
+    // Volvió la conexión: si quedó algo en cola (pedidos sin enviar), se reenvía ya.
+    const onOnline = () => {
+      if (cloudRef.current.queue.length > 0) sync({ pull: false });
+    };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
     return () => {
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
   }, [linked, intervalMs, sync]);
 

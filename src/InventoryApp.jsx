@@ -98,7 +98,7 @@ export default function InventoryApp() {
     openEdit, addProduct, saveEdit, archiveProduct, restoreProduct, reorderActiveProducts,
     registerManualSale,
     confirmOrder, deleteOrder, editOrder, markOrderSent,
-    updateCustomer, restoreCustomerData, importCustomers, mergeCustomers, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate,
+    updateCustomer, restoreCustomerData, importCustomers, mergeCustomers, markOrderConfirmed, markOrderSentToCustomer, setOrderSteps, refreshPendingPricesToCurrentRate, refreshTodayPricesToCurrentRate,
   } = useInventoryStore();
   const pwaStatus = usePwaStatus();
   const [cierreOpen, setCierreOpen] = useState(false);
@@ -416,6 +416,7 @@ export default function InventoryApp() {
             onMarkSentToCustomer={markOrderSentToCustomer}
             onSetOrderSteps={setOrderSteps}
             onRefreshPendingPrices={refreshPendingPricesToCurrentRate}
+            onRefreshTodayPrices={refreshTodayPricesToCurrentRate}
             onError={(message) => {
               setError(message);
               setTimeout(() => setError(""), 2500);

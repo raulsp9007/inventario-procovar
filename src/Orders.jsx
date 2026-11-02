@@ -209,7 +209,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, cloudChips = {}, cloud = null, billToCloud = false, focusOrderId, onFocusOrderConsumed }) {
+export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onRefreshTodayPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, cloudChips = {}, cloud = null, billToCloud = false, focusOrderId, onFocusOrderConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -1613,6 +1613,21 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
           hourLabel={formatHour12(cierreVentasHour)}
           onReview={reviewPendingOrders}
         />
+      )}
+
+      {activeSection === "hoy" && exchangeRate && allOrders.some((o) => belongsToToday(o) && !o.sent && !o.manual) && (
+        <button
+          onClick={onRefreshTodayPrices}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%",
+            background: "transparent", border: "1px solid var(--border)", color: "var(--text)",
+            borderRadius: 7, padding: "9px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            marginBottom: 14,
+          }}
+          title="Recalcula el CUP de los pedidos de hoy sin facturar a la tasa de cambio actual -- los ya facturados no se tocan"
+        >
+          Actualizar a la tasa actual (1 USD = {exchangeRate})
+        </button>
       )}
 
       {activeSection === "hoy" && renderOrdersSection({
