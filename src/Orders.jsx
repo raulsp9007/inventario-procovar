@@ -226,6 +226,8 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
   const [draftDate, setDraftDate] = useState(() => nextBusinessDayStr());
   const [pendingReserveConfirm, setPendingReserveConfirm] = useState(null); // { draft, reserveDips } | null
   const [pendingDuplicateConfirm, setPendingDuplicateConfirm] = useState(null); // { draft, reserveDips, orders, date } | null
+  // Al editar un pedido con un nombre nuevo: ¿renombrar al cliente o cambiar solo este pedido?
+  const [pendingRenameConfirm, setPendingRenameConfirm] = useState(null); // { draft, reserveDips, from, to, orderCount, code, mustRename } | null
   const [selectedProductCode, setSelectedProductCode] = useState("");
   const [pendingQty, setPendingQty] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -601,6 +603,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     setEditingOrderId(null);
     setEditingOrderSeq(null);
     setPendingReserveConfirm(null);
+    setPendingRenameConfirm(null);
     waitlistEntryIdRef.current = null;
     // No se resetea draftBucket: si confirmaste un pedido Programado,
     // te quedás en "Programar" para seguir cargando pedidos del mismo tipo.
@@ -860,15 +863,26 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     // Solo se manda el código si se tocó el lápiz y de verdad cambió.
     const wantedCode = editedCode !== null && editedCode.trim() !== storedCode.trim() ? editedCode.trim() : undefined;
     const codeOwner = wantedCode ? findCustomerByCode(customers, wantedCode, typedName) : null;
-    if (codeOwner) {
-      // Si es el código del mismo cliente del pedido que se está editando y solo cambió el nombre,
-      // se explica cómo renombrarlo.
-      const original = editingOrderId ? allOrders.find((o) => o.orderId === editingOrderId) : null;
-      const renamed = original && original.customerName === codeOwner.name;
-      reportError(`El código ${wantedCode} ya es de ${codeOwner.name}.${renamed ? " Si es el mismo cliente con el nombre corregido, cambia su nombre en Clientes." : ""}`);
+    // Editando un pedido con un nombre nuevo (que no es el de otro cliente): se puede renombrar al
+    // cliente en todos sus pedidos, con confirmación.
+    const original = editingOrderId ? allOrders.find((o) => o.orderId === editingOrderId) : null;
+    const originalCustomer = original ? findRegistryCustomer(customers, original.customerName) : null;
+    const canRename = !!originalCustomer && typedName !== original.customerName && !findRegistryCustomer(customers, typedName);
+    // El código que se escribió es el del mismo cliente que se está renombrando: no es un conflicto.
+    const codeIsOwnToRename = !!codeOwner && canRename && codeOwner.name === original.customerName;
+    if (codeOwner && !codeIsOwnToRename) {
+      reportError(`El código ${wantedCode} ya es de ${codeOwner.name}.`);
       return;
     }
     const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), ...(wantedCode !== undefined ? { customerCode: wantedCode } : {}), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
+    if (canRename) {
+      setPendingRenameConfirm({
+        draft, reserveDips, from: original.customerName, to: typedName,
+        orderCount: allOrders.filter((o) => o.customerName === original.customerName).length,
+        code: originalCustomer.code || "", mustRename: codeIsOwnToRename,
+      });
+      return;
+    }
     // Pedido nuevo: si ese cliente ya tiene un pedido ese mismo día, se avisa antes
     // para no duplicarlo sin querer (se puede seguir igual). Al editar no se avisa.
     if (!editingOrderId) {
@@ -905,6 +919,18 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     setPendingDuplicateConfirm(null);
   }
 
+  // rename: true = renombrar al cliente en todos sus pedidos; false = cambiar solo este pedido.
+  function resolveRename(rename) {
+    if (!pendingRenameConfirm) return;
+    const { draft, reserveDips, from } = pendingRenameConfirm;
+    setPendingRenameConfirm(null);
+    continueSubmit(rename ? { ...draft, renameFrom: from } : draft, reserveDips);
+  }
+
+  function cancelRenameConfirm() {
+    setPendingRenameConfirm(null);
+  }
+
   function confirmUseReserve() {
     if (!pendingReserveConfirm) return;
     const { draft } = pendingReserveConfirm;
@@ -921,7 +947,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     if (editingOrderId) {
       const previousOrder = allOrders.find((o) => o.orderId === editingOrderId);
       onEditOrder(editingOrderId, draft);
-      if (previousOrder) stageEditUndo(previousOrder);
+      if (previousOrder) stageEditUndo(previousOrder, draft);
     } else {
       onConfirmOrder({ ...draft, waitlistEntryId: waitlistEntryIdRef.current || undefined });
     }
@@ -936,7 +962,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
   // ya vio el resultado en el modal antes de confirmar) -- acá el aviso con
   // "Deshacer" aparece DESPUÉS de aplicar el cambio, y deshacer significa
   // volver a editar el pedido con los datos que tenía antes.
-  function stageEditUndo(previousOrder) {
+  function stageEditUndo(previousOrder, appliedDraft) {
     setPendingEditUndo((prev) => {
       if (prev) clearTimeout(prev.timeoutId);
       const timeoutId = setTimeout(() => {
@@ -952,6 +978,8 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         bucket: previousOrder.bucket,
         date: previousOrder.date,
         forceSent: previousOrder.sent,
+        // Si la edición renombró al cliente, deshacer lo vuelve a renombrar al nombre de antes.
+        ...(appliedDraft && appliedDraft.renameFrom ? { renameFrom: appliedDraft.customerName } : {}),
       };
       return { orderId: previousOrder.orderId, customerName: previousOrder.customerName, revertDraft, timeoutId };
     });
@@ -1928,6 +1956,9 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         onConfirmUseReserve={confirmUseReserve}
         formError={formError}
         onCancelReserveConfirm={cancelReserveConfirm}
+        pendingRenameConfirm={pendingRenameConfirm}
+        onResolveRename={resolveRename}
+        onCancelRenameConfirm={cancelRenameConfirm}
         pendingDuplicateConfirm={pendingDuplicateConfirm}
         onConfirmDuplicate={confirmDuplicate}
         onCancelDuplicateConfirm={cancelDuplicateConfirm}

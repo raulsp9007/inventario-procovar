@@ -46,6 +46,7 @@ export default function OrderFormModal({
   onConfirmOrder,
   pendingReserveConfirm, onConfirmUseReserve, onCancelReserveConfirm,
   pendingDuplicateConfirm, onConfirmDuplicate, onCancelDuplicateConfirm, formError,
+  pendingRenameConfirm, onResolveRename, onCancelRenameConfirm,
   suggestion, onUseSuggestion, onCheckPortal,
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
@@ -640,6 +641,67 @@ export default function OrderFormModal({
             </button>
         </div>
       </div>
+
+      {pendingRenameConfirm && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(20,17,12,.5)", zIndex: 70,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-label="Renombrar cliente"
+            style={{ width: "100%", maxWidth: 310, background: "var(--surface)", borderRadius: 16, padding: 20, boxShadow: "0 12px 30px rgba(0,0,0,.3)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <AlertTriangle size={18} strokeWidth={2} color="var(--orange)" />
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Cambiaste el nombre del cliente</span>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, lineHeight: 1.45 }}>
+              <div>«{pendingRenameConfirm.from}» pasa a ser «{pendingRenameConfirm.to}».</div>
+              <div style={{ marginTop: 8 }}>
+                Si es el mismo cliente con el nombre corregido, se renombra en {pendingRenameConfirm.orderCount === 1 ? "su pedido" : `sus ${pendingRenameConfirm.orderCount} pedidos`} y en Clientes{pendingRenameConfirm.code ? `, y conserva su código ${pendingRenameConfirm.code}` : ""}.
+              </div>
+              {!pendingRenameConfirm.mustRename && (
+                <div style={{ marginTop: 8 }}>Si es otra persona, cambia solo este pedido.</div>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button
+                onClick={() => onResolveRename(true)}
+                style={{
+                  height: 44, borderRadius: 10, border: "none",
+                  background: "var(--ink)", color: "var(--cream)", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                Renombrar cliente
+              </button>
+              {!pendingRenameConfirm.mustRename && (
+                <button
+                  onClick={() => onResolveRename(false)}
+                  style={{
+                    height: 44, borderRadius: 10, border: "1px solid var(--border-strong)",
+                    background: "var(--surface)", color: "var(--text)", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Solo este pedido
+                </button>
+              )}
+              <button
+                onClick={onCancelRenameConfirm}
+                style={{
+                  height: 40, borderRadius: 10, border: "none",
+                  background: "transparent", color: "var(--muted)", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingDuplicateConfirm && (
         <div

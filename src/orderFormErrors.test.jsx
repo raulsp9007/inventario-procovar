@@ -64,15 +64,25 @@ describe("Pedido: los errores se ven dentro de la ventana del pedido", () => {
     expect(screen.getByRole("button", { name: /Guardar cambios/ })).toBeTruthy();
   });
 
-  it("si es el código del mismo cliente con el nombre cambiado, explica cómo renombrarlo", async () => {
+  it("si es el código del mismo cliente con el nombre cambiado, no es error: ofrece renombrar al cliente", async () => {
     seed();
     const input = await openEdit();
     fireEvent.change(input, { target: { value: "Ana Lopez M" } });
     await setCode("AB1001");
     save();
+    expect(await screen.findByRole("dialog", { name: "Renombrar cliente" })).toBeTruthy();
+    expect(formAlert()).toBeNull();
+  });
+
+  it("si el nombre nuevo es el de otro cliente que ya existe y se pide el código del primero, sigue siendo error", async () => {
+    seed();
+    const input = await openEdit();
+    fireEvent.change(input, { target: { value: "Beto Ruiz" } });
+    await setCode("AB1001");
+    save();
     const alert = await waitFor(() => { const a = formAlert(); expect(a).toBeTruthy(); return a; });
     expect(alert.textContent).toContain("El código AB1001 ya es de Ana López.");
-    expect(alert.textContent).toContain("Clientes");
+    expect(screen.queryByRole("dialog", { name: "Renombrar cliente" })).toBeNull();
   });
 
   it("el aviso se quita al seguir escribiendo y a los pocos segundos", async () => {
@@ -108,6 +118,7 @@ describe("Pedido: los errores se ven dentro de la ventana del pedido", () => {
     fireEvent.change(input, { target: { value: "Ana Lopez M" } });
     await setCode("AB9999");
     save();
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Renombrar cliente" })).getByRole("button", { name: "Solo este pedido" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: /Guardar cambios/ })).toBeNull());
     expect(formAlert()).toBeNull();
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).movements.find((m) => m.orderId === "o1").customerName).toBe("Ana Lopez M");

@@ -995,9 +995,12 @@ export function useInventoryStore() {
   // importar si ya estaba marcado Enviado -- por eso ahí se fuerza `false`.
   // Igual que deleteOrder, también se llama diferida (posponer a mañana desde
   // el aviso de cierre): lee el estado más reciente de la referencia.
-  function editOrder(orderId, { customerName, businessName, customerPhone, customerCode, isDelivery, note, lines, bucket, date: chosenDate, forceSent }) {
+  // `renameFrom`: nombre con el que el cliente se llamaba hasta ahora; si viene, el cliente se renombra
+  // (en el registro, en todos sus otros pedidos y en la lista de espera) en vez de crear uno nuevo.
+  function editOrder(orderId, { customerName, businessName, customerPhone, customerCode, isDelivery, note, lines, bucket, date: chosenDate, forceSent, renameFrom }) {
     const fresh = latestStateRef.current.currentPersistedState;
-    const { movements, stock, cumulativeRevenue, cumulativeHl, prices, products, exchangeRate, customers } = fresh;
+    const { movements, stock, cumulativeRevenue, cumulativeHl, prices, products, exchangeRate, customers, waitlist: currentWaitlist } = fresh;
+    const renaming = !!renameFrom && renameFrom !== customerName;
     const originalMovements = movements.filter((m) => m.orderId === orderId);
     if (originalMovements.length === 0) return;
     const wasSent = !!originalMovements[0].sent;
@@ -1042,7 +1045,9 @@ export function useInventoryStore() {
       }
     });
 
-    const otherMovements = movements.filter((m) => m.orderId !== orderId);
+    const otherMovements = movements
+      .filter((m) => m.orderId !== orderId)
+      .map((m) => (renaming && m.customerName === renameFrom ? { ...m, customerName } : m));
     const nextMovements = [...newMovements, ...otherMovements].slice(0, MOVEMENTS_CAP);
     const nextCumulativeRevenue = cumulativeRevenue - removedRevenue + addedRevenue;
     const nextCumulativeHl = cumulativeHl - removedHl + addedHl;
@@ -1053,7 +1058,9 @@ export function useInventoryStore() {
     const original = originalMovements[0];
     const nextPhone = customerPhone ? toCubanPhone(customerPhone) : "";
     let nextCustomers = customers;
-    if (customerName !== original.customerName) {
+    if (renaming) {
+      nextCustomers = renameCustomer(customers, renameFrom, customerName, businessName || "", nextPhone ? customerPhone : "");
+    } else if (customerName !== original.customerName) {
       nextCustomers = upsertCustomer(customers, { name: customerName, businessName, phone: customerPhone });
     } else {
       const phoneChanged = nextPhone !== toCubanPhone(original.customerPhone || "");
@@ -1068,12 +1075,17 @@ export function useInventoryStore() {
 
     if (customerCode !== undefined) nextCustomers = patchCustomer(nextCustomers, customerName, { code: customerCode });
 
-    syncLatest({ stock: nextStock, movements: nextMovements, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl, customers: nextCustomers });
+    const nextWaitlist = renaming
+      ? currentWaitlist.map((w) => (w.customerName === renameFrom ? { ...w, customerName } : w))
+      : currentWaitlist;
+
+    syncLatest({ stock: nextStock, movements: nextMovements, cumulativeRevenue: nextCumulativeRevenue, cumulativeHl: nextCumulativeHl, customers: nextCustomers, waitlist: nextWaitlist });
     setStock(nextStock);
     setMovements(nextMovements);
     setCumulativeRevenue(nextCumulativeRevenue);
     setCumulativeHl(nextCumulativeHl);
     setCustomers(nextCustomers);
+    if (renaming) setWaitlist(nextWaitlist);
     persist({
       ...fresh,
       stock: nextStock,
@@ -1081,6 +1093,7 @@ export function useInventoryStore() {
       cumulativeRevenue: nextCumulativeRevenue,
       cumulativeHl: nextCumulativeHl,
       customers: nextCustomers,
+      waitlist: nextWaitlist,
     });
   }
 
