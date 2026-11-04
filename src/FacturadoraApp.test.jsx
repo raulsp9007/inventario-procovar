@@ -62,6 +62,10 @@ function installFetch() {
     }
     if (server.unauthorized) return { ok: false, status: 401, json: async () => ({ error: "x" }), text: async () => "x" };
     if (path === "/me") return ok({ id: "fact", name: "Facturadora", role: server.role });
+    if (path.startsWith("/summary")) return ok(server.summary || { fecha: "2026-10-30", vendedores: [], productos: [], totales: { pedidos: 0, unidades: 0 } });
+    if ((path.startsWith("/orders/confirm") || path.startsWith("/orders/unconfirm")) && server.closedMessage) {
+      return { ok: false, status: 423, json: async () => ({ error: server.closedMessage }), text: async () => "x" };
+    }
     if (path.startsWith("/orders/confirm") || path.startsWith("/orders/unconfirm")) {
       const confirming = path.startsWith("/orders/confirm");
       const ids = JSON.parse(init.body).ids;
@@ -75,7 +79,7 @@ function installFetch() {
       }));
       return ok(confirming ? { confirmed: ids, missing: [] } : { unconfirmed: ids, missing: [] });
     }
-    if (path.startsWith("/orders")) return ok({ now: "2026-10-30T16:00:00.000Z", sellers: server.sellers });
+    if (path.startsWith("/orders")) return ok({ now: "2026-10-30T16:00:00.000Z", sellers: server.sellers, ...(server.horario ? { horario: server.horario } : {}) });
     return ok({});
   }));
 }
@@ -749,5 +753,104 @@ describe("facturadora: modo claro", () => {
     render(<FacturadoraApp />);
     await screen.findByRole("button", { name: /Carlos Pérez/ });
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+});
+
+// Fuera del horario de facturación el sitio está pausado: se ve todo, pero no se puede confirmar.
+describe("facturadora: fuera del horario de facturación", () => {
+  const MSG = "La facturación está cerrada. Abre hoy a las 9:00 a. m.";
+  const closed = () => { server.horario = { activo: true, abierto: false, mensaje: MSG, abre: "09:00", cierra: "15:00" }; };
+
+  it("avisa que está cerrada y no deja confirmar", async () => {
+    linkStorage();
+    closed();
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    expect(await screen.findByText(MSG)).toBeTruthy();
+    const confirm = within(cardOf("Ana López")).getByRole("button", { name: "Confirmar pedido de Ana López" });
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(calls.some((c) => c.path.startsWith("/orders/confirm"))).toBe(false);
+  });
+
+  it("sigue pudiendo ver el pedido en el portal", async () => {
+    linkStorage();
+    closed();
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    await screen.findByText(MSG);
+    const button = within(cardOf("Ana López")).getByRole("button", { name: "Ver en el portal el pedido de Ana López" });
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("los confirmados no se pueden deshacer mientras está cerrada", async () => {
+    linkStorage();
+    closed();
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    await screen.findByText(MSG);
+    fireEvent.click(await confirmedButton(1));
+    const card = await waitFor(() => { const c = cardOf("Marta Gil"); expect(c).toBeTruthy(); return c; });
+    expect(within(card).getByRole("button", { name: "Deshacer la confirmación de Marta Gil" }).disabled).toBe(true);
+  });
+
+  it("abierta no hay aviso y se puede confirmar", async () => {
+    await openBoard();
+    expect(screen.queryByText(/La facturación está cerrada/)).toBeNull();
+    expect(within(cardOf("Ana López")).getByRole("button", { name: "Confirmar pedido de Ana López" }).disabled).toBe(false);
+  });
+
+  it("al abrir, el aviso se quita y se puede confirmar", async () => {
+    linkStorage();
+    closed();
+    render(<FacturadoraApp />);
+    await screen.findByText(MSG);
+    server.horario = { activo: true, abierto: true, mensaje: "", abre: "09:00", cierra: "15:00" };
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    await waitFor(() => expect(screen.queryByText(MSG)).toBeNull());
+    expect(within(cardOf("Ana López")).getByRole("button", { name: "Confirmar pedido de Ana López" }).disabled).toBe(false);
+  });
+});
+
+// La supervisión ve además el contador de ventas por día, producto por producto y por vendedor.
+describe("facturadora: ventas por día (supervisión)", () => {
+  const supervisor = () => localStorage.setItem("procovar-fact-enlace", JSON.stringify({ url: URL_OK, token: TOKEN, name: "super", role: "supervisor" }));
+  const SUMMARY = {
+    fecha: "2026-10-30",
+    vendedores: [{ id: "carlos", name: "Carlos Pérez", pedidos: 2, unidades: 80, productos: [{ code: "P500", name: "Parranda 500ml", qty: 80 }] }],
+    productos: [{ code: "P500", name: "Parranda 500ml", qty: 80 }],
+    totales: { pedidos: 2, unidades: 80 },
+  };
+
+  it("la supervisión abre 'Ventas del día' y ve el contador de hoy", async () => {
+    supervisor();
+    server.summary = SUMMARY;
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    expect(screen.queryByRole("region", { name: "Ventas por día" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ventas del día" }));
+    const region = await screen.findByRole("region", { name: "Ventas por día" });
+    await waitFor(() => expect(within(region).getAllByText("2 pedidos · 80 unidades").length).toBeGreaterThan(0));
+    expect(calls.some((c) => c.path === "/summary?fecha=2026-10-30")).toBe(true);
+    expect(within(region).getByRole("group", { name: "Ventas de Carlos Pérez" })).toBeTruthy();
+  });
+
+  it("se puede volver a esconder", async () => {
+    supervisor();
+    server.summary = SUMMARY;
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    fireEvent.click(screen.getByRole("button", { name: "Ventas del día" }));
+    await screen.findByRole("region", { name: "Ventas por día" });
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar ventas del día" }));
+    expect(screen.queryByRole("region", { name: "Ventas por día" })).toBeNull();
+  });
+
+  it("la facturadora no lo tiene", async () => {
+    await openBoard();
+    expect(screen.queryByRole("button", { name: "Ventas del día" })).toBeNull();
   });
 });

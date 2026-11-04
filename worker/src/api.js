@@ -3,6 +3,7 @@
 // Ver docs/superpowers/specs/2026-10-30-facturacion-nube-design.md.
 
 import { mergeUsers, vendorsView, freeId, nameKey } from "./roster.js";
+import { cubaDate, parseSchedule, scheduleStatus, validateSchedule } from "./schedule.js";
 import {
   ACCOUNT_ROLES, MAX_FAILS, LOCK_MS, SESSION_MS, accountView, hashPassword, hashToken, parseAccountInput, usernameKey, verifyPassword,
 } from "./accounts.js";
@@ -179,12 +180,54 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
 
   if (method === "GET" && path === "/me") return reply(origin, { id: user.id, name: user.name, role: user.role });
 
+  // Horario de facturación: fuera de horario se pausa lo que el vendedor envía, borra o confirma a
+  // mano, y lo que la facturadora confirma o deshace. Ver pedidos y todo lo del administrador sigue.
+  const loadSchedule = async () => parseSchedule(await store.getSetting("horario"));
+  const vendorWrite = user.role === "vendedor" && method !== "GET" && (path === "/orders" || path.startsWith("/orders/"));
+  const factWrite = user.role === "facturadora" && method === "POST" && (path === "/orders/confirm" || path === "/orders/unconfirm");
+  if (vendorWrite || factWrite) {
+    const status = scheduleStatus(await loadSchedule(), stamp);
+    if (!status.abierto) return fail(origin, 423, status.mensaje);
+  }
+
+  // Resumen de ventas de un día: lo enviado a facturación por cada vendedor, producto por producto
+  // (confirmado o no; sin cancelados). Lo ven el administrador y la supervisión.
+  if (method === "GET" && path === "/summary") {
+    if (user.role !== "admin" && user.role !== "supervisor") return fail(origin, 403, "Esto no es para tu usuario.");
+    const requested = url.searchParams.get("fecha");
+    const fecha = requested || cubaDate(stamp);
+    const parsed = new Date(`${fecha}T00:00:00Z`);
+    if (!DATE_PATTERN.test(fecha) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== fecha) return fail(origin, 400, "La fecha no es válida (AAAA-MM-DD).");
+    const orders = (await store.listFrom(fecha)).filter((o) => o.date === fecha);
+    const byQty = (a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "es");
+    const all = new Map();
+    const vendedores = roster.filter((u) => u.role === "vendedor" && u.active).map((seller) => {
+      const mine = orders.filter((o) => o.sellerId === seller.id);
+      const items = new Map();
+      mine.forEach((o) => o.lines.forEach((l) => {
+        const item = items.get(l.code) || { code: l.code, name: l.name, qty: 0 };
+        item.qty += l.qty;
+        items.set(l.code, item);
+        const total = all.get(l.code) || { code: l.code, name: l.name, qty: 0 };
+        total.qty += l.qty;
+        all.set(l.code, total);
+      }));
+      const productos = [...items.values()].sort(byQty);
+      return { id: seller.id, name: seller.name, pedidos: mine.length, unidades: productos.reduce((s, p) => s + p.qty, 0), productos };
+    }).sort((a, b) => a.name.localeCompare(b.name, "es"));
+    const productos = [...all.values()].sort(byQty);
+    return reply(origin, {
+      fecha, vendedores, productos,
+      totales: { pedidos: vendedores.reduce((s, v) => s + v.pedidos, 0), unidades: productos.reduce((s, p) => s + p.qty, 0) },
+    });
+  }
+
   // ----- vendedor -----
   if (method === "GET" && path === "/orders/status") {
     const denied = only("vendedor");
     if (denied) return denied;
     const orders = await store.listBySeller(user.id, url.searchParams.get("since") || "");
-    return reply(origin, { now: stamp, orders: orders.map(statusRow) });
+    return reply(origin, { now: stamp, orders: orders.map(statusRow), horario: scheduleStatus(await loadSchedule(), stamp) });
   }
 
   const one = path.match(/^\/orders\/([^/]+)$/);
@@ -267,7 +310,7 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
         orders: mine,
       };
     });
-    return reply(origin, { now: stamp, sellers });
+    return reply(origin, { now: stamp, sellers, horario: scheduleStatus(await loadSchedule(), stamp) });
   }
 
   if (method === "POST" && (path === "/orders/confirm" || path === "/orders/unconfirm")) {
@@ -299,6 +342,25 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   if (path.startsWith("/admin/")) {
     const denied = only("admin");
     if (denied) return denied;
+
+    if (path === "/admin/schedule") {
+      const current = await loadSchedule();
+      if (method === "GET") return reply(origin, scheduleStatus(current, stamp));
+      if (method === "PUT") {
+        const read = await readJson(request);
+        if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
+        const body = read.body && typeof read.body === "object" ? read.body : {};
+        const checked = validateSchedule({
+          enabled: body.activo === undefined ? current.enabled : body.activo,
+          open: body.abre === undefined ? current.open : body.abre,
+          close: body.cierra === undefined ? current.close : body.cierra,
+        });
+        if (checked.error) return fail(origin, 400, checked.error);
+        await store.putSetting("horario", JSON.stringify(checked.value));
+        return reply(origin, scheduleStatus(checked.value, stamp));
+      }
+      return fail(origin, 404, "No existe esa ruta.");
+    }
 
     if (path === "/admin/accounts" || path.startsWith("/admin/accounts/")) {
       if (method === "GET" && path === "/admin/accounts") {

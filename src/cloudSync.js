@@ -138,14 +138,15 @@ export function mergeOps(queue, newOps) {
   return next;
 }
 
-// Manda la cola en orden. Sin conexión, código vencido o fallo del servidor se
-// detiene y conserva lo que falta; lo que la nube rechaza (datos inválidos) se
+// Manda la cola en orden. Sin conexión, código vencido, fallo del servidor o fuera del
+// horario de facturación se detiene y conserva lo que falta; lo que la nube rechaza (datos inválidos) se
 // descarta y se reporta; borrar o confirmar algo que no existe cuenta como hecho.
 export async function flushQueue({ queue, api }) {
   const remaining = [...queue];
   const rejected = [];
   let sent = 0;
   let stopped = null;
+  let stoppedMessage = "";
 
   while (remaining.length > 0) {
     const op = remaining[0];
@@ -157,15 +158,16 @@ export async function flushQueue({ queue, api }) {
       sent += 1;
     } catch (e) {
       const kind = e instanceof CloudError ? e.kind : "server";
-      if (kind === "network" || kind === "auth" || kind === "server") {
+      if (kind === "network" || kind === "auth" || kind === "server" || kind === "closed") {
         stopped = kind;
+        stoppedMessage = kind === "closed" ? e.message : "";
         break;
       }
       remaining.shift();
       if (kind !== "notfound") rejected.push({ orderId: op.orderId, kind: op.kind, message: e.message });
     }
   }
-  return { remaining, rejected, sent, stopped };
+  return { remaining, rejected, sent, stopped, stoppedMessage };
 }
 
 const pad = (n) => String(n).padStart(2, "0");

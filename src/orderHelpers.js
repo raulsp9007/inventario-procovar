@@ -204,6 +204,21 @@ export function formatOrderForCustomer(order, products, { exchangeRate } = {}) {
   return lines.join("\n");
 }
 
+// Lo enviado a facturación en un día, producto por producto: no cuenta lo que falta por facturar,
+// los domicilios (van al supervisor), las ventas manuales ni otros días.
+export function billedByProduct(orders, products, date) {
+  const names = new Map(products.map((p) => [p.code, p.name]));
+  const mine = orders.filter((o) => o.date === date && o.sent && !o.isDelivery && !o.manual);
+  const totals = new Map();
+  mine.forEach((o) => o.lines.forEach((l) => {
+    const item = totals.get(l.code) || { code: l.code, name: names.get(l.code) || l.code, qty: 0 };
+    item.qty += l.qty;
+    totals.set(l.code, item);
+  }));
+  const productos = [...totals.values()].sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "es"));
+  return { pedidos: mine.length, unidades: productos.reduce((sum, p) => sum + p.qty, 0), productos };
+}
+
 // "Comprometido" = ya afecta stock/ingreso/HL. Hoy siempre; Mañana solo si
 // ya se marcó Enviado (o se envió por WhatsApp, que también marca Enviado).
 export function isCommittedOrder(order) {

@@ -10,6 +10,7 @@ const plural = (n, one, many) => (n === 1 ? one : many);
 
 export function checkText(cloud) {
   if (cloud.checking) return "Comprobando…";
+  if (cloud.closedMessage) return cloud.closedMessage;
   if (cloud.phase === "offline" || cloud.phase === "auth" || cloud.phase === "error") return cloud.message;
   if (!cloud.lastCheck) return "Mira si la facturadora ya confirmó tus pedidos (también se comprueba solo cada hora).";
   const { at, confirmed, unconfirmed } = cloud.lastCheck;
@@ -21,7 +22,7 @@ export function checkText(cloud) {
 
 export default function CloudCheckBar({ cloud }) {
   if (!cloud.link || !cloud.enabled) return null;
-  const problem = !cloud.checking && (cloud.phase === "offline" || cloud.phase === "auth" || cloud.phase === "error");
+  const problem = !cloud.checking && (cloud.phase === "offline" || cloud.phase === "auth" || cloud.phase === "error" || !!cloud.closedMessage);
   return (
     <div
       role="group"

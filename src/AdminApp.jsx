@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import SalesSummary from "./SalesSummary.jsx";
 import { Copy, RefreshCw, Power, Check } from "lucide-react";
 import { useAdmin } from "./useAdmin";
 import { makeLinkCode } from "./linkCode";
@@ -251,6 +252,55 @@ function AccountCard({ slug, title, blurb, account, busy, siteUrl, onSave, onCop
   );
 }
 
+// Horario de facturación: un solo horario (apertura y cierre) de lunes a sábado, en la hora de
+// Cuba; el domingo está cerrado. Fuera de horario se pausa el sitio.
+function ScheduleCard({ schedule, busy, onSave }) {
+  const [enabled, setEnabled] = useState(schedule.activo);
+  const [open, setOpen] = useState(schedule.abre);
+  const [close, setClose] = useState(schedule.cierra);
+  const [error, setError] = useState("");
+  useEffect(() => { setEnabled(schedule.activo); setOpen(schedule.abre); setClose(schedule.cierra); }, [schedule.activo, schedule.abre, schedule.cierra]);
+  const changed = enabled !== schedule.activo || open !== schedule.abre || close !== schedule.cierra;
+
+  async function save() {
+    setError("");
+    if (!open || !close || open >= close) {
+      setError("La hora de apertura debe ser antes que la de cierre.");
+      return;
+    }
+    await onSave({ activo: enabled, abre: open, cierra: close });
+  }
+
+  const field = { height: 36, border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", fontSize: 14, fontFamily: "inherit", background: "var(--surface)", color: "var(--text)" };
+  return (
+    <div role="group" aria-label="Horario de facturación" style={card}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Horario de facturación</div>
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+        Un solo horario de lunes a sábado, en la hora de Cuba; el domingo está cerrado. Fuera de horario se pausa el sitio: los vendedores no pueden enviar a facturación (sus pedidos esperan en cola) y la facturadora no puede confirmar.
+      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 10 }}>
+        <input type="checkbox" aria-label="Activar el horario" checked={enabled} onChange={(e) => { setEnabled(e.target.checked); setError(""); }} />
+        Activar el horario
+      </label>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
+          Abre
+          <input type="time" aria-label="Abre" value={open} onChange={(e) => { setOpen(e.target.value); setError(""); }} style={field} />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
+          Cierra
+          <input type="time" aria-label="Cierra" value={close} onChange={(e) => { setClose(e.target.value); setError(""); }} style={field} />
+        </label>
+        {changed && <button type="button" disabled={busy} onClick={save} style={primary}>Guardar horario</button>}
+      </div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 10 }}>
+        {schedule.activo ? (schedule.abierto ? "Ahora: abierto." : schedule.mensaje) : "Sin horario: el sitio está abierto a cualquier hora."}
+      </div>
+      {error && <div role="alert" style={{ fontSize: 13, color: "var(--error-text)", marginTop: 8 }}>{error}</div>}
+    </div>
+  );
+}
+
 export default function AdminApp() {
   useTheme();
   const admin = useAdmin();
@@ -347,6 +397,16 @@ export default function AdminApp() {
           />
           <button type="button" onClick={add} disabled={admin.busy} style={primary}>Agregar</button>
         </div>
+
+        {admin.schedule && (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "18px 2px 8px" }}>HORARIO DE FACTURACIÓN</div>
+            <ScheduleCard schedule={admin.schedule} busy={admin.busy} onSave={admin.saveSchedule} />
+          </>
+        )}
+
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "18px 2px 8px" }}>VENTAS POR DÍA</div>
+        <SalesSummary load={admin.loadSales} />
 
         {admin.accounts && (
           <>

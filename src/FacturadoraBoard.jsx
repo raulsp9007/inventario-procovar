@@ -6,6 +6,7 @@ import { openPortalSearch } from "./portalLink";
 import { flattenOrders, filterOrders } from "./facturadoraData";
 import { clock12, connectionText, newOrdersText } from "./facturadoraText";
 import { playChime } from "./alertSound";
+import SalesSummary from "./SalesSummary.jsx";
 
 // Pantalla de la facturadora: una tarjeta grande por pedido, con dos botones claros ("Ver en el
 // portal" y "Confirmar pedido"), pensada para quien tiene poca experiencia con computadoras:
@@ -62,7 +63,7 @@ const bigButton = {
 const secondaryButton = { ...bigButton, background: "var(--surface-subtle)", color: "var(--text)", border: "1px solid var(--border-strong)" };
 const confirmButton = { ...bigButton, background: "var(--green)", color: "var(--on-green)", border: "none" };
 
-function OrderCard({ order, readOnly, onConfirm, onUndo }) {
+function OrderCard({ order, readOnly, paused, onConfirm, onUndo }) {
   const done = order.status === "confirmado";
   const byFacturadora = order.confirmedBy === "facturadora";
   const when = clock12(order.createdAt);
@@ -115,14 +116,28 @@ function OrderCard({ order, readOnly, onConfirm, onUndo }) {
           Ver en el portal
         </button>
         {!done && !readOnly && (
-          <button type="button" aria-label={`Confirmar pedido de ${order.customerName}`} onClick={() => onConfirm(order)} style={confirmButton}>
+          <button
+            type="button"
+            aria-label={`Confirmar pedido de ${order.customerName}`}
+            disabled={paused}
+            title={paused ? "La facturación está cerrada" : undefined}
+            onClick={() => onConfirm(order)}
+            style={{ ...confirmButton, ...(paused ? { opacity: 0.45, cursor: "not-allowed" } : {}) }}
+          >
             <Check size={22} strokeWidth={2.6} aria-hidden="true" />
             Confirmar pedido
           </button>
         )}
         {!done && readOnly && <span style={{ fontSize: px(16), fontWeight: 600, color: "var(--orange-text)" }}>Pendiente de confirmar</span>}
         {done && byFacturadora && !readOnly && (
-          <button type="button" aria-label={`Deshacer la confirmación de ${order.customerName}`} onClick={() => onUndo([order.id])} style={secondaryButton}>
+          <button
+            type="button"
+            aria-label={`Deshacer la confirmación de ${order.customerName}`}
+            disabled={paused}
+            title={paused ? "La facturación está cerrada" : undefined}
+            onClick={() => onUndo([order.id])}
+            style={{ ...secondaryButton, ...(paused ? { opacity: 0.45, cursor: "not-allowed" } : {}) }}
+          >
             <Undo2 size={20} strokeWidth={2.2} aria-hidden="true" />
             Deshacer
           </button>
@@ -167,8 +182,11 @@ export default function FacturadoraBoard({ f, sellers }) {
   const [toast, setToast] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [showSales, setShowSales] = useState(false);
   const seenRef = useRef(null);
   const readOnly = !!f.readOnly;
+  // Fuera del horario de facturación se ve todo pero no se confirma ni se deshace.
+  const paused = !!f.closedMessage;
 
   const all = useMemo(() => flattenOrders(sellers), [sellers]);
   const inSeller = useMemo(() => (sellerId === "todos" ? all : all.filter((o) => o.sellerId === sellerId)), [all, sellerId]);
@@ -274,6 +292,21 @@ export default function FacturadoraBoard({ f, sellers }) {
           <span>{connectionText(f)}</span>
         </div>
 
+        {paused && (
+          <div role="status" data-closed style={{ background: "var(--warn-tint)", border: "1px solid var(--border-warn)", color: "var(--orange-text)", borderRadius: 12, padding: "14px 18px", marginBottom: 16, fontSize: px(18), fontWeight: 700 }}>
+            {f.closedMessage}
+          </div>
+        )}
+
+        {readOnly && (
+          <div style={{ marginBottom: 16 }}>
+            <button type="button" aria-expanded={showSales} onClick={() => setShowSales((v) => !v)} style={{ ...secondaryButton, flex: "none", width: "100%" }}>
+              {showSales ? "Ocultar ventas del día" : "Ventas del día"}
+            </button>
+            {showSales && <div style={{ marginTop: 12 }}><SalesSummary load={f.loadSales} /></div>}
+          </div>
+        )}
+
         {notice && (
           <div role="status" style={{ background: "var(--green)", color: "var(--on-green)", borderRadius: 12, padding: "14px 18px", marginBottom: 16, fontSize: px(19), fontWeight: 700, display: "flex", alignItems: "center", gap: 10 }}>
             <Bell size={22} aria-hidden="true" />
@@ -303,7 +336,7 @@ export default function FacturadoraBoard({ f, sellers }) {
         </div>
 
         <section data-list="pendientes" aria-label="Pedidos por confirmar">
-          {pending.map((o) => <OrderCard key={o.id} order={o} readOnly={readOnly} onConfirm={confirm} onUndo={undo} />)}
+          {pending.map((o) => <OrderCard key={o.id} order={o} readOnly={readOnly} paused={paused} onConfirm={confirm} onUndo={undo} />)}
           {pending.length === 0 && (query.trim() ? (
             <div style={{ textAlign: "center", padding: "30px 0", fontSize: px(18), color: "var(--text-muted)" }}>Ningún pedido coincide con lo que escribiste.</div>
           ) : (
@@ -327,7 +360,7 @@ export default function FacturadoraBoard({ f, sellers }) {
             </button>
             {showConfirmed && (
               <section data-list="confirmados" aria-label="Pedidos confirmados">
-                {confirmed.map((o) => <OrderCard key={o.id} order={o} readOnly={readOnly} onConfirm={confirm} onUndo={undo} />)}
+                {confirmed.map((o) => <OrderCard key={o.id} order={o} readOnly={readOnly} paused={paused} onConfirm={confirm} onUndo={undo} />)}
               </section>
             )}
           </div>
@@ -342,7 +375,7 @@ export default function FacturadoraBoard({ f, sellers }) {
       {toast && (
         <div role="status" aria-label="Pedido confirmado" style={{ position: "fixed", left: 16, right: 16, bottom: 20, maxWidth: 788, margin: "0 auto", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, background: "#1d1d1b", color: "#f2efe6", borderRadius: 14, padding: "14px 18px", fontSize: px(18) }}>
           <span>{`Pedido de ${toast.name} confirmado`}</span>
-          <button type="button" onClick={() => undo(toast.ids)} style={{ minHeight: px(48), padding: "0 18px", borderRadius: 10, border: "1px solid #f2efe6", background: "transparent", color: "#f2efe6", fontFamily: "inherit", fontSize: px(17), fontWeight: 700, cursor: "pointer" }}>Deshacer</button>
+          <button type="button" disabled={paused} onClick={() => undo(toast.ids)} style={{ opacity: paused ? 0.45 : 1, minHeight: px(48), padding: "0 18px", borderRadius: 10, border: "1px solid #f2efe6", background: "transparent", color: "#f2efe6", fontFamily: "inherit", fontSize: px(17), fontWeight: 700, cursor: "pointer" }}>Deshacer</button>
         </div>
       )}
 

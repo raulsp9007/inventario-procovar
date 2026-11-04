@@ -115,6 +115,33 @@ Activarlo (una sola vez, en este orden):
 2. Publica el buzón: `npx wrangler deploy`.
 3. Publica la página (push). Después entra a `admin.html` y crea los accesos.
 
+## Horario de facturación
+
+Desde `admin.html` (tarjeta "Horario de facturación") el administrador puede poner **un solo
+horario**: hora de apertura y de cierre, de lunes a sábado, en la **hora de Cuba**; el domingo está
+cerrado. Fuera de horario se **pausa el sitio**:
+
+- los vendedores no pueden enviar a facturación (el buzón responde 423 y sus pedidos esperan en
+  cola; se envían solos cuando abre: al pulsar Comprobar, en la comprobación de cada hora o al
+  cambiar un pedido);
+- la facturadora no puede confirmar ni deshacer (ve todo, pero los botones quedan apagados y se
+  le avisa cuándo abre).
+
+Ver pedidos, el administrador y la supervisión siguen funcionando. Sin el horario activado el
+sitio está abierto a cualquier hora (así queda al principio).
+
+## Ventas por día
+
+El buzón cuenta lo enviado a facturación cada día (confirmado o no; sin cancelados), producto por
+producto y por vendedor: `GET /summary?fecha=AAAA-MM-DD` (sin fecha, hoy en Cuba). Lo ven el
+administrador (en `admin.html`, "Ventas por día") y la supervisión (botón "Ventas del día"), con
+selector de día. Cada vendedor ve además su propio contador de hoy en Pedidos → Hoy ("Enviado a
+facturación hoy"), calculado en su teléfono.
+
+Activarlo (una sola vez, en este orden): aplica las tablas (`settings` es nueva)
+`npx wrangler d1 execute procovar-buzon --remote --file=schema.sql`, publica el buzón
+`npx wrangler deploy` y después la página (push).
+
 ## Cambiar o quitar a alguien
 
 Desde el sitio de administración (ver arriba). Solo si hace falta rehacerlo todo desde

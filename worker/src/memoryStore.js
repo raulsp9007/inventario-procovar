@@ -5,6 +5,7 @@ export function createMemoryStore() {
   const vendors = new Map();
   const accounts = new Map();
   const sessions = new Map();
+  const settings = new Map();
   const copy = (o) => (o ? JSON.parse(JSON.stringify(o)) : null);
 
   return {
@@ -14,6 +15,13 @@ export function createMemoryStore() {
     },
     async putVendor(vendor) {
       vendors.set(vendor.id, copy(vendor));
+    },
+    // Ajustes (texto) que maneja el administrador, como el horario de facturación.
+    async getSetting(key) {
+      return settings.has(key) ? settings.get(key) : null;
+    },
+    async putSetting(key, value) {
+      settings.set(key, String(value));
     },
     // Cuentas de facturación y supervisión (ver accounts.js): una por rol.
     async listAccounts() {

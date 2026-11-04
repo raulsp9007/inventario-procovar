@@ -83,6 +83,32 @@ describe("createCloudApi: usuario y contraseña", () => {
   });
 });
 
+describe("createCloudApi: horario y resumen de ventas", () => {
+  it("lee y guarda el horario (administrador) y pide el resumen del día, con sus rutas", async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push([init.method, url.replace(URL_OK, ""), init.body ? JSON.parse(init.body) : undefined]);
+      return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+    });
+    const cloud = createCloudApi({ url: URL_OK, token: TOKEN, fetchImpl });
+    await cloud.adminSchedule();
+    await cloud.saveSchedule({ activo: true, abre: "09:00", cierra: "15:00" });
+    await cloud.sales("2026-10-30");
+    await cloud.sales();
+    expect(calls).toEqual([
+      ["GET", "/admin/schedule", undefined],
+      ["PUT", "/admin/schedule", { activo: true, abre: "09:00", cierra: "15:00" }],
+      ["GET", "/summary?fecha=2026-10-30", undefined],
+      ["GET", "/summary", undefined],
+    ]);
+  });
+
+  it("fuera de horario (423) llega como tipo 'closed' con el mensaje del buzón", async () => {
+    const { api: cloud } = api({ status: 423, body: { error: "La facturación está cerrada. Abre hoy a las 9:00 a. m." } });
+    await expect(cloud.putOrder("o1", {})).rejects.toMatchObject({ kind: "closed", status: 423, message: "La facturación está cerrada. Abre hoy a las 9:00 a. m." });
+  });
+});
+
 describe("createCloudApi: peticiones", () => {
   it("me: GET /me con el código", async () => {
     const { api: cloud, fetchImpl } = api({ status: 200, body: { id: "carlos", name: "Carlos", role: "vendedor" } });

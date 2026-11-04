@@ -53,20 +53,24 @@ export function useCloudSync({
     commit({ map: planned.nextMap, queue });
 
     let stopped = null;
+    let stoppedMessage = "";
     let rejected = [];
     if (queue.length > 0) {
       const out = await flushQueue({ queue, api });
       // Lo que la nube rechazó se marca en el pedido (aviso rojo) con el motivo.
       commit({ queue: out.remaining, map: markRejected(cloudRef.current.map, out.rejected) });
       stopped = out.stopped;
+      stoppedMessage = out.stoppedMessage || "";
       rejected = out.rejected;
     }
 
     let pulled = false;
     let lastCheck = null;
+    let horario;
     if (!stopped && pull) {
       try {
         const data = await api.statusSince(cloudRef.current.since);
+        horario = data.horario || null;
         const { orders: ordersNow, setOrdersConfirmed: confirmOrders } = propsRef.current;
         const result = applyStatuses({ rows: data.orders, orders: ordersNow, map: cloudRef.current.map });
         if (result.toConfirm.length > 0) confirmOrders(result.toConfirm, true);
@@ -81,8 +85,9 @@ export function useCloudSync({
     }
 
     setStatus((prev) => ({
-      phase: stopped ? (stopped === "network" ? "offline" : stopped === "auth" ? "auth" : "error") : "ok",
-      message: stopped ? MESSAGES[stopped] || MESSAGES.server : "",
+      phase: stopped ? (stopped === "network" ? "offline" : stopped === "auth" ? "auth" : stopped === "closed" ? "closed" : "error") : "ok",
+      message: stopped ? (stopped === "closed" ? stoppedMessage : MESSAGES[stopped] || MESSAGES.server) : "",
+      horario: horario === undefined ? prev.horario : horario,
       lastSyncAt: pulled ? Date.now() : prev.lastSyncAt,
       rejected: rejected.length > 0 ? rejected : prev.rejected,
       lastCheck: lastCheck || prev.lastCheck,
@@ -166,15 +171,19 @@ export function useCloudSync({
     }
   }, [sync]);
 
+  // Fuera del horario de facturación lo que está en cola espera a que abra.
+  const closed = status.phase === "closed";
   const chips = useMemo(() => {
     const queued = new Set(cloud.queue.map((op) => op.orderId));
     const out = {};
     Object.keys(cloud.map).forEach((id) => {
-      const chip = chipFor({ entry: cloud.map[id], queued: queued.has(id) });
+      let chip = chipFor({ entry: cloud.map[id], queued: queued.has(id) });
+      if (chip && chip.state === "queued" && closed) chip = { state: "queued", text: "En cola: facturación cerrada" };
       if (chip) out[id] = chip;
     });
     return out;
-  }, [cloud.map, cloud.queue]);
+  }, [cloud.map, cloud.queue, closed]);
+  const closedMessage = closed ? status.message : (status.horario && status.horario.abierto === false ? status.horario.mensaje : "");
 
   return {
     link: cloud.link,
@@ -187,6 +196,7 @@ export function useCloudSync({
     rejected: status.rejected,
     pendingCount: cloud.queue.length,
     chips,
+    closedMessage,
     linkWith,
     unlink,
     setEnabled,

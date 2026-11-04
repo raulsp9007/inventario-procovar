@@ -6,7 +6,7 @@ import { sendSupervisorSummary } from "./supervisorSummary";
 import ReorderSuggestions from "./ReorderSuggestions.jsx";
 import { openPortalSearch } from "./portalLink";
 import { customersToContact, buildCustomerProfile, availableTypical, formatReorderMessage } from "./recommendations";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending, findSameDayOrders } from "./orderHelpers";
+import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending, findSameDayOrders, billedByProduct } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
 import { registryNames, findRegistryCustomer, registryBusinessNames, registryCustomerNameForBusiness, findCustomerByCode } from "./customerRegistry";
 import { productChipColors } from "./colorUtils";
@@ -211,6 +211,7 @@ function orderTotal(order) {
 
 export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onRefreshTodayPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, cloudChips = {}, cloud = null, billToCloud = false, focusOrderId, onFocusOrderConsumed }) {
   const senderOptions = { senderName, sendSenderName };
+  const billedToday = billedByProduct(groupAllOrders(movements), products, todayStr());
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -1659,6 +1660,25 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         sortValue: hoyOrderSort,
         onSortChange: setHoyOrderSort,
       })}
+
+      {activeSection === "hoy" && billedToday.pedidos > 0 && (
+        <div
+          role="group"
+          aria-label="Enviado a facturación hoy"
+          style={{ marginTop: 20, background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 12, padding: "12px 14px" }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "var(--muted)" }}>ENVIADO A FACTURACIÓN HOY</div>
+          <div style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 8px" }}>
+            {`${billedToday.pedidos} ${billedToday.pedidos === 1 ? "pedido" : "pedidos"} · ${billedToday.unidades} ${billedToday.unidades === 1 ? "unidad" : "unidades"}`}
+          </div>
+          {billedToday.productos.map((p) => (
+            <div key={p.code} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 0", borderTop: "1px solid var(--border)", fontSize: 14 }}>
+              <span>{p.name}</span>
+              <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{p.qty}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {activeSection === "hoy" && (
         <div style={{ marginTop: 20 }}>

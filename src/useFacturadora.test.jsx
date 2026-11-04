@@ -30,7 +30,8 @@ function fakeCloud() {
       if (state.badLogin) throw new CloudError("auth", 401, "Usuario o contraseña incorrectos.");
       return { token: "sesion-abc-123", role: state.loginRole, name: usuario, expiresAt: "2026-11-30T00:00:00.000Z" };
     }),
-    listOrders: vi.fn(async () => ({ now: "2026-10-30T16:00:00.000Z", sellers: state.sellers })),
+    listOrders: vi.fn(async () => ({ now: "2026-10-30T16:00:00.000Z", sellers: state.sellers, ...(state.horario ? { horario: state.horario } : {}) })),
+    sales: vi.fn(async (fecha) => ({ fecha, vendedores: [], productos: [], totales: { pedidos: 0, unidades: 0 } })),
     confirmMany: vi.fn(async (ids) => ({ confirmed: ids, missing: [] })),
     unconfirmMany: vi.fn(async (ids) => ({ unconfirmed: ids, missing: [] })),
   };
@@ -259,5 +260,46 @@ describe("useFacturadora: sin conexión y código vencido", () => {
     await act(async () => { await ctx.hook.result.current.refresh(); });
     expect(ctx.hook.result.current.phase).toBe("auth");
     expect(ctx.hook.result.current.message).toMatch(/entrar/i);
+  });
+});
+
+describe("useFacturadora: horario de facturación", () => {
+  const closedHorario = { activo: true, abierto: false, mensaje: "La facturación está cerrada. Abre hoy a las 9:00 a. m.", abre: "09:00", cierra: "15:00" };
+
+  it("dice cuándo la facturación está cerrada y se quita al abrir", async () => {
+    const ctx = setup();
+    ctx.state.horario = closedHorario;
+    await linked(ctx);
+    expect(ctx.hook.result.current.closedMessage).toBe("La facturación está cerrada. Abre hoy a las 9:00 a. m.");
+    ctx.state.horario = { ...closedHorario, abierto: true, mensaje: "" };
+    await act(async () => { await ctx.hook.result.current.refresh(); });
+    expect(ctx.hook.result.current.closedMessage).toBe("");
+  });
+
+  it("sin horario en la respuesta, no hay aviso", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    expect(ctx.hook.result.current.closedMessage).toBe("");
+  });
+
+  it("una confirmación rechazada por horario no se pierde: queda en cola hasta que abra", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    ctx.api.confirmMany.mockRejectedValueOnce(new CloudError("closed", 423, "La facturación está cerrada. Abre hoy a las 9:00 a. m."));
+    await act(async () => { await ctx.hook.result.current.confirm(["a"]); });
+    expect(ctx.hook.result.current.pendingOps).toBe(1);
+    expect(ctx.hook.result.current.sellers[0].orders.find((o) => o.id === "a").status).toBe("confirmado");
+    expect(ctx.hook.result.current.phase).toBe("ok");
+    await act(async () => { await ctx.hook.result.current.refresh(); });
+    expect(ctx.api.confirmMany).toHaveBeenCalledTimes(2);
+    expect(ctx.hook.result.current.pendingOps).toBe(0);
+  });
+
+  it("loadSales pide el resumen de ese día al buzón", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    const result = await ctx.hook.result.current.loadSales("2026-10-30");
+    expect(ctx.api.sales).toHaveBeenCalledWith("2026-10-30");
+    expect(result.fecha).toBe("2026-10-30");
   });
 });

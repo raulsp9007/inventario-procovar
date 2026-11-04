@@ -27,7 +27,7 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
   const [sellersRaw, setSellersRaw] = useState(() => (loadCloud(SCOPE).data ? loadCloud(SCOPE).data.sellers : []));
   const [status, setStatus] = useState(() => {
     const data = loadCloud(SCOPE).data;
-    return { phase: "idle", message: "", lastSyncAt: data ? data.at : null };
+    return { phase: "idle", message: "", lastSyncAt: data ? data.at : null, horario: null };
   });
   const cloudRef = useRef(cloud);
   const createApiRef = useRef(createApi);
@@ -48,9 +48,11 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     const api = createApiRef.current({ url: link.url, token: link.token });
     let stopped = null;
 
-    // 1) Mandar lo que esperaba en cola.
+    // 1) Mandar lo que esperaba en cola. Fuera del horario de facturación se deja todo en cola
+    // (se vuelve a intentar al abrir); la lista igual se lee.
     const remaining = [...queue];
-    while (remaining.length > 0 && !stopped) {
+    let queueClosed = false;
+    while (remaining.length > 0 && !stopped && !queueClosed) {
       const op = remaining[0];
       try {
         if (op.kind === "confirm") await api.confirmMany(op.ids);
@@ -58,7 +60,8 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
         remaining.shift();
       } catch (e) {
         const kind = e instanceof CloudError ? e.kind : "server";
-        if (kind === "network" || kind === "auth" || kind === "server") stopped = kind;
+        if (kind === "closed") queueClosed = true;
+        else if (kind === "network" || kind === "auth" || kind === "server") stopped = kind;
         else remaining.shift();
       }
     }
@@ -72,7 +75,7 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
         const at = Date.now();
         setSellersRaw(data.sellers);
         commit({ data: { sellers: data.sellers, at } });
-        setStatus({ phase: "ok", message: "", lastSyncAt: at });
+        setStatus({ phase: "ok", message: "", lastSyncAt: at, horario: data.horario || null });
         fetched = true;
       } catch (e) {
         stopped = e instanceof CloudError ? e.kind : "server";
@@ -83,6 +86,7 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
         phase: stopped === "network" ? "offline" : stopped === "auth" ? "auth" : "error",
         message: MESSAGES[stopped] || MESSAGES.server,
         lastSyncAt: prev.lastSyncAt,
+        horario: prev.horario,
       }));
     }
   }, [commit]);
@@ -161,6 +165,12 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     return undefined;
   }, [commit, cloudUrl, linkWith]);
 
+  // Resumen de ventas de un día (lo usa la supervisión).
+  const loadSales = useCallback((fecha) => {
+    const { link } = cloudRef.current;
+    return createApiRef.current({ url: link.url, token: link.token }).sales(fecha);
+  }, []);
+
   const unlink = useCallback(() => {
     clearCloud(SCOPE);
     cloudRef.current = loadCloud(SCOPE);
@@ -184,6 +194,8 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     phase: status.phase,
     message: status.message,
     lastSyncAt: status.lastSyncAt,
+    closedMessage: status.horario && status.horario.abierto === false ? status.horario.mensaje : "",
+    loadSales,
     pendingOps: cloud.queue.length,
     confirm,
     unconfirm,

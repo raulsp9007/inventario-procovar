@@ -5,6 +5,7 @@
 //   forbidden esto no es para este usuario (403)
 //   notfound  no existe (404)
 //   invalid   el buzón rechazó los datos (400/409)
+//   closed    fuera del horario de facturación (423): se pausa, se reintenta después
 //   server    fallo del buzón (5xx u otra cosa)
 
 export class CloudError extends Error {
@@ -21,6 +22,7 @@ function kindForStatus(status) {
   if (status === 403) return "forbidden";
   if (status === 404) return "notfound";
   if (status === 400 || status === 409) return "invalid";
+  if (status === 423) return "closed";
   return "server";
 }
 
@@ -73,6 +75,10 @@ export function createCloudApi({ url, token, fetchImpl }) {
     login: (usuario, clave) => request("POST", "/login", { usuario, clave }),
     // Cuentas de facturación y supervisión (administrador).
     adminAccounts: () => request("GET", "/admin/accounts"),
+    // Horario de facturación (administrador) y resumen de ventas de un día (administrador y supervisión).
+    adminSchedule: () => request("GET", "/admin/schedule"),
+    saveSchedule: (body) => request("PUT", "/admin/schedule", body),
+    sales: (fecha) => request("GET", fecha ? `/summary?fecha=${enc(fecha)}` : "/summary"),
     saveAccount: (slug, body) => request("PUT", `/admin/accounts/${enc(slug)}`, body),
     adminVendors: () => request("GET", "/admin/vendors"),
     addVendor: (name) => request("POST", "/admin/vendors", { name }),

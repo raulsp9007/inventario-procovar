@@ -48,5 +48,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL
 );
+-- Ajustes del buzón que maneja el administrador (por ahora, el horario de facturación).
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS orders_seller_updated ON orders (seller_id, updated_at);
 CREATE INDEX IF NOT EXISTS orders_date ON orders (date);

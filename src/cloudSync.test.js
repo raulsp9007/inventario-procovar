@@ -299,6 +299,15 @@ describe("flushQueue: vaciar la cola", () => {
     expect(api.confirmOrder).toHaveBeenCalled();
   });
 
+  it("fuera de horario de facturación se detiene, conserva la cola y trae el mensaje del buzón", async () => {
+    const api = apiOf({ putOrder: vi.fn(async () => { throw new CloudError("closed", 423, "La facturación está cerrada. Abre hoy a las 9:00 a. m."); }) });
+    const out = await flushQueue({ queue: ops(), api });
+    expect(out.stopped).toBe("closed");
+    expect(out.stoppedMessage).toBe("La facturación está cerrada. Abre hoy a las 9:00 a. m.");
+    expect(out.remaining).toHaveLength(3);
+    expect(out.rejected).toEqual([]);
+  });
+
   it("borrar o confirmar algo que no existe en la nube cuenta como hecho", async () => {
     const api = apiOf({
       deleteOrder: vi.fn(async () => { throw new CloudError("notfound", 404, "x"); }),

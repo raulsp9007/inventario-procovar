@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, isPastCierre, getCierrePending, fixSundayScheduledOrders, findSameDayOrders } from "./orderHelpers";
+import { billedByProduct, groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, isCommittedMovement, reservedForTomorrow, computeScheduledTransition, nextOrderSeq, renumberOpenOrders, isPastCierre, getCierrePending, fixSundayScheduledOrders, findSameDayOrders } from "./orderHelpers";
 
 function makeMovement(overrides = {}) {
   return {
@@ -530,5 +530,41 @@ describe("findSameDayOrders (¿ese cliente ya tiene pedido ese día?)", () => {
 
   it("sin nombre ni código no encuentra nada", () => {
     expect(findSameDayOrders([orderOf()], customers, { name: "", code: "", date: "2026-10-30" })).toEqual([]);
+  });
+});
+
+// Contador de lo enviado a facturación en un día, por producto.
+describe("billedByProduct", () => {
+  const products = [{ code: "P500", name: "Parranda 500ml" }, { code: "M330", name: "Malta 330ml" }];
+  const o = (over = {}) => ({ orderId: "a", date: "2026-10-30", sent: true, isDelivery: false, manual: false, lines: [{ code: "P500", qty: 10 }], ...over });
+
+  it("suma por producto lo enviado a facturación ese día, del que más al que menos", () => {
+    const orders = [
+      o({ orderId: "a", lines: [{ code: "P500", qty: 10 }, { code: "M330", qty: 30 }] }),
+      o({ orderId: "b", lines: [{ code: "P500", qty: 25 }] }),
+    ];
+    expect(billedByProduct(orders, products, "2026-10-30")).toEqual({
+      pedidos: 2, unidades: 65,
+      productos: [{ code: "P500", name: "Parranda 500ml", qty: 35 }, { code: "M330", name: "Malta 330ml", qty: 30 }],
+    });
+  });
+
+  it("no cuenta lo no enviado, los domicilios, las ventas manuales ni otros días", () => {
+    const orders = [
+      o({ orderId: "a" }),
+      o({ orderId: "b", sent: false }),
+      o({ orderId: "c", isDelivery: true }),
+      o({ orderId: "d", manual: true }),
+      o({ orderId: "e", date: "2026-10-29" }),
+    ];
+    expect(billedByProduct(orders, products, "2026-10-30")).toMatchObject({ pedidos: 1, unidades: 10 });
+  });
+
+  it("un producto que ya no está en la lista sale con su código", () => {
+    expect(billedByProduct([o({ lines: [{ code: "XX", qty: 3 }] })], products, "2026-10-30").productos).toEqual([{ code: "XX", name: "XX", qty: 3 }]);
+  });
+
+  it("sin nada enviado, vacío", () => {
+    expect(billedByProduct([], products, "2026-10-30")).toEqual({ pedidos: 0, unidades: 0, productos: [] });
   });
 });

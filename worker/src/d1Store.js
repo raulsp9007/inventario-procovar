@@ -33,6 +33,14 @@ export function createD1Store(db) {
     + "active = excluded.active, fail_count = excluded.fail_count, locked_until = excluded.locked_until, updated_at = excluded.updated_at";
 
   return {
+    // Ajustes (texto) que maneja el administrador, como el horario de facturación.
+    async getSetting(key) {
+      const r = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first();
+      return r ? r.value : null;
+    },
+    async putSetting(key, value) {
+      await db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, String(value)).run();
+    },
     // Cuentas de facturación y supervisión (ver accounts.js): una por rol.
     async listAccounts() {
       const { results } = await db.prepare("SELECT * FROM accounts ORDER BY role").bind().all();

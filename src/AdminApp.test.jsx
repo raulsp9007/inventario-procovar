@@ -25,6 +25,7 @@ function installFetch() {
     vendors: [vendor("raul", "Raul"), vendor("eddy", "Eddy"), vendor("melisa", "Melisa", { active: false })],
     facturadora: { id: "fact", name: "Facturadora", token: "f".repeat(24) },
     accounts: { facturacion: null, supervision: null },
+    schedule: { activo: false, abre: "09:00", cierra: "15:00", abierto: true, mensaje: "" },
     nextToken: 1,
   };
   const sorted = () => [...server.vendors].sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -42,6 +43,13 @@ function installFetch() {
       return reply(v);
     }
     if (path === "/admin/accounts" && init.method === "GET") return reply(server.accounts);
+    if (path === "/admin/schedule" && init.method === "GET") return reply(server.schedule);
+    if (path === "/admin/schedule" && init.method === "PUT") {
+      const next = { ...server.schedule, activo: body.activo, abre: body.abre, cierra: body.cierra };
+      server.schedule = { ...next, abierto: !next.activo, mensaje: next.activo ? "La facturación está cerrada. Abre hoy a las 9:00 a. m." : "" };
+      return reply(server.schedule);
+    }
+    if (path.startsWith("/summary")) return reply(server.summary || { fecha: "2026-10-30", vendedores: [], productos: [], totales: { pedidos: 0, unidades: 0 } });
     const acc = path.match(/^\/admin\/accounts\/([^/]+)$/);
     if (acc && init.method === "PUT") {
       if (body.usuario === "repetido") return reply({ error: "Ya hay una cuenta con ese usuario." }, 409);
@@ -415,5 +423,76 @@ describe("administración: acceso de facturación y supervisión", () => {
       await waitFor(() => expect(copied).toHaveLength(1));
       expect(copied[0]).toContain("Contraseña: nueva-clave-1");
     });
+  });
+});
+
+// Horario de facturación: un solo horario (apertura y cierre) de lunes a sábado, en la hora de Cuba.
+// Fuera de horario se pausa el sitio. Se maneja desde la administración.
+describe("administración: horario de facturación", () => {
+  const card = () => screen.findByRole("group", { name: "Horario de facturación" });
+  const putSchedule = () => calls.filter((c) => c.method === "PUT" && c.path === "/admin/schedule");
+
+  it("muestra el horario guardado, apagado al principio, y cómo está ahora", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Abre").value).toBe("09:00"));
+    expect(within(group).getByLabelText("Cierra").value).toBe("15:00");
+    expect(within(group).getByLabelText("Activar el horario").checked).toBe(false);
+    expect(within(group).getByText(/sin horario/i)).toBeTruthy();
+    expect(within(group).getByText(/domingo/i)).toBeTruthy();
+    expect(within(group).queryByRole("button", { name: "Guardar horario" })).toBeNull();
+  });
+
+  it("activarlo y cambiar las horas lo guarda y dice si ahora está cerrado", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Abre").value).toBe("09:00"));
+    fireEvent.click(within(group).getByLabelText("Activar el horario"));
+    fireEvent.change(within(group).getByLabelText("Abre"), { target: { value: "08:30" } });
+    fireEvent.change(within(group).getByLabelText("Cierra"), { target: { value: "16:00" } });
+    fireEvent.click(within(group).getByRole("button", { name: "Guardar horario" }));
+    await waitFor(() => expect(putSchedule()).toEqual([{ method: "PUT", path: "/admin/schedule", body: { activo: true, abre: "08:30", cierra: "16:00" } }]));
+    expect(await within(group).findByText("La facturación está cerrada. Abre hoy a las 9:00 a. m.")).toBeTruthy();
+    await waitFor(() => expect(within(group).queryByRole("button", { name: "Guardar horario" })).toBeNull());
+  });
+
+  it("no manda una apertura que no sea antes del cierre", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Abre").value).toBe("09:00"));
+    fireEvent.change(within(group).getByLabelText("Abre"), { target: { value: "16:00" } });
+    fireEvent.click(within(group).getByRole("button", { name: "Guardar horario" }));
+    expect(await within(group).findByText("La hora de apertura debe ser antes que la de cierre.")).toBeTruthy();
+    expect(putSchedule()).toHaveLength(0);
+  });
+
+  it("con el horario activo explica qué se pausa", async () => {
+    server.schedule = { activo: true, abre: "09:00", cierra: "15:00", abierto: false, mensaje: "La facturación está cerrada. Abre hoy a las 9:00 a. m." };
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Activar el horario").checked).toBe(true));
+    expect(within(group).getByText("La facturación está cerrada. Abre hoy a las 9:00 a. m.")).toBeTruthy();
+    expect(within(group).getByText(/no pueden enviar/i)).toBeTruthy();
+  });
+});
+
+describe("administración: ventas por día", () => {
+  it("muestra el contador de ventas por día, por producto y por vendedor", async () => {
+    server.summary = {
+      fecha: "2026-10-30",
+      vendedores: [{ id: "raul", name: "Raul", pedidos: 2, unidades: 80, productos: [{ code: "P500", name: "Parranda 500ml", qty: 80 }] }],
+      productos: [{ code: "P500", name: "Parranda 500ml", qty: 80 }],
+      totales: { pedidos: 2, unidades: 80 },
+    };
+    link();
+    render(<AdminApp />);
+    const region = await screen.findByRole("region", { name: "Ventas por día" });
+    await waitFor(() => expect(within(region).getAllByText("2 pedidos · 80 unidades").length).toBeGreaterThan(0));
+    expect(within(region).getByRole("group", { name: "Ventas de Raul" })).toBeTruthy();
+    expect(calls.some((c) => c.method === "GET" && c.path.startsWith("/summary?fecha="))).toBe(true);
   });
 });

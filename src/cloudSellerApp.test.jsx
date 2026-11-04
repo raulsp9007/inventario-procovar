@@ -43,6 +43,7 @@ function installFetch() {
     calls.push({ method: init.method, path: url.replace(URL_OK, ""), headers: init.headers, body: init.body ? JSON.parse(init.body) : undefined });
     const path = url.replace(URL_OK, "");
     const ok = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) });
+    if (server.closedMessage && init.method === "PUT") return { ok: false, status: 423, json: async () => ({ error: server.closedMessage }), text: async () => "x" };
     if (server.rejectPut && init.method === "PUT") return { ok: false, status: 400, json: async () => ({ error: server.rejectPut }), text: async () => "x" };
     if (path === "/me") return ok({ id: "carlos", name: "Carlos Pérez", role: server.role });
     if (path.startsWith("/orders/status")) return ok({ now: server.now, orders: server.rows });
@@ -441,5 +442,29 @@ describe("vendedor: acceso que no es de vendedor", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Enlazar" }));
     await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.path === "/orders/o1")).toBe(true));
     expect(JSON.parse(localStorage.getItem("procovar-nube-enlace"))).toMatchObject({ role: "vendedor", token: TOKEN });
+  });
+});
+
+// Fuera del horario de facturación el sitio está pausado: el pedido queda en cola y se avisa.
+describe("vendedor: fuera del horario de facturación", () => {
+  const MSG = "La facturación está cerrada. Abre hoy a las 9:00 a. m.";
+
+  it("el pedido queda en cola con el motivo y la barra avisa que está cerrada", async () => {
+    seed();
+    server.closedMessage = MSG;
+    render(<InventoryApp />);
+    expect(await screen.findByText("En cola: facturación cerrada")).toBeTruthy();
+    expect(await within(await screen.findByRole("group", { name: "Comprobar confirmaciones" })).findByText(MSG)).toBeTruthy();
+    expect(screen.queryByText(/La nube rechazó este pedido/)).toBeNull();
+  });
+
+  it("al abrir y pulsar Comprobar, el pedido se envía", async () => {
+    seed();
+    server.closedMessage = MSG;
+    render(<InventoryApp />);
+    await screen.findByText("En cola: facturación cerrada");
+    server.closedMessage = null;
+    fireEvent.click(await screen.findByRole("button", { name: "Comprobar" }));
+    expect(await screen.findByText("En nube")).toBeTruthy();
   });
 });

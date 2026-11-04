@@ -131,6 +131,44 @@ describe("useCloudSync: esperar a que la app cargue", () => {
 // La app comprueba sola lo que confirmó la facturadora cada hora (intervalMs, 1 h
 // por defecto) con la app abierta, y al volver a ella si ya pasó más de una hora.
 // El botón "Comprobar" (syncNow) sigue ahí para hacerlo al momento.
+describe("useCloudSync: fuera del horario de facturación", () => {
+  const closed = () => new CloudError("closed", 423, "La facturación está cerrada. Abre hoy a las 9:00 a. m.");
+
+  it("el pedido queda en cola, con el motivo, y no se pierde", async () => {
+    const ctx = setup();
+    ctx.api.putOrder.mockRejectedValue(closed());
+    await act(async () => { await ctx.hook.result.current.linkWith(CODE); });
+    await waitFor(() => expect(ctx.hook.result.current.phase).toBe("closed"));
+    expect(ctx.hook.result.current.message).toBe("La facturación está cerrada. Abre hoy a las 9:00 a. m.");
+    expect(ctx.hook.result.current.pendingCount).toBe(1);
+    expect(ctx.hook.result.current.chips.o1).toEqual({ state: "queued", text: "En cola: facturación cerrada" });
+    expect(ctx.hook.result.current.rejected).toEqual([]);
+  });
+
+  it("cuando abre, al volver a intentar se envía y sale de la cola", async () => {
+    const ctx = setup();
+    ctx.api.putOrder.mockRejectedValueOnce(closed());
+    await act(async () => { await ctx.hook.result.current.linkWith(CODE); });
+    await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(1));
+    await act(async () => { await ctx.hook.result.current.syncNow(); });
+    expect(ctx.api.putOrder).toHaveBeenCalledTimes(2);
+    expect(ctx.hook.result.current.pendingCount).toBe(0);
+    expect(ctx.hook.result.current.phase).toBe("ok");
+    expect(ctx.hook.result.current.chips.o1).toEqual({ state: "cloud", text: "En nube" });
+  });
+
+  it("al comprobar, el buzón dice si la facturación está cerrada", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    ctx.api.statusSince.mockResolvedValueOnce({ now: ctx.state.now, orders: [], horario: { activo: true, abierto: false, mensaje: "La facturación está cerrada. Abre mañana sábado a las 9:00 a. m.", abre: "09:00", cierra: "15:00" } });
+    await act(async () => { await ctx.hook.result.current.syncNow(); });
+    expect(ctx.hook.result.current.closedMessage).toBe("La facturación está cerrada. Abre mañana sábado a las 9:00 a. m.");
+    ctx.api.statusSince.mockResolvedValueOnce({ now: ctx.state.now, orders: [], horario: { activo: true, abierto: true, mensaje: "", abre: "09:00", cierra: "15:00" } });
+    await act(async () => { await ctx.hook.result.current.syncNow(); });
+    expect(ctx.hook.result.current.closedMessage).toBe("");
+  });
+});
+
 describe("useCloudSync: pedido rechazado por la nube", () => {
   const rejection = () => new CloudError("invalid", 400, "Falta el nombre del cliente.");
 
