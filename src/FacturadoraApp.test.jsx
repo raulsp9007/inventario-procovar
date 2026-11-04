@@ -387,11 +387,11 @@ describe("facturadora: la tarjeta del pedido", () => {
     expect(open.mock.calls[0]).toEqual(["https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=AB1001", "procovar-portal", "popup,width=1000,height=800"]);
   });
 
-  it("sin código busca por el nombre del cliente", async () => {
+  it("sin código busca solo por el primer nombre del cliente", async () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
     await openBoard();
     fireEvent.click(within(cardOf("Ana López")).getByRole("button", { name: "Ver en el portal el pedido de Ana López" }));
-    expect(open.mock.calls[0][0]).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana%20L%C3%B3pez");
+    expect(open.mock.calls[0][0]).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana");
   });
 
   it("no hay casillas, pestañas ni atajos de teclado a la vista", async () => {

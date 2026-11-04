@@ -4,7 +4,7 @@ import { todayStr, nextBusinessDayStr, isSundayStr, formatDate, formatDateTime, 
 import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { sendSupervisorSummary } from "./supervisorSummary";
 import ReorderSuggestions from "./ReorderSuggestions.jsx";
-import { openPortalSearch } from "./portalLink";
+import { openPortalSearch, portalSearchText } from "./portalLink";
 import { customersToContact, buildCustomerProfile, availableTypical, formatReorderMessage } from "./recommendations";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending, findSameDayOrders, billedByProduct } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
@@ -663,9 +663,9 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
 
   // Abre el portal de pedidos ya buscando al cliente del pedido que se arma.
   // Primero el código del cliente (el guardado, o el que se ve en el campo Código del
-  // pedido); si no tiene, su nombre.
+  // pedido); si no tiene, solo su primer nombre.
   function checkCustomerInPortal() {
-    openPortalSearch(shownCode.trim() || customerName);
+    openPortalSearch(portalSearchText({ code: shownCode, name: customerName }));
   }
 
   function useFormSuggestion() {

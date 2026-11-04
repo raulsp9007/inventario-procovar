@@ -68,7 +68,7 @@ describe("Comprobar en el portal (pedido nuevo)", () => {
     fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
     expect(openSpy).toHaveBeenCalledTimes(1);
     expect(openSpy).toHaveBeenCalledWith(
-      "https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana%20L%C3%B3pez",
+      "https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana",
       "procovar-portal",
       "popup,width=480,height=820",
     );
@@ -83,11 +83,11 @@ describe("Comprobar en el portal (pedido nuevo)", () => {
     fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
     expect(openSpy).toHaveBeenCalledTimes(2);
     expect(openSpy.mock.calls[0][1]).toBe(openSpy.mock.calls[1][1]);
-    expect(openSpy.mock.calls[1][0]).toContain("buscar=Beto%20Ruiz");
+    expect(openSpy.mock.calls[1][0]).toContain("buscar=Beto");
   });
 
   // Primero el código del cliente (es lo que mejor lo encuentra en el portal);
-  // si no tiene, su nombre.
+  // si no tiene, solo su primer nombre (el portal encuentra mejor con una palabra).
   describe("qué busca: primero el código, luego el nombre", () => {
     const customers = [
       { id: "a", name: "Ana López", businessName: "", phone: "", createdAt: "2026-01-01T00:00:00.000Z", code: "LT05TCP0932" },
@@ -108,12 +108,12 @@ describe("Comprobar en el portal (pedido nuevo)", () => {
       expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=LT05TCP0932");
     });
 
-    it("un cliente guardado sin código: busca por su nombre", async () => {
+    it("un cliente guardado sin código: busca solo por su primer nombre", async () => {
       seed("pedidos", { customers });
       const input = await openForm();
       fireEvent.change(input, { target: { value: "Beto Ruiz" } });
       fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
-      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Beto%20Ruiz");
+      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Beto");
     });
 
     it("un cliente nuevo con el código que se escribió en el pedido: busca por ese código", async () => {
@@ -134,13 +134,13 @@ describe("Comprobar en el portal (pedido nuevo)", () => {
       expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=LT05TCP0001");
     });
 
-    it("si se borra el código en el pedido, vuelve a buscar por el nombre", async () => {
+    it("si se borra el código en el pedido, vuelve a buscar por el primer nombre", async () => {
       seed("pedidos", { customers });
       const input = await openForm();
       fireEvent.change(input, { target: { value: "Ana López" } });
       await typeCode("   ");
       fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
-      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana%20L%C3%B3pez");
+      expect(urlOf()).toBe("https://pedidos.procovar.cloud/panel/panel-pedidos?buscar=Ana");
     });
 
     it("sigue abriendo la misma ventana pequeña", async () => {

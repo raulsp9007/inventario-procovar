@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { portalSearchUrl, openPortalSearch, PORTAL_BASE, PORTAL_WINDOW_NAME, PORTAL_WINDOW_FEATURES, PORTAL_WINDOW_FEATURES_WIDE } from "./portalLink";
+import { portalSearchUrl, portalSearchText, openPortalSearch, PORTAL_BASE, PORTAL_WINDOW_NAME, PORTAL_WINDOW_FEATURES, PORTAL_WINDOW_FEATURES_WIDE } from "./portalLink";
 
 // Dirección del portal de pedidos con la búsqueda ya hecha: la pantalla de
 // Pedidos del portal lee el parámetro "buscar" y lo pone en su buscador.
@@ -24,6 +24,28 @@ describe("portalSearchUrl", () => {
     expect(portalSearchUrl("")).toBeNull();
     expect(portalSearchUrl("   ")).toBeNull();
     expect(portalSearchUrl(undefined)).toBeNull();
+  });
+});
+
+// Qué se busca en el portal: el código del cliente; si no tiene, solo su primer nombre.
+describe("portalSearchText", () => {
+  it("con código busca por el código, sin espacios de más", () => {
+    expect(portalSearchText({ code: " LT05TCP0932 ", name: "Ana López" })).toBe("LT05TCP0932");
+  });
+
+  it("sin código busca solo por el primer nombre", () => {
+    expect(portalSearchText({ code: "", name: "Ana López" })).toBe("Ana");
+    expect(portalSearchText({ name: "  Hector   Naranjo Naranjo " })).toBe("Hector");
+    expect(portalSearchText({ code: "   ", name: "Luis Mariano Rodríguez" })).toBe("Luis");
+  });
+
+  it("un nombre de una sola palabra se busca completo", () => {
+    expect(portalSearchText({ name: "Danmarelis" })).toBe("Danmarelis");
+  });
+
+  it("sin código ni nombre no hay nada que buscar", () => {
+    expect(portalSearchText({})).toBe("");
+    expect(portalSearchText({ code: "", name: "  " })).toBe("");
   });
 });
 

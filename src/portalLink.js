@@ -4,6 +4,14 @@
 // CORS) hablar con su API desde la app: lo ve la persona en el portal.
 export const PORTAL_BASE = "https://pedidos.procovar.cloud";
 
+// Qué se busca en el portal para un cliente: su código; si no tiene, solo su primer nombre
+// (el portal encuentra mejor con una palabra que con el nombre completo).
+export function portalSearchText({ code, name } = {}) {
+  const trimmedCode = (code || "").trim();
+  if (trimmedCode) return trimmedCode;
+  return (name || "").trim().split(/\s+/)[0] || "";
+}
+
 export function portalSearchUrl(customerName) {
   const name = (customerName || "").trim().replace(/\s+/g, " ");
   if (!name) return null;

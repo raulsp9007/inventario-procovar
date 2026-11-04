@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, Check, ChevronDown, ChevronUp, CircleHelp, Cloud, CloudOff, ExternalLink, Search, Undo2 } from "lucide-react";
 import { formatCUP } from "./money";
 import { formatDateShort, todayStr } from "./dateUtils";
-import { openPortalSearch } from "./portalLink";
+import { openPortalSearch, portalSearchText } from "./portalLink";
 import { flattenOrders, filterOrders } from "./facturadoraData";
 import { clock12, connectionText, newOrdersText } from "./facturadoraText";
 import { playChime } from "./alertSound";
@@ -109,7 +109,7 @@ function OrderCard({ order, readOnly, paused, onConfirm, onUndo }) {
         <button
           type="button"
           aria-label={`Ver en el portal el pedido de ${order.customerName}`}
-          onClick={() => openPortalSearch(order.customerCode || order.customerName, { wide: true })}
+          onClick={() => openPortalSearch(portalSearchText({ code: order.customerCode, name: order.customerName }), { wide: true })}
           style={secondaryButton}
         >
           <ExternalLink size={20} strokeWidth={2.2} aria-hidden="true" />
