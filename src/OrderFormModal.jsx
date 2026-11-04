@@ -45,7 +45,7 @@ export default function OrderFormModal({
   pendingQty, onPendingQtyChange, onAddDraftLine,
   onConfirmOrder,
   pendingReserveConfirm, onConfirmUseReserve, onCancelReserveConfirm,
-  pendingDuplicateConfirm, onConfirmDuplicate, onCancelDuplicateConfirm,
+  pendingDuplicateConfirm, onConfirmDuplicate, onCancelDuplicateConfirm, formError,
   suggestion, onUseSuggestion, onCheckPortal,
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
@@ -611,6 +611,15 @@ export default function OrderFormModal({
 
         {/* Pie fijo */}
         <div style={{ flexShrink: 0, borderTop: "1px solid var(--border-strong)", background: "var(--bg-edit)", padding: "12px 16px 16px" }}>
+            {formError && (
+              <div
+                role="alert"
+                data-order-form-error
+                style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-border)", color: "var(--error-text)", borderRadius: 10, padding: "10px 12px", marginBottom: 10, fontSize: 13.5, fontWeight: 600, lineHeight: 1.4 }}
+              >
+                {formError}
+              </div>
+            )}
             <button
               onClick={onConfirmOrder}
               disabled={!canConfirm}

@@ -334,6 +334,21 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     (isPastCierre(cierreVentasHour) || isSundayStr(todayStr())) ? "manana" : "hoy"
   );
   const [modalOpen, setModalOpen] = useState(false);
+  // Aviso de error del pedido: con la ventana del pedido abierta se ve DENTRO de ella (junto al botón
+  // de guardar); el aviso general de la app queda detrás de la ventana y nadie lo veía.
+  const [formError, setFormError] = useState("");
+  const formErrorTimer = useRef(null);
+  function reportError(message) {
+    if (!modalOpen) {
+      onError(message);
+      return;
+    }
+    setFormError(message);
+    clearTimeout(formErrorTimer.current);
+    formErrorTimer.current = setTimeout(() => setFormError(""), 8000);
+  }
+  useEffect(() => { setFormError(""); }, [modalOpen]);
+  useEffect(() => () => clearTimeout(formErrorTimer.current), []);
   // Bloquea envíos repetidos (doble clic/doble toque) mientras el formulario
   // todavía no reflejó el reset -- el estado de React (customerName, etc.)
   // se actualiza en batch, así que un segundo click puede leer el mismo
@@ -570,6 +585,9 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
   const editedCode = codeEdit && codeEdit.name === typedName ? codeEdit.value : null;
   const shownCode = editedCode !== null ? editedCode : storedCode;
 
+  // Al seguir escribiendo, el aviso de error ya no aplica.
+  useEffect(() => { setFormError(""); }, [customerName, businessName, customerPhone, codeEdit, draftLines, draftBucket, draftDate, isDelivery]);
+
   function resetForm() {
     setCustomerName("");
     setBusinessName("");
@@ -686,7 +704,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     if (!effectiveSelectedProductCode) return;
     const qty = parseInt(pendingQty, 10);
     if (!pendingQty || isNaN(qty) || qty <= 0) {
-      onError("Ingresa una cantidad válida.");
+      reportError("Ingresa una cantidad válida.");
       return;
     }
     setDraftLines((lines) => [...lines, { code: effectiveSelectedProductCode, qty: String(qty) }]);
@@ -797,28 +815,28 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     // pasó, el pedido nuevo no puede ser de hoy.
     if (pastCierreDeVentas && draftBucket === "hoy" && !editingOrderIsHoy) {
       setDraftBucket("manana");
-      onError(todayIsSunday
+      reportError(todayIsSunday
         ? "Los domingos no se despacha: el pedido se guarda para el próximo día hábil. Revísalo y confírmalo de nuevo."
         : "Ya pasó el cierre de ventas: el pedido se guarda para mañana. Revísalo y confírmalo de nuevo.");
       return;
     }
     if (!customerName.trim()) {
-      onError("Ingresa el nombre del cliente.");
+      reportError("Ingresa el nombre del cliente.");
       return;
     }
     const lines = draftLines
       .map((l) => ({ code: l.code, qty: parseInt(l.qty, 10) }))
       .filter((l) => !isNaN(l.qty) && l.qty > 0);
     if (lines.length === 0) {
-      onError("Agrega al menos un producto al pedido.");
+      reportError("Agrega al menos un producto al pedido.");
       return;
     }
     if (draftBucket === "manana" && (!draftDate || draftDate <= today)) {
-      onError("Elegí una fecha futura para el pedido programado.");
+      reportError("Elegí una fecha futura para el pedido programado.");
       return;
     }
     if (draftBucket === "manana" && isSundayStr(draftDate)) {
-      onError("No se despacha los domingos, elegí otro día.");
+      reportError("No se despacha los domingos, elegí otro día.");
       return;
     }
     const reserveDips = [];
@@ -829,7 +847,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         const motivo = draftBucket === "manana"
           ? ` para el ${formatDate(draftDate)} (ya reservado por otros pedidos)`
           : reservedForTomorrow(allOrders, line.code, editingOrderId) > 0 ? " (parte ya está reservada para mañana)" : "";
-        onError(`No hay suficiente stock de ${product ? product.name : line.code}${motivo}.`);
+        reportError(`No hay suficiente stock de ${product ? product.name : line.code}${motivo}.`);
         return;
       }
       const available = computeAvailable(line.code);
@@ -842,7 +860,11 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     const wantedCode = editedCode !== null && editedCode.trim() !== storedCode.trim() ? editedCode.trim() : undefined;
     const codeOwner = wantedCode ? findCustomerByCode(customers, wantedCode, typedName) : null;
     if (codeOwner) {
-      onError(`El código ${wantedCode} ya es de ${codeOwner.name}.`);
+      // Si es el código del mismo cliente del pedido que se está editando y solo cambió el nombre,
+      // se explica cómo renombrarlo.
+      const original = editingOrderId ? allOrders.find((o) => o.orderId === editingOrderId) : null;
+      const renamed = original && original.customerName === codeOwner.name;
+      reportError(`El código ${wantedCode} ya es de ${codeOwner.name}.${renamed ? " Si es el mismo cliente con el nombre corregido, cambia su nombre en Clientes." : ""}`);
       return;
     }
     const draft = { customerName: customerName.trim(), businessName: businessName.trim(), customerPhone: customerPhone.trim(), ...(wantedCode !== undefined ? { customerCode: wantedCode } : {}), isDelivery, note: note.trim(), lines, bucket: draftBucket, date: draftDate };
@@ -1890,6 +1912,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         onConfirmOrder={confirmOrder}
         pendingReserveConfirm={pendingReserveConfirm}
         onConfirmUseReserve={confirmUseReserve}
+        formError={formError}
         onCancelReserveConfirm={cancelReserveConfirm}
         pendingDuplicateConfirm={pendingDuplicateConfirm}
         onConfirmDuplicate={confirmDuplicate}
