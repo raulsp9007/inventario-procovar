@@ -314,22 +314,22 @@ describe("formatOrderForCustomer", () => {
     { code: "M330", name: "Malta Guajira 330ml" },
   ];
 
-  it("arma el mensaje con encabezado en negrita, precio c/u, total en CUP y USD, y cierre -- sin negocio ni remitente", () => {
+  it("arma el mensaje con encabezado en negrita, precio c/u, total en CUP y USD, a nombre de quién se factura y cierre -- sin negocio ni remitente", () => {
     const order = {
-      date: "2026-08-28", isDelivery: false,
+      date: "2026-08-28", isDelivery: false, customerName: "Ana López",
       lines: [{ code: "P1500", qty: 5, unitPrice: 100 }, { code: "M330", qty: 1, unitPrice: 200 }],
     };
     const text = formatOrderForCustomer(order, products, { exchangeRate: 120 });
     expect(text).toBe(
-      "*Tu pedido para 28 ago 2026* (recoger entre 9:00 am y 3:00 pm)\n\n5x Parranda 1500ml (100 CUP c/u)\n1x Malta Guajira 330ml (200 CUP c/u)\n\n*Total:*\n700 CUP\nUS$5.83\n\n¡Gracias por tu compra!"
+      "*Tu pedido para 28 ago 2026* (recoger entre 9:00 am y 3:00 pm)\n\n5x Parranda 1500ml (100 CUP c/u)\n1x Malta Guajira 330ml (200 CUP c/u)\n\n*Total:*\n700 CUP\nUS$5.83\nFacturación a nombre de: Ana López\n¡Gracias por tu compra!"
     );
   });
 
   it("sin tasa de cambio no sale la línea de USD", () => {
-    const order = { date: "2026-08-28", isDelivery: false, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
+    const order = { date: "2026-08-28", isDelivery: false, customerName: "Ana López", lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
     for (const opts of [undefined, {}, { exchangeRate: null }, { exchangeRate: 0 }]) {
       const text = formatOrderForCustomer(order, products, opts);
-      expect(text).toContain("*Total:*\n100 CUP\n\n¡Gracias por tu compra!");
+      expect(text).toContain("*Total:*\n100 CUP\nFacturación a nombre de: Ana López\n¡Gracias por tu compra!");
       expect(text).not.toContain("US$");
     }
   });
@@ -351,6 +351,34 @@ describe("formatOrderForCustomer", () => {
     const order = { date: "2026-08-28", isDelivery: true, lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
     const text = formatOrderForCustomer(order, products);
     expect(text.startsWith("*Tu pedido para 28 ago 2026* (Domicilio)\n")).toBe(true);
+  });
+
+  // Formato pedido: después del total (CUP y USD) va "Facturación a nombre de: ..." y enseguida
+  // el cierre, sin líneas en blanco en medio.
+  it("termina con 'Facturación a nombre de' el cliente y luego el agradecimiento, sin líneas en blanco en medio", () => {
+    const order = { date: "2026-08-28", isDelivery: false, customerName: "Lourdes Pérez Tamayo", lines: [{ code: "P1500", qty: 2, unitPrice: 34865 }] };
+    const text = formatOrderForCustomer(order, products, { exchangeRate: 950 });
+    expect(text.split("\n").slice(-5)).toEqual(["*Total:*", "69.730 CUP", "US$73.40", "Facturación a nombre de: Lourdes Pérez Tamayo", "¡Gracias por tu compra!"]);
+  });
+
+  it("el nombre va tal cual, sin el ícono de la app y sin espacios de más", () => {
+    const order = { date: "2026-08-28", isDelivery: false, customerName: "  Ana   López ", lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
+    const text = formatOrderForCustomer(order, products);
+    expect(text).toContain("Facturación a nombre de: Ana López\n");
+    expect(text).not.toContain("👤");
+  });
+
+  it("también en un pedido a domicilio", () => {
+    const order = { date: "2026-08-28", isDelivery: true, customerName: "Beto Ruiz", lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
+    const text = formatOrderForCustomer(order, products);
+    expect(text).toContain("Facturación a nombre de: Beto Ruiz\n¡Gracias por tu compra!");
+  });
+
+  it("sin nombre del cliente se omite esa línea (no sale vacía)", () => {
+    const order = { date: "2026-08-28", isDelivery: false, customerName: "  ", lines: [{ code: "P1500", qty: 1, unitPrice: 100 }] };
+    const text = formatOrderForCustomer(order, products);
+    expect(text).not.toContain("Facturación a nombre de");
+    expect(text.endsWith("100 CUP\n¡Gracias por tu compra!")).toBe(true);
   });
 
   it("nunca incluye nombre del negocio, nota, ni remitente", () => {

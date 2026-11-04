@@ -196,7 +196,11 @@ export function formatOrderForCustomer(order, products, { exchangeRate } = {}) {
   // mandar "US$0.00".
   const totalUsd = convertToUSD(total, exchangeRate);
   if (totalUsd != null) lines.push(formatUSD(totalUsd));
-  lines.push("", "¡Gracias por tu compra!");
+  // A nombre de quién se factura (el cliente del pedido, tal cual, sin el ícono que la app
+  // le agrega al mostrarlo), y enseguida el cierre, sin líneas en blanco en medio.
+  const billedTo = (order.customerName || "").replace(/\s+/g, " ").trim();
+  if (billedTo) lines.push(`Facturación a nombre de: ${billedTo}`);
+  lines.push("¡Gracias por tu compra!");
   return lines.join("\n");
 }
 

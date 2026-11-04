@@ -323,11 +323,10 @@ export default function ProductsView({
   const lowStockFiltered = lowStockFilterActive
     ? activeProducts.filter((p) => (stock[p.code] || 0) <= lowStockThresholdFor(p))
     : activeProducts;
-  // Un producto en 0 con clientes en espera no se oculta: es justo donde
-  // se necesita ver y manejar esa lista.
-  const hasWaiters = (code) => waitlist.some((w) => w.code === code);
+  // "Ocultar productos en 0" esconde todos los que tienen inventario 0, también los que
+  // tienen clientes en espera: la lista de espera no los mantiene a la vista.
   const visibleProducts = !editMode && hideZeroStock
-    ? lowStockFiltered.filter((p) => (stock[p.code] || 0) > 0 || hasWaiters(p.code))
+    ? lowStockFiltered.filter((p) => (stock[p.code] || 0) > 0)
     : lowStockFiltered;
   // Mover productos solo se puede en modo Ajustar (la vista normal no tiene
   // agarraderas, para no arrastrar sin querer al hacer scroll). dragOrder
@@ -338,7 +337,7 @@ export default function ProductsView({
   const displayedProducts = dragOrder
     ? dragOrder
         .map((code) => activeProducts.find((p) => p.code === code))
-        .filter((p) => p && (editMode || !hideZeroStock || (stock[p.code] || 0) > 0 || hasWaiters(p.code)))
+        .filter((p) => p && (editMode || !hideZeroStock || (stock[p.code] || 0) > 0))
         .filter((p) => !lowStockFilterActive || (stock[p.code] || 0) <= lowStockThresholdFor(p))
     : visibleProducts;
 
