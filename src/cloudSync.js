@@ -172,6 +172,13 @@ export async function flushQueue({ queue, api }) {
 
 const pad = (n) => String(n).padStart(2, "0");
 
+// Franja de un pedido que el propio vendedor confirmó a mano (paso CONF.); con la hora si se guardó.
+export function manualConfirmText(confirmedAt) {
+  const date = confirmedAt ? new Date(confirmedAt) : null;
+  const at = date && !Number.isNaN(date.getTime()) ? ` a las ${pad(date.getHours())}:${pad(date.getMinutes())}` : "";
+  return `Confirmado manualmente${at}`;
+}
+
 // Lo que se ve en la tarjeta del pedido. null si no está en la nube.
 export function chipFor({ entry, queued }) {
   if (entry && entry.rejected) return { state: "rejected", text: entry.rejected };

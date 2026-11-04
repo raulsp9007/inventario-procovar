@@ -18,6 +18,7 @@ export function groupAllOrders(movements) {
         sentAt: m.sentAt || null,
         sentToCustomer: !!m.sentToCustomer,
         confirmed: !!m.confirmed,
+        confirmedAt: m.confirmedAt || null,
         bucket: m.bucket || "hoy",
         orderSeq: m.orderSeq || null,
         manual: !!m.manual,

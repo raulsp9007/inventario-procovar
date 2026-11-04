@@ -98,6 +98,10 @@
   --faint: #716C5B;
   --green: #3C6E4A;
   --on-green: #FFFFFF;
+  /* Franja "Confirmado manualmente": naranja claro, el mismo diseño que la verde de facturación. */
+  --manual-bg: #F7D9AE;
+  --manual-text: #5C3A0C;
+  --manual-accent: #E0A04F;
   --orange: #A65A14;
   --orange-text: #8A5A1E;
   --red: #B4291E;
@@ -167,6 +171,9 @@
   --faint: #9E9885;
   --green: #6FBE8A;
   --on-green: #0F2A1A;
+  --manual-bg: #5A4220;
+  --manual-text: #F7DDB4;
+  --manual-accent: #C98B3E;
   --orange: #E0954A;
   --orange-text: #E0B96A;
   --red: #C4382C;

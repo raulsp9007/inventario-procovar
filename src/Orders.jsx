@@ -15,6 +15,7 @@ import OrderFormModal from "./OrderFormModal.jsx";
 import CierreDeVentasBanner from "./CierreDeVentasBanner.jsx";
 import CierrePendientesBanner from "./CierrePendientesBanner.jsx";
 import CloudCheckBar from "./CloudCheckBar.jsx";
+import { manualConfirmText } from "./cloudSync";
 import { customerLabel, businessLabel } from "./nameLabels";
 import PulseNumber from "./PulseNumber.jsx";
 import { leaveAnimationMs, riseStyle, ENTER_ANIMATION_MS } from "./motion";
@@ -1093,7 +1094,10 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     const cloudRejected = cloudChips[order.orderId] && cloudChips[order.orderId].state === "rejected" ? cloudChips[order.orderId].text : "";
     // Confirmado por la facturadora desde su plataforma (no el que marcó el propio vendedor).
     const cloudConfirmed = cloudChips[order.orderId] && cloudChips[order.orderId].state === "confirmed" ? cloudChips[order.orderId].text : "";
-    const statusColor = isDeleting || cloudRejected ? "var(--red)" : allStepsDone ? "var(--green)" : "var(--orange-2)";
+    // Confirmado a mano por el propio vendedor (paso CONF.), no por la facturadora ni una venta manual:
+    // misma franja que la verde de facturación, en naranja claro.
+    const manualConfirmed = order.confirmed && !order.manual && !cloudConfirmed && !cloudRejected ? manualConfirmText(order.confirmedAt) : "";
+    const statusColor = isDeleting || cloudRejected ? "var(--red)" : manualConfirmed ? "var(--manual-accent)" : allStepsDone ? "var(--green)" : "var(--orange-2)";
     const totalStr = formatCUP(orderTotal(order));
     const [totalNumber, totalUnit] = totalStr.split(" ");
     // Sin tasa cargada no hay USD que mostrar (igual que en el mensaje de WhatsApp).
@@ -1106,7 +1110,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
         style={{
           ...riseStyle(i),
           display: "flex", alignItems: "stretch", background: "var(--surface)",
-          border: `1px solid ${isDeleting || cloudRejected ? "var(--danger)" : cloudConfirmed ? "var(--green)" : "var(--border)"}`,
+          border: `1px solid ${isDeleting || cloudRejected ? "var(--danger)" : cloudConfirmed ? "var(--green)" : manualConfirmed ? "var(--manual-accent)" : "var(--border)"}`,
           borderRadius: 12, overflow: "hidden",
         }}
       >
@@ -1120,6 +1124,16 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
             >
               <CheckCircle2 size={15} strokeWidth={2.2} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
               <span>{cloudConfirmed}</span>
+            </div>
+          )}
+          {manualConfirmed && !isDeleting && (
+            <div
+              role="status"
+              data-manual-confirmed
+              style={{ margin: "-10px -12px 0", padding: "8px 12px", background: "var(--manual-bg)", color: "var(--manual-text)", fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, display: "flex", alignItems: "flex-start", gap: 7 }}
+            >
+              <CheckCircle2 size={15} strokeWidth={2.2} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{manualConfirmed}</span>
             </div>
           )}
           {cloudRejected && (

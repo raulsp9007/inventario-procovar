@@ -1164,7 +1164,10 @@ export function useInventoryStore() {
         next.sent = sent;
         next.sentAt = sent ? nowIso : m.sentAt;
       }
-      if (confirmed !== undefined) next.confirmed = confirmed;
+      if (confirmed !== undefined) {
+        next.confirmed = confirmed;
+        next.confirmedAt = confirmed ? nowIso : null;
+      }
       return next;
     });
     const nextCumulativeRevenue = cumulativeRevenue + revenueDelta;
@@ -1263,7 +1266,7 @@ export function useInventoryStore() {
 
   function markOrderConfirmed(orderId, confirmed) {
     const nextMovements = movements.map((m) =>
-      m.orderId === orderId ? { ...m, confirmed } : m
+      m.orderId === orderId ? { ...m, confirmed, confirmedAt: confirmed ? new Date().toISOString() : null } : m
     );
     setMovements(nextMovements);
     persist({ ...currentPersistedState, movements: nextMovements });
@@ -1276,7 +1279,7 @@ export function useInventoryStore() {
     const idSet = new Set(orderIds);
     const fresh = latestStateRef.current.currentPersistedState;
     const nextMovements = latestStateRef.current.movements.map((m) =>
-      idSet.has(m.orderId) && !!m.confirmed !== confirmed ? { ...m, confirmed } : m
+      idSet.has(m.orderId) && !!m.confirmed !== confirmed ? { ...m, confirmed, confirmedAt: null } : m
     );
     syncLatest({ movements: nextMovements });
     setMovements(nextMovements);
