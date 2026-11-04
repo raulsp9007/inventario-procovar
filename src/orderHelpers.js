@@ -196,7 +196,8 @@ export function formatOrderForCustomer(order, products, { exchangeRate } = {}) {
   // Sin tasa cargada no hay USD que mostrar -- mejor omitir la línea que
   // mandar "US$0.00".
   const totalUsd = convertToUSD(total, exchangeRate);
-  if (totalUsd != null) lines.push(formatUSD(totalUsd));
+  // Debajo del total, el orden es "cantidad MONEDA" tanto para CUP como para USD.
+  if (totalUsd != null) lines.push(`${formatUSD(totalUsd).replace("US$", "")} USD`);
   // A nombre de quién se factura (el cliente del pedido, tal cual, sin el ícono que la app
   // le agrega al mostrarlo), y enseguida el cierre, sin líneas en blanco en medio.
   const billedTo = (order.customerName || "").replace(/\s+/g, " ").trim();

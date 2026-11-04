@@ -321,7 +321,7 @@ describe("formatOrderForCustomer", () => {
     };
     const text = formatOrderForCustomer(order, products, { exchangeRate: 120 });
     expect(text).toBe(
-      "*Tu pedido para 28 ago 2026* (recoger entre 9:00 am y 3:00 pm)\n\n5x Parranda 1500ml (100 CUP c/u)\n1x Malta Guajira 330ml (200 CUP c/u)\n\n*Total:*\n700 CUP\nUS$5.83\nFacturación a nombre de: Ana López\n¡Gracias por tu compra!"
+      "*Tu pedido para 28 ago 2026* (recoger entre 9:00 am y 3:00 pm)\n\n5x Parranda 1500ml (100 CUP c/u)\n1x Malta Guajira 330ml (200 CUP c/u)\n\n*Total:*\n700 CUP\n5.83 USD\nFacturación a nombre de: Ana López\n¡Gracias por tu compra!"
     );
   });
 
@@ -330,7 +330,7 @@ describe("formatOrderForCustomer", () => {
     for (const opts of [undefined, {}, { exchangeRate: null }, { exchangeRate: 0 }]) {
       const text = formatOrderForCustomer(order, products, opts);
       expect(text).toContain("*Total:*\n100 CUP\nFacturación a nombre de: Ana López\n¡Gracias por tu compra!");
-      expect(text).not.toContain("US$");
+      expect(text).not.toContain("USD");
     }
   });
 
@@ -358,7 +358,7 @@ describe("formatOrderForCustomer", () => {
   it("termina con 'Facturación a nombre de' el cliente y luego el agradecimiento, sin líneas en blanco en medio", () => {
     const order = { date: "2026-08-28", isDelivery: false, customerName: "Lourdes Pérez Tamayo", lines: [{ code: "P1500", qty: 2, unitPrice: 34865 }] };
     const text = formatOrderForCustomer(order, products, { exchangeRate: 950 });
-    expect(text.split("\n").slice(-5)).toEqual(["*Total:*", "69.730 CUP", "US$73.40", "Facturación a nombre de: Lourdes Pérez Tamayo", "¡Gracias por tu compra!"]);
+    expect(text.split("\n").slice(-5)).toEqual(["*Total:*", "69.730 CUP", "73.40 USD", "Facturación a nombre de: Lourdes Pérez Tamayo", "¡Gracias por tu compra!"]);
   });
 
   it("el nombre va tal cual, sin el ícono de la app y sin espacios de más", () => {
