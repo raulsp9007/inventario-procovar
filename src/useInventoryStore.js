@@ -1029,6 +1029,17 @@ export function useInventoryStore() {
       ? nextOrderSeq(movements, date, orderId)
       : originalMovements[0].orderSeq;
 
+    // Editar no borra las marcas del pedido: "Enviado al cliente" y la hora de facturado se conservan.
+    // "Confirmado" se conserva solo si lo marcó el propio vendedor (trae su hora) y el pedido sigue
+    // facturado; la que vino de facturación se quita, porque la facturadora tiene que volver a
+    // confirmar lo editado (la nube lo vuelve a pedir), y al pasar a "Para mañana" ya no hay facturado.
+    const keptSteps = {
+      sentToCustomer: !!originalMovements[0].sentToCustomer,
+      ...(nextSent && originalMovements[0].sentAt ? { sentAt: originalMovements[0].sentAt } : {}),
+      ...(nextSent && originalMovements[0].confirmed && originalMovements[0].confirmedAt
+        ? { confirmed: true, confirmedAt: originalMovements[0].confirmedAt }
+        : {}),
+    };
     const nextStock = { ...restoredStock };
     const newMovements = [];
     let addedRevenue = 0;
@@ -1037,7 +1048,7 @@ export function useInventoryStore() {
       const unitPrice = priceToCUP(prices[code], exchangeRate);
       const product = products.find((p) => p.code === code);
       const unitHl = hlPerFormat(product, productFormats);
-      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone ? toCubanPhone(customerPhone) : "", isDelivery, note, bucket, date, sent: nextSent, timestamp: originalMovements[0].timestamp }));
+      newMovements.push(makeMovement(code, "venta", qty, { unitPrice, unitHl, exchangeRate, orderId, orderSeq, customerName, businessName: businessName || "", customerPhone: customerPhone ? toCubanPhone(customerPhone) : "", isDelivery, note, bucket, date, sent: nextSent, ...keptSteps, timestamp: originalMovements[0].timestamp }));
       if (willBeCommitted) {
         nextStock[code] = (nextStock[code] || 0) - qty;
         addedRevenue += qty * unitPrice;
