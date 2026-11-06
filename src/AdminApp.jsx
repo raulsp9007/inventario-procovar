@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import SalesSummary from "./SalesSummary.jsx";
+import { clock12 } from "./cierreFacturacion";
 import { Copy, RefreshCw, Power, Check } from "lucide-react";
 import { useAdmin } from "./useAdmin";
 import { makeLinkCode } from "./linkCode";
@@ -301,6 +302,50 @@ function ScheduleCard({ schedule, busy, onSave }) {
   );
 }
 
+// Cierre de facturación del día: una hora; pasada esa hora ya no se envían pedidos para hoy (sí para
+// otro día). Aparte del horario del sitio, que pausa todo.
+function CierreCard({ cierre, busy, onSave }) {
+  const [enabled, setEnabled] = useState(cierre.activo);
+  const [time, setTime] = useState(cierre.hora);
+  const [error, setError] = useState("");
+  useEffect(() => { setEnabled(cierre.activo); setTime(cierre.hora); }, [cierre.activo, cierre.hora]);
+  const changed = enabled !== cierre.activo || time !== cierre.hora;
+
+  async function save() {
+    setError("");
+    if (!time) {
+      setError("Elige la hora de cierre.");
+      return;
+    }
+    await onSave({ activo: enabled, hora: time });
+  }
+
+  const field = { height: 36, border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", fontSize: 14, fontFamily: "inherit", background: "var(--surface)", color: "var(--text)" };
+  return (
+    <div role="group" aria-label="Cierre de facturación del día" style={{ ...card, marginTop: 10 }}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Cierre de facturación del día</div>
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+        Pasada esta hora, en la hora de Cuba, los vendedores ya no pueden enviar pedidos para hoy. Los pedidos para otro día sí se pueden enviar, y también borrar o pasar para mañana.
+      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 10 }}>
+        <input type="checkbox" aria-label="Activar el cierre del día" checked={enabled} onChange={(e) => { setEnabled(e.target.checked); setError(""); }} />
+        Activar el cierre del día
+      </label>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
+          Cierra a las
+          <input type="time" aria-label="Hora de cierre" value={time} onChange={(e) => { setTime(e.target.value); setError(""); }} style={field} />
+        </label>
+        {changed && <button type="button" disabled={busy} onClick={save} style={primary}>Guardar cierre</button>}
+      </div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 10 }}>
+        {cierre.activo ? `Cierra a las ${clock12(cierre.hora)}. ${cierre.cerrado ? "Ahora: ya cerró." : "Ahora: abierto."}` : "Sin cierre: se puede enviar pedidos para hoy a cualquier hora."}
+      </div>
+      {error && <div role="alert" style={{ fontSize: 13, color: "var(--error-text)", marginTop: 8 }}>{error}</div>}
+    </div>
+  );
+}
+
 export default function AdminApp() {
   useTheme();
   const admin = useAdmin();
@@ -404,6 +449,7 @@ export default function AdminApp() {
             <ScheduleCard schedule={admin.schedule} busy={admin.busy} onSave={admin.saveSchedule} />
           </>
         )}
+        {admin.cierre && <CierreCard cierre={admin.cierre} busy={admin.busy} onSave={admin.saveCierre} />}
 
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "18px 2px 8px" }}>VENTAS POR DÍA</div>
         <SalesSummary load={admin.loadSales} />

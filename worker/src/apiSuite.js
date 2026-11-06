@@ -650,6 +650,106 @@ export function apiSuite(label, makeStore) {
       });
     });
 
+    // Cierre de facturación del día: pasada esa hora el vendedor ya no envía pedidos de hoy (sí de otro
+    // día, y puede borrarlos o pasarlos para mañana). Es aparte del horario del sitio, que lo pausa todo.
+    describe("cierre de facturación del día", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const setCierre = (body) => admin("PUT", "/cierre", body);
+      const VIERNES_7AM = "2026-10-30T11:00:00.000Z";
+      const VIERNES_11AM = "2026-10-30T15:00:00.000Z";
+      const MENSAJE = "La facturación de hoy cerró a las 10:00 a. m. Pasa el pedido para mañana.";
+
+      it("al principio no hay cierre; solo el administrador lo ve y lo cambia", async () => {
+        expect((await admin("GET", "/cierre")).json).toEqual({ activo: false, hora: "15:00", cerrado: false, mensaje: "" });
+        expect((await call("GET", "/admin/cierre")).status).toBe(401);
+        for (const token of ["tok-carlos", "tok-fact"]) {
+          expect((await call("GET", "/admin/cierre", { token })).status).toBe(403);
+          expect((await call("PUT", "/admin/cierre", { token, body: { activo: true, hora: "10:00" } })).status).toBe(403);
+        }
+      });
+
+      it("el administrador lo activa con una hora y queda guardado; se puede cambiar una sola cosa", async () => {
+        clock = VIERNES_7AM;
+        expect((await setCierre({ activo: true, hora: "10:00" })).json).toEqual({ activo: true, hora: "10:00", cerrado: false, mensaje: "" });
+        expect((await setCierre({ hora: "11:30" })).json).toMatchObject({ activo: true, hora: "11:30" });
+        expect((await setCierre({ activo: false })).json).toMatchObject({ activo: false, hora: "11:30" });
+        expect((await admin("GET", "/cierre")).json).toMatchObject({ activo: false, hora: "11:30" });
+      });
+
+      it("valida la hora (400 con el motivo)", async () => {
+        for (const bad of [{ hora: "9:00" }, { hora: "25:00" }, { activo: "si" }]) {
+          const r = await setCierre({ activo: true, hora: "10:00", ...bad });
+          expect(r.status).toBe(400);
+          expect(r.json.error).toBeTruthy();
+        }
+        expect((await call("PUT", "/admin/cierre", { token: "tok-admin" })).status).toBe(400);
+      });
+
+      it("pasada la hora no se envían pedidos de hoy (409 con el motivo), pero antes sí", async () => {
+        await setCierre({ activo: true, hora: "10:00" });
+        clock = VIERNES_7AM;
+        expect((await put("o1", order())).status).toBe(200);
+        clock = VIERNES_11AM;
+        const closed = await put("o2", order());
+        expect(closed.status).toBe(409);
+        expect(closed.json.error).toBe(MENSAJE);
+      });
+
+      it("pasada la hora tampoco se cambia un pedido de hoy que ya estaba en la nube", async () => {
+        clock = VIERNES_7AM;
+        await put("o1", order());
+        await setCierre({ activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        expect((await put("o1", order({ total: 9999 }))).status).toBe(409);
+      });
+
+      it("pasada la hora sí se pueden enviar pedidos de otro día", async () => {
+        await setCierre({ activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        expect((await put("o3", order({ date: "2026-10-31" }))).status).toBe(200);
+      });
+
+      it("pasada la hora el vendedor puede borrar y confirmar a mano, y la facturadora confirmar", async () => {
+        clock = VIERNES_7AM;
+        await put("o1", order());
+        await put("o2", order({ customerName: "Beto Ruiz" }));
+        await setCierre({ activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        expect((await call("POST", "/orders/o1/confirm", { token: "tok-carlos" })).status).toBe(200);
+        expect((await call("DELETE", "/orders/o2", { token: "tok-carlos" })).status).toBe(200);
+        expect((await call("POST", "/orders/confirm", { token: "tok-fact", body: { ids: ["o1"] } })).status).toBe(200);
+      });
+
+      it("con el cierre apagado se envía a cualquier hora", async () => {
+        await setCierre({ activo: false, hora: "10:00" });
+        clock = VIERNES_11AM;
+        expect((await put("o1", order())).status).toBe(200);
+      });
+
+      it("si el sitio está pausado por el horario, manda el 423 del horario", async () => {
+        await setCierre({ activo: true, hora: "10:00" });
+        await admin("PUT", "/schedule", { activo: true, abre: "12:00", cierra: "15:00" });
+        clock = VIERNES_11AM;
+        expect((await put("o1", order())).status).toBe(423);
+      });
+
+      it("la lista del vendedor trae el cierre, para avisarle antes de enviar", async () => {
+        await setCierre({ activo: true, hora: "10:00" });
+        clock = VIERNES_7AM;
+        expect((await call("GET", "/orders/status", { token: "tok-carlos" })).json.cierre).toEqual({ activo: true, hora: "10:00", cerrado: false, mensaje: "" });
+        clock = VIERNES_11AM;
+        expect((await call("GET", "/orders/status", { token: "tok-carlos" })).json.cierre).toEqual({ activo: true, hora: "10:00", cerrado: true, mensaje: MENSAJE });
+      });
+
+      it("CORS: el sitio recibe sus cabeceras al ser rechazado por el cierre", async () => {
+        await setCierre({ activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        const r = await call("PUT", "/orders/o1", { token: "tok-carlos", body: order(), origin: ORIGIN });
+        expect(r.status).toBe(409);
+        expect(r.headers.get("Access-Control-Allow-Origin")).toBe(ORIGIN);
+      });
+    });
+
     describe("horario de facturación", () => {
       const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
       const setSchedule = (body) => admin("PUT", "/schedule", body);

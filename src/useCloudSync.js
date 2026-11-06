@@ -20,6 +20,9 @@ const MESSAGES = {
   server: "La nube tuvo un problema. Se reintentará.",
 };
 
+// Cuánto se espera la respuesta del buzón al revisar el cierre antes de enviar un pedido.
+const CIERRE_CHECK_MS = 2500;
+
 // `ready`: la app ya cargó sus datos. Mientras no, la lista de pedidos está vacía
 // y sincronizar sería consultar la nube sin nada que subir.
 export function useCloudSync({
@@ -67,10 +70,12 @@ export function useCloudSync({
     let pulled = false;
     let lastCheck = null;
     let horario;
+    let cierre;
     if (!stopped && pull) {
       try {
         const data = await api.statusSince(cloudRef.current.since);
         horario = data.horario || null;
+        cierre = data.cierre || null;
         const { orders: ordersNow, setOrdersConfirmed: confirmOrders } = propsRef.current;
         const result = applyStatuses({ rows: data.orders, orders: ordersNow, map: cloudRef.current.map });
         if (result.toConfirm.length > 0) confirmOrders(result.toConfirm, true);
@@ -88,6 +93,7 @@ export function useCloudSync({
       phase: stopped ? (stopped === "network" ? "offline" : stopped === "auth" ? "auth" : stopped === "closed" ? "closed" : "error") : "ok",
       message: stopped ? (stopped === "closed" ? stoppedMessage : MESSAGES[stopped] || MESSAGES.server) : "",
       horario: horario === undefined ? prev.horario : horario,
+      cierre: cierre === undefined ? prev.cierre : cierre,
       lastSyncAt: pulled ? Date.now() : prev.lastSyncAt,
       rejected: rejected.length > 0 ? rejected : prev.rejected,
       lastCheck: lastCheck || prev.lastCheck,
@@ -161,6 +167,27 @@ export function useCloudSync({
   }, []);
 
   const setEnabled = useCallback((enabled) => commit({ enabled }), [commit]);
+
+  // Cierre de facturación del día, al momento: se pregunta al buzón justo antes de enviar un pedido de
+  // hoy (no al abrir la app). Sin conexión, o si el buzón tarda, vale lo último que se supo.
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  const checkCierre = useCallback(async () => {
+    const current = cloudRef.current;
+    const lastKnown = statusRef.current.cierre || null;
+    if (!current.link || !current.enabled) return lastKnown;
+    try {
+      const api = propsRef.current.createApi({ url: current.link.url, token: current.link.token });
+      const timeout = new Promise((resolve) => { setTimeout(() => resolve(null), CIERRE_CHECK_MS); });
+      const data = await Promise.race([api.statusSince(new Date().toISOString()), timeout]);
+      if (!data) return lastKnown;
+      const cierre = data.cierre || null;
+      setStatus((prev) => ({ ...prev, cierre }));
+      return cierre;
+    } catch {
+      return lastKnown;
+    }
+  }, []);
   // "Comprobar": sube lo pendiente y consulta lo que confirmó la facturadora.
   const syncNow = useCallback(async () => {
     setChecking(true);
@@ -197,6 +224,9 @@ export function useCloudSync({
     pendingCount: cloud.queue.length,
     chips,
     closedMessage,
+    // Cierre de facturación del día ({ activo, hora, ... }), o null si todavía no se sabe.
+    cierre: status.cierre || null,
+    checkCierre,
     linkWith,
     unlink,
     setEnabled,

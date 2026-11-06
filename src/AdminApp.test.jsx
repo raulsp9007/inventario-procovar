@@ -26,6 +26,7 @@ function installFetch() {
     facturadora: { id: "fact", name: "Facturadora", token: "f".repeat(24) },
     accounts: { facturacion: null, supervision: null },
     schedule: { activo: false, abre: "09:00", cierra: "15:00", abierto: true, mensaje: "" },
+    cierre: { activo: false, hora: "15:00", cerrado: false, mensaje: "" },
     nextToken: 1,
   };
   const sorted = () => [...server.vendors].sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -48,6 +49,11 @@ function installFetch() {
       const next = { ...server.schedule, activo: body.activo, abre: body.abre, cierra: body.cierra };
       server.schedule = { ...next, abierto: !next.activo, mensaje: next.activo ? "La facturación está cerrada. Abre hoy a las 9:00 a. m." : "" };
       return reply(server.schedule);
+    }
+    if (path === "/admin/cierre" && init.method === "GET") return reply(server.cierre);
+    if (path === "/admin/cierre" && init.method === "PUT") {
+      server.cierre = { activo: body.activo, hora: body.hora, cerrado: false, mensaje: "" };
+      return reply(server.cierre);
     }
     if (path.startsWith("/summary")) return reply(server.summary || { fecha: "2026-10-30", vendedores: [], productos: [], totales: { pedidos: 0, unidades: 0 } });
     const acc = path.match(/^\/admin\/accounts\/([^/]+)$/);
@@ -494,5 +500,56 @@ describe("administración: ventas por día", () => {
     await waitFor(() => expect(within(region).getAllByText("2 pedidos · 80 unidades").length).toBeGreaterThan(0));
     expect(within(region).getByRole("group", { name: "Ventas de Raul" })).toBeTruthy();
     expect(calls.some((c) => c.method === "GET" && c.path.startsWith("/summary?fecha="))).toBe(true);
+  });
+});
+
+// Cierre de facturación del día: una hora; pasada esa hora ya no se envían pedidos para hoy (sí para
+// otro día). Aparte del horario del sitio.
+describe("administración: cierre de facturación del día", () => {
+  const card = () => screen.findByRole("group", { name: "Cierre de facturación del día" });
+  const putCierre = () => calls.filter((c) => c.method === "PUT" && c.path === "/admin/cierre");
+
+  it("muestra la hora guardada, apagado al principio, y explica qué hace", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Hora de cierre").value).toBe("15:00"));
+    expect(within(group).getByLabelText("Activar el cierre del día").checked).toBe(false);
+    expect(within(group).getByText(/sin cierre/i)).toBeTruthy();
+    expect(within(group).getByText(/para otro día/i)).toBeTruthy();
+    expect(within(group).queryByRole("button", { name: "Guardar cierre" })).toBeNull();
+  });
+
+  it("activarlo y cambiar la hora lo guarda", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Hora de cierre").value).toBe("15:00"));
+    fireEvent.click(within(group).getByLabelText("Activar el cierre del día"));
+    fireEvent.change(within(group).getByLabelText("Hora de cierre"), { target: { value: "14:00" } });
+    fireEvent.click(within(group).getByRole("button", { name: "Guardar cierre" }));
+    await waitFor(() => expect(putCierre()).toEqual([{ method: "PUT", path: "/admin/cierre", body: { activo: true, hora: "14:00" } }]));
+    await waitFor(() => expect(within(group).queryByRole("button", { name: "Guardar cierre" })).toBeNull());
+    expect(within(group).getByText(/2:00 p\. m\./)).toBeTruthy();
+  });
+
+  it("con el cierre activo dice a qué hora cierra y si ya cerró", async () => {
+    server.cierre = { activo: true, hora: "10:00", cerrado: true, mensaje: "La facturación de hoy cerró a las 10:00 a. m. Pasa el pedido para mañana." };
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Activar el cierre del día").checked).toBe(true));
+    expect(within(group).getByText(/Ahora: ya cerró/)).toBeTruthy();
+  });
+
+  it("no manda una hora vacía", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Hora de cierre").value).toBe("15:00"));
+    fireEvent.change(within(group).getByLabelText("Hora de cierre"), { target: { value: "" } });
+    fireEvent.click(within(group).getByRole("button", { name: "Guardar cierre" }));
+    expect(await within(group).findByText("Elige la hora de cierre.")).toBeTruthy();
+    expect(putCierre()).toHaveLength(0);
   });
 });

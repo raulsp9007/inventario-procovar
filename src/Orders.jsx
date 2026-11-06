@@ -5,6 +5,7 @@ import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { sendSupervisorSummary } from "./supervisorSummary";
 import ReorderSuggestions from "./ReorderSuggestions.jsx";
 import { openPortalSearch, portalSearchText } from "./portalLink";
+import { cierreBlockMessage } from "./cierreFacturacion";
 import { customersToContact, buildCustomerProfile, availableTypical, formatReorderMessage } from "./recommendations";
 import { groupAllOrders, formatOrderForWhatsApp, formatOrderForCustomer, isCommittedOrder, reservedForTomorrow, isPastCierre, getCierrePending, findSameDayOrders, billedByProduct } from "./orderHelpers";
 import { matchCustomerNames, getCustomerOrders, findNearDuplicateCustomerName, toCubanPhone, cubanPhoneLocalPart } from "./customerHelpers";
@@ -668,6 +669,23 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     openPortalSearch(portalSearchText({ code: shownCode, name: customerName }));
   }
 
+  // Marcar un pedido como enviado a facturación. Con "Facturar a la nube", pasada la hora de cierre
+  // del día (la pone el administrador) un pedido de hoy ya no se envía: se avisa y queda para
+  // mañana. Los de otro día, y los de domicilio (van al supervisor), no se bloquean.
+  // Antes de enviar un pedido de hoy se le pregunta al buzón por el cierre (con lo último que se
+  // supo como respaldo si no hay conexión).
+  async function requestMarkSent(order) {
+    if (billToCloud && !order.isDelivery && order.date === today && cloud) {
+      const closed = cierreBlockMessage(cloud.checkCierre ? await cloud.checkCierre() : cloud.cierre);
+      if (closed) {
+        onError(closed);
+        return false;
+      }
+    }
+    onMarkSent(order.orderId, true);
+    return true;
+  }
+
   function useFormSuggestion() {
     if (!formSuggestion) return;
     setDraftLines(formSuggestion.lines.map((l) => ({ code: l.code, qty: String(l.qty) })));
@@ -1308,7 +1326,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
               <OrderStepTrack
                 order={order}
                 onMarkSentToCustomer={onMarkSentToCustomer}
-                onMarkSent={onMarkSent}
+                onMarkSent={() => requestMarkSent(order)}
                 onMarkConfirmed={onMarkConfirmed}
                 onSetOrderSteps={onSetOrderSteps}
                 expanded={expandedCompletedTrackers.has(order.orderId)}
@@ -1367,6 +1385,11 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
                   onClick={() => {
                     // "Facturar a la nube": el pedido (que no es a domicilio) solo se
                     // marca facturado; la nube se lo lleva a la facturadora, sin WhatsApp.
+                    // Pasada la hora de cierre del día, un pedido de hoy no se envía.
+                    if (billToCloud && !order.isDelivery) {
+                      requestMarkSent(order);
+                      return;
+                    }
                     if (!(billToCloud && !order.isDelivery)) {
                       openOrderWhatsApp(order, products, order.isDelivery ? supervisorPhone : whatsappPhone, senderOptions);
                     }

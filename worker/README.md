@@ -130,6 +130,17 @@ cerrado. Fuera de horario se **pausa el sitio**:
 Ver pedidos, el administrador y la supervisión siguen funcionando. Sin el horario activado el
 sitio está abierto a cualquier hora (así queda al principio).
 
+## Cierre de facturación del día
+
+Aparte del horario, el administrador puede poner **una hora de cierre del día** (tarjeta "Cierre de
+facturación del día", `GET/PUT /admin/cierre`, hora de Cuba). Pasada esa hora el vendedor ya no
+puede enviar a facturación un pedido **de hoy** (el buzón responde 409 con el motivo, y la tarjeta
+del pedido lo muestra en rojo); los pedidos **de otro día** sí se pueden enviar, y también borrar,
+confirmar a mano o pasar para mañana. La facturadora sigue confirmando lo que ya llegó. La app del
+vendedor pregunta el cierre justo al tocar FACT. y avisa antes de marcar el pedido. Sin activarlo,
+no hay cierre (así queda al principio). No hace falta tocar la base de datos: se guarda como un
+ajuste más. Para que funcione hay que volver a publicar el buzón (`npx wrangler deploy`).
+
 ## Ventas por día
 
 El buzón cuenta lo enviado a facturación cada día (confirmado o no; sin cancelados), producto por

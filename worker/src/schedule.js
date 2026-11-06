@@ -66,3 +66,33 @@ export function scheduleStatus(schedule, nowIso) {
   const when = tomorrow === 0 ? `el ${DAYS[1]}` : `mañana ${DAYS[tomorrow]}`;
   return { ...base, abierto: false, mensaje: `La facturación está cerrada. Abre ${when} a las ${opens}` };
 }
+
+// Cierre de facturación del día: pasada esta hora ya no se envían pedidos para hoy (sí para otro día;
+// borrar y confirmar siguen). Es aparte del horario del sitio, que lo pausa todo. Hora de Cuba.
+export const DEFAULT_CIERRE = { enabled: false, time: "15:00" };
+
+// Valida lo que manda el administrador: { value } o { error }.
+export function validateCierre(input) {
+  const body = input && typeof input === "object" ? input : {};
+  if (typeof body.enabled !== "boolean") return { error: "Activo debe ser verdadero o falso." };
+  if (typeof body.time !== "string" || !TIME_PATTERN.test(body.time)) return { error: "La hora de cierre no es válida (formato HH:MM)." };
+  return { value: { enabled: body.enabled, time: body.time } };
+}
+
+// Lo guardado (texto JSON) como cierre; si falta o está roto, el valor por defecto (apagado).
+export function parseCierre(raw) {
+  if (typeof raw !== "string") return { ...DEFAULT_CIERRE };
+  try {
+    const { value } = validateCierre(JSON.parse(raw));
+    return value || { ...DEFAULT_CIERRE };
+  } catch {
+    return { ...DEFAULT_CIERRE };
+  }
+}
+
+// Cómo está el cierre ahora: { activo, hora, cerrado, mensaje }.
+export function cierreStatus(cierre, nowIso) {
+  const base = { activo: !!cierre.enabled, hora: cierre.time };
+  if (!cierre.enabled || cubaClock(nowIso).minutes < toMinutes(cierre.time)) return { ...base, cerrado: false, mensaje: "" };
+  return { ...base, cerrado: true, mensaje: `La facturación de hoy cerró a las ${formatTime12(cierre.time)} Pasa el pedido para mañana.` };
+}

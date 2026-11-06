@@ -3,7 +3,7 @@
 // Ver docs/superpowers/specs/2026-10-30-facturacion-nube-design.md.
 
 import { mergeUsers, vendorsView, freeId, nameKey } from "./roster.js";
-import { cubaDate, parseSchedule, scheduleStatus, validateSchedule } from "./schedule.js";
+import { cubaDate, parseSchedule, scheduleStatus, validateSchedule, parseCierre, cierreStatus, validateCierre } from "./schedule.js";
 import {
   ACCOUNT_ROLES, MAX_FAILS, LOCK_MS, SESSION_MS, accountView, hashPassword, hashToken, parseAccountInput, usernameKey, verifyPassword,
 } from "./accounts.js";
@@ -183,6 +183,7 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   // Horario de facturación: fuera de horario se pausa lo que el vendedor envía, borra o confirma a
   // mano, y lo que la facturadora confirma o deshace. Ver pedidos y todo lo del administrador sigue.
   const loadSchedule = async () => parseSchedule(await store.getSetting("horario"));
+  const loadCierre = async () => parseCierre(await store.getSetting("cierre"));
   const vendorWrite = user.role === "vendedor" && method !== "GET" && (path === "/orders" || path.startsWith("/orders/"));
   const factWrite = user.role === "facturadora" && method === "POST" && (path === "/orders/confirm" || path === "/orders/unconfirm");
   if (vendorWrite || factWrite) {
@@ -227,7 +228,7 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     const denied = only("vendedor");
     if (denied) return denied;
     const orders = await store.listBySeller(user.id, url.searchParams.get("since") || "");
-    return reply(origin, { now: stamp, orders: orders.map(statusRow), horario: scheduleStatus(await loadSchedule(), stamp) });
+    return reply(origin, { now: stamp, orders: orders.map(statusRow), horario: scheduleStatus(await loadSchedule(), stamp), cierre: cierreStatus(await loadCierre(), stamp) });
   }
 
   const one = path.match(/^\/orders\/([^/]+)$/);
@@ -242,6 +243,10 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
     const parsed = parseOrder(read.body);
     if (parsed.error) return fail(origin, 400, parsed.error);
+    // Cierre de facturación del día: pasada la hora no se envía ni se cambia un pedido de hoy (los de
+    // otro día sí). Es aparte del horario del sitio, que ya se revisó arriba.
+    const cierre = cierreStatus(await loadCierre(), stamp);
+    if (cierre.cerrado && parsed.value.date === cubaDate(stamp)) return fail(origin, 409, cierre.mensaje);
 
     const existing = await store.get(id);
     if (existing && existing.sellerId !== user.id) return fail(origin, 403, "Ese pedido es de otro vendedor.");
@@ -342,6 +347,24 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   if (path.startsWith("/admin/")) {
     const denied = only("admin");
     if (denied) return denied;
+
+    if (path === "/admin/cierre") {
+      const current = await loadCierre();
+      if (method === "GET") return reply(origin, cierreStatus(current, stamp));
+      if (method === "PUT") {
+        const read = await readJson(request);
+        if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
+        const body = read.body && typeof read.body === "object" ? read.body : {};
+        const checked = validateCierre({
+          enabled: body.activo === undefined ? current.enabled : body.activo,
+          time: body.hora === undefined ? current.time : body.hora,
+        });
+        if (checked.error) return fail(origin, 400, checked.error);
+        await store.putSetting("cierre", JSON.stringify(checked.value));
+        return reply(origin, cierreStatus(checked.value, stamp));
+      }
+      return fail(origin, 404, "No existe esa ruta.");
+    }
 
     if (path === "/admin/schedule") {
       const current = await loadSchedule();

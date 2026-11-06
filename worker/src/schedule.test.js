@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { DEFAULT_SCHEDULE, parseSchedule, scheduleStatus, validateSchedule } from "./schedule";
+import { DEFAULT_SCHEDULE, DEFAULT_CIERRE, parseSchedule, scheduleStatus, validateSchedule, validateCierre, parseCierre, cierreStatus } from "./schedule";
 
 // Horario de facturación: un solo horario (apertura y cierre) de lunes a sábado, en la hora de
 // Cuba; el domingo está cerrado. Fuera de horario se pausa el sitio. Sin horario activado,
@@ -89,5 +89,51 @@ describe("cubaDate", () => {
     expect(cubaDate("2026-10-30T15:00:00.000Z")).toBe("2026-10-30");
     expect(cubaDate("2026-10-31T02:30:00.000Z")).toBe("2026-10-30");
     expect(cubaDate("2026-10-31T04:00:00.000Z")).toBe("2026-10-31");
+  });
+});
+
+// Cierre de facturación del día: pasada esa hora ya no se envían pedidos para hoy (sí para otro día).
+// Es aparte del horario del sitio, que pausa todo. Hora de Cuba.
+describe("cierreStatus", () => {
+  const cierre = { enabled: true, time: "10:00" };
+
+  it("sin activar nunca está cerrado", () => {
+    expect(DEFAULT_CIERRE).toEqual({ enabled: false, time: "15:00" });
+    expect(cierreStatus(DEFAULT_CIERRE, VIERNES_4_30PM)).toEqual({ activo: false, hora: "15:00", cerrado: false, mensaje: "" });
+  });
+
+  it("antes de la hora, abierto", () => {
+    expect(cierreStatus(cierre, VIERNES_7AM)).toEqual({ activo: true, hora: "10:00", cerrado: false, mensaje: "" });
+  });
+
+  it("a la hora en punto y después, cerrado, con el motivo", () => {
+    const msg = "La facturación de hoy cerró a las 10:00 a. m. Pasa el pedido para mañana.";
+    expect(cierreStatus(cierre, VIERNES_11AM)).toEqual({ activo: true, hora: "10:00", cerrado: true, mensaje: msg });
+    expect(cierreStatus(cierre, "2026-10-30T14:00:00.000Z").cerrado).toBe(true); // 10:00 en Cuba
+    expect(cierreStatus(cierre, "2026-10-30T13:59:00.000Z").cerrado).toBe(false); // 9:59
+  });
+
+  it("las horas de la tarde se dicen en 12 horas", () => {
+    expect(cierreStatus({ enabled: true, time: "15:30" }, VIERNES_4_30PM).mensaje).toContain("3:30 p. m.");
+  });
+});
+
+describe("validateCierre y parseCierre", () => {
+  it("acepta una hora HH:MM y activo verdadero o falso", () => {
+    expect(validateCierre({ enabled: true, time: "14:30" })).toEqual({ value: { enabled: true, time: "14:30" } });
+  });
+
+  it("rechaza horas mal escritas o un activo que no es verdadero o falso", () => {
+    expect(validateCierre({ enabled: true, time: "9:00" }).error).toBeTruthy();
+    expect(validateCierre({ enabled: true, time: "25:00" }).error).toBeTruthy();
+    expect(validateCierre({ enabled: "si", time: "10:00" }).error).toBeTruthy();
+    expect(validateCierre(null).error).toBeTruthy();
+  });
+
+  it("parseCierre lee lo guardado, y con algo roto vuelve al valor por defecto", () => {
+    expect(parseCierre(JSON.stringify({ enabled: true, time: "12:00" }))).toEqual({ enabled: true, time: "12:00" });
+    expect(parseCierre(undefined)).toEqual(DEFAULT_CIERRE);
+    expect(parseCierre("no es json")).toEqual(DEFAULT_CIERRE);
+    expect(parseCierre(JSON.stringify({ enabled: true, time: "xx" }))).toEqual(DEFAULT_CIERRE);
   });
 });
