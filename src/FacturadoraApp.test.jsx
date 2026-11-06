@@ -79,7 +79,7 @@ function installFetch() {
       }));
       return ok(confirming ? { confirmed: ids, missing: [] } : { unconfirmed: ids, missing: [] });
     }
-    if (path.startsWith("/orders")) return ok({ now: "2026-10-30T16:00:00.000Z", sellers: server.sellers, ...(server.horario ? { horario: server.horario } : {}) });
+    if (path.startsWith("/orders")) return ok({ now: "2026-10-30T16:00:00.000Z", sellers: server.sellers, ...(server.horario ? { horario: server.horario } : {}), ...(server.dia ? { dia: server.dia, hoy: server.hoy } : {}) });
     return ok({});
   }));
 }
@@ -852,5 +852,57 @@ describe("facturadora: ventas por día (supervisión)", () => {
   it("la facturadora no lo tiene", async () => {
     await openBoard();
     expect(screen.queryByRole("button", { name: "Ventas del día" })).toBeNull();
+  });
+});
+
+// Pasada la hora de cierre del día (la pone el administrador), el tablero se limpia: deja de mostrar lo de
+// hoy y pasa a mostrar los pedidos de mañana, que van llegando.
+describe("tablero: el día de trabajo", () => {
+  // Abre el tablero y espera a la primera lista (no siempre hay un pedido de Ana López que esperar).
+  const openAny = async () => {
+    linkStorage();
+    render(<FacturadoraApp />);
+    await waitFor(() => expect(calls.some((c) => c.path.startsWith("/orders"))).toBe(true));
+  };
+  it("antes del cierre dice 'Hoy' con la fecha de hoy y muestra los pedidos de hoy", async () => {
+    server.dia = "2026-10-30";
+    server.hoy = "2026-10-30";
+    await openBoard();
+    expect(screen.getByText(/^Hoy · /)).toBeTruthy();
+    expect(screen.getByText("Ana López")).toBeTruthy();
+  });
+
+  it("pasado el cierre dice 'Para mañana', ya no muestra lo de hoy y sí lo de mañana", async () => {
+    server.dia = "2026-10-31";
+    server.hoy = "2026-10-30";
+    server.sellers = [
+      recount({ id: "carlos", name: "Carlos Pérez", orders: [
+        order("a", "Ana López"),
+        order("z", "Zoila Nueva", { date: "2026-10-31" }),
+      ] }),
+    ];
+    await openAny();
+    expect(await screen.findByText("Zoila Nueva")).toBeTruthy();
+    expect(screen.queryByText("Ana López")).toBeNull();
+    const label = screen.getByText(/^Para mañana · /);
+    expect(label.textContent).toContain("31");
+    expect(screen.queryByText(/^Hoy · /)).toBeNull();
+  });
+
+  it("si el siguiente día de trabajo no es mañana (sábado, el lunes), dice 'Próximo día'", async () => {
+    server.dia = "2026-11-02";
+    server.hoy = "2026-10-31";
+    server.sellers = [recount({ id: "carlos", name: "Carlos Pérez", orders: [order("l", "Lola Lunes", { date: "2026-11-02" })] })];
+    await openAny();
+    expect(await screen.findByText("Lola Lunes")).toBeTruthy();
+    expect(screen.getByText(/^Próximo día · /)).toBeTruthy();
+  });
+
+  it("sin pedidos del siguiente día dice que está todo al día, no muestra lo de hoy", async () => {
+    server.dia = "2026-10-31";
+    server.hoy = "2026-10-30";
+    await openAny();
+    await waitFor(() => expect(screen.queryByText("Ana López")).toBeNull());
+    expect(screen.getByText(/^Para mañana · /)).toBeTruthy();
   });
 });

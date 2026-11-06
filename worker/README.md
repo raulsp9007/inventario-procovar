@@ -116,6 +116,15 @@ Las cuentas viven ahora en los ajustes del buzón (no hace falta una tabla nueva
 (una de facturación y una de supervisión) se pasan solas la primera vez, con sus contraseñas, y siguen
 entrando. Para activarlo basta publicar el buzón (`npx wrangler deploy`) y la página (push).
 
+## El día de trabajo de la facturadora
+
+La página de la facturadora (y la de supervisión) muestra solo los pedidos del **día de trabajo**, que
+dice el buzón (`GET /orders` trae `hoy` y `dia`, en la hora del sitio): hoy, y **pasada la hora de
+cierre del día** que puso el administrador, el siguiente día de trabajo (mañana; del sábado, el
+lunes: el domingo no se trabaja). Así, a la hora del cierre el tablero se **limpia** de lo de hoy y
+van apareciendo los pedidos de mañana que los vendedores envían. El título del tablero dice "Hoy",
+"Para mañana" o "Próximo día" con la fecha. Sin cierre activado, el día de trabajo es hoy.
+
 ## Pedidos para mañana
 
 La app del vendedor también envía a la nube los pedidos **de mañana** (o del próximo día hábil) que

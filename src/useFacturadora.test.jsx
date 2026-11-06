@@ -30,7 +30,7 @@ function fakeCloud() {
       if (state.badLogin) throw new CloudError("auth", 401, "Usuario o contraseña incorrectos.");
       return { token: "sesion-abc-123", role: state.loginRole, name: usuario, expiresAt: "2026-11-30T00:00:00.000Z" };
     }),
-    listOrders: vi.fn(async () => ({ now: "2026-10-30T16:00:00.000Z", sellers: state.sellers, ...(state.horario ? { horario: state.horario } : {}) })),
+    listOrders: vi.fn(async () => ({ now: "2026-10-30T16:00:00.000Z", sellers: state.sellers, ...(state.horario ? { horario: state.horario } : {}), ...(state.dia ? { dia: state.dia, hoy: state.hoy } : {}) })),
     sales: vi.fn(async (fecha) => ({ fecha, vendedores: [], productos: [], totales: { pedidos: 0, unidades: 0 } })),
     confirmMany: vi.fn(async (ids) => ({ confirmed: ids, missing: [] })),
     unconfirmMany: vi.fn(async (ids) => ({ unconfirmed: ids, missing: [] })),
@@ -50,6 +50,80 @@ const linked = async (ctx) => {
 };
 
 beforeEach(() => localStorage.clear());
+
+// El día de trabajo lo dice el buzón (con la hora del sitio): pasada la hora de cierre del día, la lista pasa
+// al siguiente día de trabajo y lo de hoy se limpia.
+describe("useFacturadora: el día de trabajo", () => {
+  const withOrders = (...dates) => [{ id: "carlos", name: "Carlos Pérez", pending: dates.length, confirmed: 0, orders: dates.map((date, i) => order(`p${i}`, { date })) }];
+
+  it("pasada la hora de cierre muestra solo los pedidos del día siguiente y lo dice", async () => {
+    const ctx = setup({ today: undefined });
+    ctx.state.dia = "2026-10-31";
+    ctx.state.hoy = "2026-10-30";
+    ctx.state.sellers = withOrders("2026-10-30", "2026-10-31", "2026-10-31");
+    await linked(ctx);
+    const { sellers, day, nextDay } = ctx.hook.result.current;
+    expect(sellers[0].orders.map((o) => o.id)).toEqual(["p1", "p2"]);
+    expect(sellers[0].pending).toBe(2);
+    expect(day).toBe("2026-10-31");
+    expect(nextDay).toBe(true);
+  });
+
+  it("antes de la hora muestra los de hoy y no dice que es otro día", async () => {
+    const ctx = setup({ today: undefined });
+    ctx.state.dia = "2026-10-30";
+    ctx.state.hoy = "2026-10-30";
+    ctx.state.sellers = withOrders("2026-10-30", "2026-10-31");
+    await linked(ctx);
+    const { sellers, day, nextDay } = ctx.hook.result.current;
+    expect(sellers[0].orders.map((o) => o.id)).toEqual(["p0"]);
+    expect(day).toBe("2026-10-30");
+    expect(nextDay).toBe(false);
+  });
+
+  it("después de la primera lista pide desde el día que dijo el buzón", async () => {
+    const ctx = setup({ today: undefined });
+    ctx.state.dia = "2026-10-31";
+    ctx.state.hoy = "2026-10-30";
+    ctx.state.sellers = withOrders("2026-10-31");
+    await linked(ctx);
+    await act(async () => { await ctx.hook.result.current.refresh(); });
+    expect(ctx.api.listOrders.mock.calls.at(-1)[0]).toBe("2026-10-31");
+  });
+
+  it("lo guardado recuerda el día, para verlo sin conexión", async () => {
+    const ctx = setup({ today: undefined });
+    ctx.state.dia = "2026-10-31";
+    ctx.state.hoy = "2026-10-30";
+    ctx.state.sellers = withOrders("2026-10-31");
+    await linked(ctx);
+    expect(loadCloud("facturadora").data).toMatchObject({ dia: "2026-10-31", hoy: "2026-10-30" });
+    const again = setup({ today: undefined });
+    expect(again.hook.result.current.day).toBe("2026-10-31");
+  });
+
+  it("si el buzón no dice el día (versión vieja), cuenta como hoy en este equipo", async () => {
+    const ctx = setup({ today: undefined });
+    ctx.state.sellers = withOrders();
+    await linked2(ctx);
+    expect(ctx.hook.result.current.nextDay).toBe(false);
+  });
+
+  it("un día fijado (para pruebas) manda sobre el del buzón", async () => {
+    const ctx = setup({ today: "2026-10-30" });
+    ctx.state.dia = "2026-10-31";
+    ctx.state.hoy = "2026-10-30";
+    ctx.state.sellers = withOrders("2026-10-30", "2026-10-31");
+    await linked(ctx);
+    expect(ctx.hook.result.current.sellers[0].orders.map((o) => o.id)).toEqual(["p0"]);
+  });
+
+  // linked() espera a que haya vendedores; sin pedidos se espera a la primera lista
+  async function linked2(ctx) {
+    await act(async () => { await ctx.hook.result.current.linkWith(FACT_CODE); });
+    await waitFor(() => expect(ctx.api.listOrders).toHaveBeenCalled());
+  }
+});
 
 // Solo cuentan los pedidos de "Hoy": a las 12 am la lista se limpia.
 describe("useFacturadora: solo los pedidos de hoy", () => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, Check, ChevronDown, ChevronUp, CircleHelp, Cloud, CloudOff, ExternalLink, Search, Undo2 } from "lucide-react";
 import { formatCUP } from "./money";
-import { formatDateShort, todayStr } from "./dateUtils";
+import { formatDateShort } from "./dateUtils";
 import { openPortalSearch, portalSearchText } from "./portalLink";
 import { flattenOrders, filterOrders } from "./facturadoraData";
 import { clock12, connectionText, newOrdersText } from "./facturadoraText";
@@ -264,7 +264,7 @@ export default function FacturadoraBoard({ f, sellers }) {
     <div data-board style={{ "--fx-scale": scale, minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'Inter', system-ui, sans-serif", paddingBottom: 110 }}>
       <header style={{ background: "var(--ink)", color: "var(--cream)", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ fontSize: px(18), fontWeight: 700 }}>Facturación Procovar</div>
-        <span style={{ fontSize: px(14), padding: "4px 12px", borderRadius: 999, background: "rgba(255,255,255,0.12)" }}>{`Hoy · ${formatDateShort(todayStr())}`}</span>
+        <span style={{ fontSize: px(14), padding: "4px 12px", borderRadius: 999, background: "rgba(255,255,255,0.12)" }}>{`${f.nextDay ? (f.nextDayIsTomorrow ? "Para mañana" : "Próximo día") : "Hoy"} · ${formatDateShort(f.day)}`}</span>
         <span style={{ flex: 1 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <button type="button" aria-label="Letra más pequeña" onClick={() => changeScale(-0.1)} style={{ ...toolButton, fontSize: 15 }}>A−</button>

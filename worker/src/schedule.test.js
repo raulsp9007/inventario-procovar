@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { DEFAULT_SCHEDULE, DEFAULT_CIERRE, DEFAULT_ZONE, ZONES, parseSchedule, scheduleStatus, validateSchedule, validateCierre, parseCierre, cierreStatus, parseZone, siteNow, cubaDate, adjustFromManual, parseAdjust, shiftIso } from "./schedule";
+import { DEFAULT_SCHEDULE, DEFAULT_CIERRE, DEFAULT_ZONE, ZONES, parseSchedule, scheduleStatus, validateSchedule, validateCierre, parseCierre, cierreStatus, parseZone, siteNow, cubaDate, adjustFromManual, parseAdjust, shiftIso, nextWorkingDay } from "./schedule";
 
 // Horario de facturación: un solo horario (apertura y cierre) de lunes a sábado, en la hora de
 // Cuba; el domingo está cerrado. Fuera de horario se pausa el sitio. Sin horario activado,
@@ -209,5 +209,29 @@ describe("hora del sitio puesta a mano", () => {
     expect(shiftIso("2026-10-30T15:00:00.000Z", 60)).toBe("2026-10-30T16:00:00.000Z");
     expect(shiftIso("2026-10-30T15:00:00.000Z", -90)).toBe("2026-10-30T13:30:00.000Z");
     expect(shiftIso("2026-10-30T15:00:00.000Z", 0)).toBe("2026-10-30T15:00:00.000Z");
+  });
+});
+
+// El día de trabajo de la facturadora: pasada la hora de cierre del día, su tablero pasa al siguiente día
+// de trabajo (el domingo no se trabaja).
+describe("nextWorkingDay", () => {
+  it("el día siguiente", () => {
+    expect(nextWorkingDay("2026-10-30")).toBe("2026-10-31"); // viernes -> sábado
+    expect(nextWorkingDay("2026-11-02")).toBe("2026-11-03");
+  });
+
+  it("del sábado salta el domingo: va al lunes", () => {
+    expect(nextWorkingDay("2026-10-31")).toBe("2026-11-02");
+  });
+
+  it("si hoy es domingo, va al lunes", () => {
+    expect(nextWorkingDay("2026-11-01")).toBe("2026-11-02");
+  });
+
+  it("cruza el fin de mes y de año", () => {
+    expect(nextWorkingDay("2026-10-30")).toBe("2026-10-31");
+    expect(nextWorkingDay("2026-12-31")).toBe("2027-01-01");
+    expect(nextWorkingDay("2027-01-29")).toBe("2027-01-30"); // viernes
+    expect(nextWorkingDay("2027-01-30")).toBe("2027-02-01"); // sábado: salta el domingo
   });
 });

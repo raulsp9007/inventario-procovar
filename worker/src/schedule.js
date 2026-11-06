@@ -120,6 +120,14 @@ export function scheduleStatus(schedule, nowIso, zone = DEFAULT_ZONE) {
 // borrar y confirmar siguen). Es aparte del horario del sitio, que lo pausa todo. Hora de Cuba.
 export const DEFAULT_CIERRE = { enabled: false, time: "15:00" };
 
+// El siguiente día de trabajo después de uno (AAAA-MM-DD): el día siguiente, saltando el domingo.
+export function nextWorkingDay(dateStr) {
+  const next = new Date(`${dateStr}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  if (next.getUTCDay() === 0) next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
+
 // Valida lo que manda el administrador: { value } o { error }.
 export function validateCierre(input) {
   const body = input && typeof input === "object" ? input : {};

@@ -5,7 +5,7 @@
 import { mergeUsers, vendorsView, freeId, nameKey } from "./roster.js";
 import {
   cubaDate, parseSchedule, scheduleStatus, validateSchedule, parseCierre, cierreStatus, validateCierre, parseZone, zoneLabel, siteNow, ZONES,
-  adjustFromManual, parseAdjust, shiftIso, isTimeOfDay,
+  adjustFromManual, parseAdjust, shiftIso, isTimeOfDay, nextWorkingDay,
 } from "./schedule.js";
 import {
   ACCOUNT_ROLES, MAX_FAILS, LOCK_MS, SESSION_MS, accountView, hashPassword, hashToken, parseAccountInput, usernameKey, verifyPassword,
@@ -360,7 +360,14 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
       };
     });
     const site = await loadSiteClock();
-    return reply(origin, { now: stamp, sellers, horario: scheduleStatus(await loadSchedule(), site.at, site.zone) });
+    // El día de trabajo: hoy, y pasada la hora de cierre del día (la que pone el administrador) el siguiente día
+    // de trabajo. La página muestra solo los pedidos de ese día: a la hora del cierre se limpia lo de hoy y
+    // van apareciendo los de mañana. `hoy` es la fecha de hoy en la hora del sitio.
+    const hoy = cubaDate(site.at, site.zone);
+    const cierre = cierreStatus(await loadCierre(), site.at, site.zone);
+    return reply(origin, {
+      now: stamp, sellers, horario: scheduleStatus(await loadSchedule(), site.at, site.zone), hoy, dia: cierre.cerrado ? nextWorkingDay(hoy) : hoy,
+    });
   }
 
   if (method === "POST" && (path === "/orders/confirm" || path === "/orders/unconfirm")) {

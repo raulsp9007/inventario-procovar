@@ -970,6 +970,64 @@ export function apiSuite(label, makeStore) {
       });
     });
 
+    // Después de la hora de cierre del día (la que pone el administrador), el tablero de la facturadora pasa
+    // al siguiente día de trabajo: lo de hoy se limpia y van apareciendo los pedidos de mañana.
+    describe("el día de trabajo de la facturadora", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const VIERNES_9AM = "2026-10-30T13:00:00.000Z"; // 09:00 en Cuba
+      const VIERNES_11AM = "2026-10-30T15:00:00.000Z"; // 11:00 en Cuba
+      const SABADO_11AM = "2026-10-31T15:00:00.000Z"; // 11:00 en Cuba
+      const list = (token = "tok-fact") => call("GET", "/orders?desde=2026-10-01", { token });
+
+      it("sin cierre el día de trabajo es hoy, a cualquier hora", async () => {
+        clock = VIERNES_11AM;
+        expect((await list()).json).toMatchObject({ hoy: "2026-10-30", dia: "2026-10-30" });
+      });
+
+      it("con el cierre puesto y antes de la hora, sigue siendo hoy", async () => {
+        clock = VIERNES_9AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        expect((await list()).json).toMatchObject({ hoy: "2026-10-30", dia: "2026-10-30" });
+      });
+
+      it("pasada la hora de cierre pasa a mañana (hoy sigue siendo hoy)", async () => {
+        clock = VIERNES_9AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        expect((await list()).json).toMatchObject({ hoy: "2026-10-30", dia: "2026-10-31" });
+      });
+
+      it("el sábado, pasada la hora, salta el domingo y va al lunes", async () => {
+        clock = SABADO_11AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        expect((await list()).json).toMatchObject({ hoy: "2026-10-31", dia: "2026-11-02" });
+      });
+
+      it("con el cierre apagado vuelve a ser hoy", async () => {
+        clock = VIERNES_11AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        await admin("PUT", "/cierre", { activo: false });
+        expect((await list()).json.dia).toBe("2026-10-30");
+      });
+
+      it("cuenta la hora del sitio (zona y hora puesta a mano)", async () => {
+        clock = VIERNES_11AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "11:30" });
+        expect((await list()).json.dia).toBe("2026-10-30");
+        await admin("PUT", "/zona", { manual: "12:00" }); // ahora son las 12:00 en el sitio
+        expect((await list()).json.dia).toBe("2026-10-31");
+      });
+
+      it("la supervisión ve el mismo día de trabajo", async () => {
+        clock = VIERNES_9AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        await admin("POST", "/accounts", { rol: "supervision", usuario: "super", clave: "clave-12345" });
+        const { token } = (await call("POST", "/login", { body: { usuario: "super", clave: "clave-12345" } })).json;
+        clock = VIERNES_11AM;
+        expect((await list(token)).json).toMatchObject({ hoy: "2026-10-30", dia: "2026-10-31" });
+      });
+    });
+
     describe("cierre de facturación del día", () => {
       const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
       const setCierre = (body) => admin("PUT", "/cierre", body);

@@ -4,7 +4,7 @@ import { parseAccess } from "./linkCode";
 import { CLOUD_URL } from "./cloudConfig";
 import { loadCloud, saveCloud, clearCloud } from "./cloudStorage";
 import { overlayOps, totalPending, mergeFactOps, onlyDay } from "./facturadoraData";
-import { todayStr } from "./dateUtils";
+import { todayStr, addDaysStr } from "./dateUtils";
 
 // Lógica de la app de la facturadora: lista los pedidos por vendedor, manda su 👍
 // (y el deshacer) y, sin internet, guarda esas operaciones en cola y las muestra
@@ -19,12 +19,21 @@ const MESSAGES = {
   server: "La nube tuvo un problema. Se reintentará.",
 };
 
-// Solo cuentan los pedidos de "Hoy": se le pide al buzón únicamente desde hoy y lo
-// guardado de otro día no se muestra, así que a las 12 am la lista se limpia sola.
-// `today` (AAAA-MM-DD) se puede fijar para pruebas; por defecto es el día de hoy.
+// Solo cuentan los pedidos del día de trabajo, que dice el buzón con la hora del sitio: hoy, y pasada
+// la hora de cierre del día (la pone el administrador) el siguiente día de trabajo; así a esa hora la
+// lista se limpia y van apareciendo los pedidos de mañana. Lo guardado de otro día no se muestra.
+// `today` (AAAA-MM-DD) se puede fijar para pruebas; sin él, el del buzón y, si no lo dice, el de hoy
+// en este equipo.
 export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000, ready = true, today, cloudUrl = CLOUD_URL } = {}) {
   const [cloud, setCloud] = useState(() => loadCloud(SCOPE));
   const [sellersRaw, setSellersRaw] = useState(() => (loadCloud(SCOPE).data ? loadCloud(SCOPE).data.sellers : []));
+  // El día de trabajo y el de hoy que dijo el buzón la última vez (también lo guardado, para verlo sin conexión).
+  const [days, setDays] = useState(() => {
+    const data = loadCloud(SCOPE).data;
+    return data && data.dia ? { dia: data.dia, hoy: data.hoy || data.dia } : null;
+  });
+  const daysRef = useRef(days);
+  daysRef.current = days;
   const [status, setStatus] = useState(() => {
     const data = loadCloud(SCOPE).data;
     return { phase: "idle", message: "", lastSyncAt: data ? data.at : null, horario: null };
@@ -71,10 +80,12 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     let fetched = false;
     if (!stopped) {
       try {
-        const data = await api.listOrders(todayRef.current || todayStr());
+        const data = await api.listOrders(todayRef.current || (daysRef.current && daysRef.current.dia) || todayStr());
         const at = Date.now();
         setSellersRaw(data.sellers);
-        commit({ data: { sellers: data.sellers, at } });
+        const nextDays = data.dia ? { dia: data.dia, hoy: data.hoy || data.dia } : null;
+        setDays(nextDays);
+        commit({ data: { sellers: data.sellers, at, ...(nextDays || {}) } });
         setStatus({ phase: "ok", message: "", lastSyncAt: at, horario: data.horario || null });
         fetched = true;
       } catch (e) {
@@ -176,11 +187,15 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     cloudRef.current = loadCloud(SCOPE);
     setCloud(cloudRef.current);
     setSellersRaw([]);
+    setDays(null);
     setStatus({ phase: "idle", message: "", lastSyncAt: null });
   }, []);
 
-  // Solo los pedidos de hoy (también lo guardado de ayer deja de verse).
-  const day = today || todayStr();
+  // Solo los pedidos del día de trabajo (también lo guardado de otro día deja de verse).
+  const day = today || (days && days.dia) || todayStr();
+  // ¿Ya se pasó a otro día? (pasada la hora de cierre): mañana, o el próximo día de trabajo si mañana no se trabaja.
+  const nextDay = !today && !!days && days.dia > days.hoy;
+  const nextDayIsTomorrow = nextDay && days.dia === addDaysStr(days.hoy, 1);
   const sellers = useMemo(
     () => overlayOps(onlyDay(sellersRaw, day), cloud.queue, new Date().toISOString()),
     [sellersRaw, cloud.queue, day],
@@ -191,6 +206,9 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     readOnly: !!cloud.link && cloud.link.role === "supervisor",
     sellers,
     totalPending: totalPending(sellers),
+    day,
+    nextDay,
+    nextDayIsTomorrow,
     phase: status.phase,
     message: status.message,
     lastSyncAt: status.lastSyncAt,
