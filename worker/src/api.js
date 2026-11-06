@@ -138,9 +138,27 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   if (method === "OPTIONS") return reply(origin, null, 204);
 
   const stamp = now();
-  const accounts = await store.listAccounts();
 
-  // Entrar con usuario y contraseña (facturación o supervisión): da una sesión.
+  // Las cuentas con usuario y contraseña (varias por rol) viven en los ajustes. La primera vez se pasan
+  // las de antes (una por rol; su id es el rol, así siguen valiendo las sesiones abiertas).
+  const saveAccounts = (list) => store.putSetting("cuentas", JSON.stringify(list));
+  const loadAccounts = async () => {
+    const raw = await store.getSetting("cuentas");
+    if (raw !== null) {
+      try {
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list : [];
+      } catch {
+        return [];
+      }
+    }
+    const migrated = (await store.listAccounts()).map((a) => ({ ...a, id: a.role }));
+    if (migrated.length > 0) await saveAccounts(migrated);
+    return migrated;
+  };
+  let accounts = await loadAccounts();
+
+  // Entrar con usuario y contraseña (facturación, supervisión o administración): da una sesión.
   if (method === "POST" && path === "/login") {
     const read = await readJson(request);
     const body = (!read.error && read.body && typeof read.body === "object") ? read.body : {};
@@ -153,30 +171,31 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     if (!(await verifyPassword(clave, account))) {
       const failCount = (account.failCount || 0) + 1;
       const locked = failCount >= MAX_FAILS;
-      await store.putAccount({ ...account, failCount: locked ? 0 : failCount, lockedUntil: locked ? new Date(new Date(stamp).getTime() + LOCK_MS).toISOString() : null });
+      const failed = { ...account, failCount: locked ? 0 : failCount, lockedUntil: locked ? new Date(new Date(stamp).getTime() + LOCK_MS).toISOString() : null };
+      await saveAccounts(accounts.map((a) => (a.id === account.id ? failed : a)));
       return wrong();
     }
-    if (account.failCount || account.lockedUntil) await store.putAccount({ ...account, failCount: 0, lockedUntil: null });
+    if (account.failCount || account.lockedUntil) await saveAccounts(accounts.map((a) => (a.id === account.id ? { ...account, failCount: 0, lockedUntil: null } : a)));
     let token = makeToken();
     while (await store.getSession(await hashToken(token))) token = makeToken();
     const expiresAt = new Date(new Date(stamp).getTime() + SESSION_MS).toISOString();
     await store.purgeSessions(stamp);
-    await store.putSession({ tokenHash: await hashToken(token), role: account.role, createdAt: stamp, expiresAt });
+    await store.putSession({ tokenHash: await hashToken(token), accountId: account.id, createdAt: stamp, expiresAt });
     return reply(origin, { token, role: account.role, name: account.username, expiresAt });
   }
 
   // Quién tiene acceso: los del secreto + los vendedores que maneja el administrador.
   // Una cuenta de facturación o supervisión con usuario y contraseña reemplaza al
-  // usuario de ese rol que venga del secreto.
-  const accountRoles = new Set(accounts.map((a) => a.role));
+  // usuario de ese rol que venga del secreto. La del administrador no: su enlace sigue sirviendo.
+  const accountRoles = new Set(accounts.filter((a) => a.role !== "admin").map((a) => a.role));
   const roster = mergeUsers(users.filter((u) => !accountRoles.has(u.role)), await store.listVendors());
   let user = authenticate(request, roster.filter((u) => u.active));
   if (!user) {
     const header = request.headers.get("Authorization") || "";
     const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
     const session = token ? await store.getSession(await hashToken(token)) : null;
-    const account = session && session.expiresAt > stamp ? accounts.find((a) => a.role === session.role) : null;
-    if (account && account.active) user = { id: `cuenta-${account.role}`, name: account.username, role: account.role, token: "" };
+    const account = session && session.expiresAt > stamp ? accounts.find((a) => a.id === session.accountId) : null;
+    if (account && account.active) user = { id: `cuenta-${account.id}`, name: account.username, role: account.role, token: "" };
   }
   if (!user) return fail(origin, 401, "Código no válido.");
   const only = (role) => (user.role === role ? null : fail(origin, 403, "Esto no es para tu usuario."));
@@ -442,30 +461,50 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     }
 
     if (path === "/admin/accounts" || path.startsWith("/admin/accounts/")) {
-      if (method === "GET" && path === "/admin/accounts") {
-        const byRole = (role) => accountView(accounts.find((a) => a.role === role));
-        return reply(origin, { facturacion: byRole(ACCOUNT_ROLES.facturacion), supervision: byRole(ACCOUNT_ROLES.supervision) });
-      }
-      const target = path.match(/^\/admin\/accounts\/([^/]+)$/);
-      const role = target ? ACCOUNT_ROLES[decodeURIComponent(target[1])] : null;
-      if (method === "PUT" && role) {
+      if (method === "GET" && path === "/admin/accounts") return reply(origin, { cuentas: accounts.map(accountView) });
+
+      // Crear una cuenta: { rol: "facturacion" | "supervision" | "administrador", usuario, clave }.
+      if (method === "POST" && path === "/admin/accounts") {
         const read = await readJson(request);
         if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
-        const current = accounts.find((a) => a.role === role) || null;
+        const body = read.body && typeof read.body === "object" ? read.body : {};
+        const role = typeof body.rol === "string" && Object.prototype.hasOwnProperty.call(ACCOUNT_ROLES, body.rol) ? ACCOUNT_ROLES[body.rol] : null;
+        if (!role) return fail(origin, 400, "Elige si es de facturación, de supervisión o administrador.");
+        const parsed = parseAccountInput(body, null);
+        if (parsed.error) return fail(origin, 400, parsed.error);
+        if (accounts.some((a) => a.usernameKey === usernameKey(parsed.usuario))) return fail(origin, 409, "Ya hay una cuenta con ese usuario.");
+        const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(5)), (b) => b.toString(16).padStart(2, "0")).join("");
+        let id = newId();
+        while (accounts.some((a) => a.id === id)) id = newId();
+        const next = {
+          id, role, username: parsed.usuario, usernameKey: usernameKey(parsed.usuario), ...(await hashPassword(parsed.clave)),
+          active: true, failCount: 0, lockedUntil: null, createdAt: stamp, updatedAt: stamp,
+        };
+        accounts = [...accounts, next];
+        await saveAccounts(accounts);
+        return reply(origin, accountView(next));
+      }
+
+      const target = path.match(/^\/admin\/accounts\/([^/]+)$/);
+      if (method === "PUT" && target) {
+        const id = decodeURIComponent(target[1]);
+        const current = accounts.find((a) => a.id === id);
+        if (!current) return fail(origin, 404, "No existe esa cuenta.");
+        const read = await readJson(request);
+        if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
         const parsed = parseAccountInput(read.body, current);
         if (parsed.error) return fail(origin, 400, parsed.error);
-        if (parsed.usuario && accounts.some((a) => a.role !== role && a.usernameKey === usernameKey(parsed.usuario))) {
+        if (parsed.usuario && accounts.some((a) => a.id !== id && a.usernameKey === usernameKey(parsed.usuario))) {
           return fail(origin, 409, "Ya hay una cuenta con ese usuario.");
         }
-        const next = current
-          ? { ...current, updatedAt: stamp }
-          : { role, createdAt: stamp, updatedAt: stamp, active: true, failCount: 0, lockedUntil: null };
+        const next = { ...current, updatedAt: stamp };
         if (parsed.usuario) { next.username = parsed.usuario; next.usernameKey = usernameKey(parsed.usuario); }
         if (parsed.clave) { Object.assign(next, await hashPassword(parsed.clave), { failCount: 0, lockedUntil: null }); }
         if (parsed.activo !== undefined) next.active = parsed.activo;
-        await store.putAccount(next);
-        // Nueva contraseña o cuenta desactivada: las sesiones abiertas dejan de servir.
-        if (parsed.clave || parsed.activo === false) await store.deleteSessionsByRole(role);
+        accounts = accounts.map((a) => (a.id === id ? next : a));
+        await saveAccounts(accounts);
+        // Nueva contraseña o cuenta desactivada: las sesiones abiertas de esa cuenta dejan de servir.
+        if (parsed.clave || parsed.activo === false) await store.deleteSessionsByAccount(id);
         return reply(origin, accountView(next));
       }
       return fail(origin, 404, "No existe esa ruta.");

@@ -19,7 +19,7 @@ ${code}
 3. Cuando ella lo confirme, toca *Comprobar* (arriba, en Pedidos). El pedido pasa a *CONF.*
 
 *OJO*
-• Solo se envían los pedidos de *hoy*. A las 12 am la lista de la facturadora se limpia.
+• Se envían los pedidos de *hoy* y los que dejas listos para *mañana* (ya quedan en la nube; la facturadora los ve ese día). Los de días que ya pasaron no se envían.
 • Los *domicilios* siguen yendo al supervisor por WhatsApp.
 • Si dice "En cola", no hay internet: se envía solo al volver.
 • Si editas un pedido ya enviado, ella lo ve como MODIFICADO.

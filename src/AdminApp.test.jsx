@@ -3,6 +3,8 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import AdminApp from "./AdminApp";
 import { makeLinkCode, parseLinkCode } from "./linkCode";
 
+vi.mock("./cloudConfig", () => ({ CLOUD_URL: "https://buzon.test" }));
+
 // Sitio de administración (admin.html): el administrador maneja los nombres y los
 // enlaces de los vendedores. El buzón se simula con un fetch falso.
 
@@ -24,7 +26,8 @@ function installFetch() {
     role: "admin",
     vendors: [vendor("raul", "Raul"), vendor("eddy", "Eddy"), vendor("melisa", "Melisa", { active: false })],
     facturadora: { id: "fact", name: "Facturadora", token: "f".repeat(24) },
-    accounts: { facturacion: null, supervision: null },
+    accounts: { cuentas: [] },
+    nextAccount: 1,
     schedule: { activo: false, abre: "09:00", cierra: "15:00", abierto: true, mensaje: "" },
     cierre: { activo: false, hora: "15:00", cerrado: false, mensaje: "" },
     zona: { zona: "America/Havana", etiqueta: "Cuba (La Habana)", ahora: "11:00", manual: false, ajuste: 0, zonas: [{ id: "America/Havana", label: "Cuba (La Habana)" }, { id: "Europe/Madrid", label: "España (Madrid)" }, { id: "America/Mexico_City", label: "México (Ciudad de México)" }] },
@@ -69,12 +72,22 @@ function installFetch() {
       return reply(server.cierre);
     }
     if (path.startsWith("/summary")) return reply(server.summary || { fecha: "2026-10-30", vendedores: [], productos: [], totales: { pedidos: 0, unidades: 0 } });
+    if (path === "/admin/accounts" && init.method === "POST") {
+      if (body.usuario === "repetido") return reply({ error: "Ya hay una cuenta con ese usuario." }, 409);
+      const created = { id: `c${server.nextAccount++}`, rol: body.rol, usuario: body.usuario, activo: true };
+      server.accounts.cuentas.push(created);
+      return reply(created);
+    }
     const acc = path.match(/^\/admin\/accounts\/([^/]+)$/);
     if (acc && init.method === "PUT") {
+      const current = server.accounts.cuentas.find((c) => c.id === acc[1]);
       if (body.usuario === "repetido") return reply({ error: "Ya hay una cuenta con ese usuario." }, 409);
-      const current = server.accounts[acc[1]];
-      server.accounts[acc[1]] = { usuario: body.usuario !== undefined ? body.usuario : current.usuario, activo: body.activo !== undefined ? body.activo : (current ? current.activo : true) };
-      return reply(server.accounts[acc[1]]);
+      Object.assign(current, body.usuario !== undefined ? { usuario: body.usuario } : {}, body.activo !== undefined ? { activo: body.activo } : {});
+      return reply(current);
+    }
+    if (path === "/login" && init.method === "POST") {
+      if (body.clave === "mala-clave") return reply({ error: "Usuario o contraseña incorrectos." }, 401);
+      return reply({ token: "sesion-del-admin-0123456789", role: body.usuario === "tania" ? "facturadora" : "admin", name: body.usuario, expiresAt: "2026-11-06T00:00:00.000Z" });
     }
     const regen = path.match(/^\/admin\/vendors\/([^/]+)\/regenerate$/);
     if (regen && init.method === "POST") {
@@ -305,99 +318,128 @@ describe("administración: enlaces", () => {
   });
 });
 
-// Usuario y contraseña de la facturación y de la supervisión (solo lectura), que
-// define el administrador. La contraseña nunca vuelve del buzón: solo se ve al escribirla.
-describe("administración: acceso de facturación y supervisión", () => {
+// Usuarios con usuario y contraseña (facturación, supervisión y administrador): el administrador crea todos los
+// que haga falta. La contraseña nunca vuelve del buzón: solo se ve al escribirla.
+describe("administración: usuarios", () => {
   const group = (name) => screen.findByRole("group", { name });
+  const postCalls = () => calls.filter((c) => c.method === "POST" && c.path === "/admin/accounts");
   const putCalls = () => calls.filter((c) => c.method === "PUT" && c.path.startsWith("/admin/accounts/"));
+  const person = (id, rol, usuario, activo = true) => ({ id, rol, usuario, activo });
 
-  async function create(name, usuario, clave) {
-    const card = await group(name);
+  async function create({ rol, usuario, clave }) {
+    const card = await group("Crear usuario");
+    if (rol) fireEvent.change(within(card).getByLabelText("Tipo de usuario"), { target: { value: rol } });
     fireEvent.change(within(card).getByLabelText("Usuario"), { target: { value: usuario } });
     fireEvent.change(within(card).getByLabelText("Contraseña"), { target: { value: clave } });
-    fireEvent.click(within(card).getByRole("button", { name: "Crear acceso" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Crear usuario" }));
     return card;
   }
 
-  it("muestra las dos tarjetas, sin cuenta todavía, y para qué sirve cada una", async () => {
+  it("sin usuarios todavía muestra el formulario para crear el primero, y para qué sirve cada tipo", async () => {
     link();
     render(<AdminApp />);
-    const fact = await group("Acceso de facturación");
-    const sup = await group("Acceso de supervisión");
-    expect(within(fact).getByText(/confirma pedidos/i)).toBeTruthy();
-    expect(within(sup).getByText(/solo lectura/i)).toBeTruthy();
-    expect(within(fact).getByRole("button", { name: "Crear acceso" })).toBeTruthy();
-    expect(within(sup).getByRole("button", { name: "Crear acceso" })).toBeTruthy();
+    const card = await group("Crear usuario");
+    expect(within(card).getByLabelText("Tipo de usuario").value).toBe("facturacion");
+    const options = [...within(card).getByLabelText("Tipo de usuario").querySelectorAll("option")].map((o) => [o.value, o.textContent]);
+    expect(options).toEqual([["facturacion", "Facturación"], ["supervision", "Supervisión"], ["administrador", "Administrador"]]);
+    expect(await screen.findByText(/Todavía no hay usuarios/)).toBeTruthy();
+    expect(within(card).getByText(/hace todo/i)).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "Crear usuario" })).toBeTruthy();
   });
 
-  it("crea la cuenta de facturación con usuario y contraseña", async () => {
+  it("crea un usuario de facturación con usuario y contraseña, y aparece su tarjeta", async () => {
     link();
     render(<AdminApp />);
-    await create("Acceso de facturación", "  maria  ", "clave-12345");
-    await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/facturacion", body: { usuario: "maria", clave: "clave-12345" } }]), { timeout: 4000 });
-    const card = await group("Acceso de facturación");
-    await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
-    expect(within(card).getByText("Activo")).toBeTruthy();
-    expect(within(card).queryByLabelText("Contraseña")).toBeNull();
+    await create({ usuario: "  maria  ", clave: "clave-12345" });
+    await waitFor(() => expect(postCalls().map((c) => c.body)).toEqual([{ rol: "facturacion", usuario: "maria", clave: "clave-12345" }]), { timeout: 4000 });
+    const mine = await group("Usuario maria");
+    expect(within(mine).getByLabelText("Usuario").value).toBe("maria");
+    expect(within(mine).getByText("Facturación")).toBeTruthy();
+    expect(within(mine).getByText("Activo")).toBeTruthy();
+    const form = await group("Crear usuario");
+    expect(within(form).getByLabelText("Usuario").value).toBe("");
+    expect(within(form).getByLabelText("Contraseña").value).toBe("");
   });
 
-  it("crea la de supervisión en su propia ruta", async () => {
+  it("se pueden crear de supervisión y de administrador, y varios del mismo tipo", async () => {
     link();
     render(<AdminApp />);
-    await create("Acceso de supervisión", "super", "otra-clave-9");
-    await waitFor(() => expect(putCalls().map((c) => c.path)).toEqual(["/admin/accounts/supervision"]), { timeout: 4000 });
+    await create({ rol: "supervision", usuario: "super", clave: "otra-clave-9" });
+    await waitFor(() => expect(postCalls()).toHaveLength(1), { timeout: 4000 });
+    await create({ rol: "administrador", usuario: "raul", clave: "clave-admin-1" });
+    await waitFor(() => expect(postCalls()).toHaveLength(2), { timeout: 4000 });
+    await create({ rol: "administrador", usuario: "raul2", clave: "clave-admin-2" });
+    await waitFor(() => expect(postCalls()).toHaveLength(3), { timeout: 4000 });
+    expect(postCalls().map((c) => c.body.rol)).toEqual(["supervision", "administrador", "administrador"]);
+    expect(await group("Usuario super")).toBeTruthy();
+    expect(await group("Usuario raul")).toBeTruthy();
+    expect(await group("Usuario raul2")).toBeTruthy();
   });
 
   it("valida antes de mandar: usuario vacío y contraseña corta", async () => {
     link();
     render(<AdminApp />);
-    const card = await create("Acceso de facturación", "  ", "clave-12345");
+    const card = await create({ usuario: "  ", clave: "clave-12345" });
     expect(await within(card).findByText("Escribe el usuario.")).toBeTruthy();
     fireEvent.change(within(card).getByLabelText("Usuario"), { target: { value: "maria" } });
     fireEvent.change(within(card).getByLabelText("Contraseña"), { target: { value: "corta" } });
-    fireEvent.click(within(card).getByRole("button", { name: "Crear acceso" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Crear usuario" }));
     expect(await within(card).findByText("La contraseña debe tener al menos 8 caracteres.")).toBeTruthy();
-    expect(putCalls()).toHaveLength(0);
+    expect(postCalls()).toHaveLength(0);
   });
 
-  it("un usuario repetido muestra el aviso del buzón", async () => {
+  it("un usuario repetido muestra el aviso del buzón y no crea nada", async () => {
     link();
     render(<AdminApp />);
-    await create("Acceso de supervisión", "repetido", "clave-12345");
+    await create({ usuario: "repetido", clave: "clave-12345" });
     expect(await screen.findByText("Ya hay una cuenta con ese usuario.")).toBeTruthy();
+    expect(server.accounts.cuentas).toHaveLength(0);
   });
 
-  describe("con la cuenta ya creada", () => {
-    beforeEach(() => { server.accounts.facturacion = { usuario: "maria", activo: true }; });
+  it("lista todos los usuarios que ya hay, con su tipo", async () => {
+    server.accounts.cuentas = [person("a1", "facturacion", "maria"), person("a2", "facturacion", "ana"), person("a3", "administrador", "raul"), person("a4", "supervision", "super", false)];
+    link();
+    render(<AdminApp />);
+    const maria = await group("Usuario maria");
+    expect(within(maria).getByText("Facturación")).toBeTruthy();
+    expect(within(await group("Usuario ana")).getByText("Facturación")).toBeTruthy();
+    expect(within(await group("Usuario raul")).getByText("Administrador")).toBeTruthy();
+    const sup = await group("Usuario super");
+    expect(within(sup).getByText("Supervisión")).toBeTruthy();
+    expect(within(sup).getByText("Desactivado")).toBeTruthy();
+    expect(screen.queryByText(/Todavía no hay usuarios/)).toBeNull();
+  });
 
-    it("cambiar el usuario: aparece Guardar solo si cambió, y manda solo el usuario", async () => {
+  describe("con usuarios ya creados", () => {
+    beforeEach(() => {
+      server.accounts.cuentas = [person("a1", "facturacion", "maria"), person("a2", "facturacion", "ana"), person("a3", "administrador", "raul")];
+    });
+
+    it("cambiar el usuario: aparece Guardar solo si cambió, y manda solo el usuario a esa cuenta", async () => {
       link();
       render(<AdminApp />);
-      const card = await group("Acceso de facturación");
-      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      const card = await group("Usuario maria");
       expect(within(card).queryByRole("button", { name: "Guardar usuario" })).toBeNull();
       fireEvent.change(within(card).getByLabelText("Usuario"), { target: { value: "maria2" } });
       fireEvent.click(within(card).getByRole("button", { name: "Guardar usuario" }));
-      await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/facturacion", body: { usuario: "maria2" } }]));
+      await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/a1", body: { usuario: "maria2" } }]));
     });
 
-    it("cambiar la contraseña: se abre el campo, se guarda y manda solo la contraseña", async () => {
+    it("cambiar la contraseña de una: se abre el campo, se guarda y manda solo la contraseña a esa cuenta", async () => {
       link();
       render(<AdminApp />);
-      const card = await group("Acceso de facturación");
-      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      const card = await group("Usuario ana");
       fireEvent.click(within(card).getByRole("button", { name: "Cambiar contraseña" }));
       fireEvent.change(within(card).getByLabelText("Contraseña nueva"), { target: { value: "nueva-clave-1" } });
       fireEvent.click(within(card).getByRole("button", { name: "Guardar contraseña" }));
-      await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/facturacion", body: { clave: "nueva-clave-1" } }]));
+      await waitFor(() => expect(putCalls()).toEqual([{ method: "PUT", path: "/admin/accounts/a2", body: { clave: "nueva-clave-1" } }]));
       await waitFor(() => expect(within(card).queryByLabelText("Contraseña nueva")).toBeNull());
     });
 
     it("una contraseña nueva muy corta no se manda", async () => {
       link();
       render(<AdminApp />);
-      const card = await group("Acceso de facturación");
-      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      const card = await group("Usuario maria");
       fireEvent.click(within(card).getByRole("button", { name: "Cambiar contraseña" }));
       fireEvent.change(within(card).getByLabelText("Contraseña nueva"), { target: { value: "corta" } });
       fireEvent.click(within(card).getByRole("button", { name: "Guardar contraseña" }));
@@ -405,23 +447,22 @@ describe("administración: acceso de facturación y supervisión", () => {
       expect(putCalls()).toHaveLength(0);
     });
 
-    it("desactivar y reactivar el acceso", async () => {
+    it("desactivar y reactivar uno, sin tocar a los demás", async () => {
       link();
       render(<AdminApp />);
-      const card = await group("Acceso de facturación");
-      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      const card = await group("Usuario maria");
       fireEvent.click(within(card).getByRole("button", { name: "Desactivar" }));
       await waitFor(() => expect(within(card).getByText("Desactivado")).toBeTruthy());
       fireEvent.click(within(card).getByRole("button", { name: "Reactivar" }));
       await waitFor(() => expect(within(card).getByText("Activo")).toBeTruthy());
-      expect(putCalls().map((c) => c.body)).toEqual([{ activo: false }, { activo: true }]);
+      expect(putCalls().map((c) => [c.path, c.body])).toEqual([["/admin/accounts/a1", { activo: false }], ["/admin/accounts/a1", { activo: true }]]);
+      expect(within(await group("Usuario ana")).getByText("Activo")).toBeTruthy();
     });
 
-    it("copiar los datos de acceso: sin la contraseña a mano dice que se pasa aparte", async () => {
+    it("copiar los datos de acceso: facturación lleva el sitio de la facturadora; sin la contraseña dice que se pasa aparte", async () => {
       link();
       render(<AdminApp />);
-      const card = await group("Acceso de facturación");
-      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      const card = await group("Usuario maria");
       fireEvent.click(within(card).getByRole("button", { name: "Copiar datos de acceso" }));
       await waitFor(() => expect(copied).toHaveLength(1));
       expect(copied[0]).toContain("Usuario: maria");
@@ -429,11 +470,20 @@ describe("administración: acceso de facturación y supervisión", () => {
       expect(copied[0]).toContain("te la paso aparte");
     });
 
+    it("el de administrador lleva el sitio de administración", async () => {
+      link();
+      render(<AdminApp />);
+      const card = await group("Usuario raul");
+      fireEvent.click(within(card).getByRole("button", { name: "Copiar datos de acceso" }));
+      await waitFor(() => expect(copied).toHaveLength(1));
+      expect(copied[0]).toContain("admin.html");
+      expect(copied[0]).toContain("Usuario: raul");
+    });
+
     it("recién puesta la contraseña, los datos copiados la llevan", async () => {
       link();
       render(<AdminApp />);
-      const card = await group("Acceso de facturación");
-      await waitFor(() => expect(within(card).getByLabelText("Usuario").value).toBe("maria"));
+      const card = await group("Usuario maria");
       fireEvent.click(within(card).getByRole("button", { name: "Cambiar contraseña" }));
       fireEvent.change(within(card).getByLabelText("Contraseña nueva"), { target: { value: "nueva-clave-1" } });
       fireEvent.click(within(card).getByRole("button", { name: "Guardar contraseña" }));
@@ -442,6 +492,66 @@ describe("administración: acceso de facturación y supervisión", () => {
       await waitFor(() => expect(copied).toHaveLength(1));
       expect(copied[0]).toContain("Contraseña: nueva-clave-1");
     });
+  });
+});
+
+// Entrar al sitio de administración con usuario y contraseña (además del código de enlace).
+describe("administración: entrar con usuario y contraseña", () => {
+  const form = async () => screen.findByRole("group", { name: "Entrar con usuario y contraseña" });
+  const fill = async (usuario, clave) => {
+    const card = await form();
+    fireEvent.change(within(card).getByLabelText("Usuario"), { target: { value: usuario } });
+    fireEvent.change(within(card).getByLabelText("Contraseña"), { target: { value: clave } });
+    return card;
+  };
+  const loginCalls = () => calls.filter((c) => c.path === "/login");
+
+  it("la pantalla de entrada ofrece usuario y contraseña, y sigue ofreciendo el código de enlace", async () => {
+    render(<AdminApp />);
+    const card = await form();
+    expect(within(card).getByRole("button", { name: "Entrar" })).toBeTruthy();
+    expect(screen.getByLabelText("Código de enlace")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Enlazar" })).toBeTruthy();
+  });
+
+  it("con un usuario administrador entra y recuerda la sesión", async () => {
+    render(<AdminApp />);
+    const card = await fill("  raul  ", "clave-admin-1");
+    fireEvent.click(within(card).getByRole("button", { name: "Entrar" }));
+    await opened();
+    expect(loginCalls().map((c) => c.body)).toEqual([{ usuario: "raul", clave: "clave-admin-1" }]);
+    expect(JSON.parse(localStorage.getItem(KEY))).toMatchObject({ url: URL_OK, token: "sesion-del-admin-0123456789", role: "admin", name: "raul" });
+  });
+
+  it("con la tecla Enter en la contraseña también entra", async () => {
+    render(<AdminApp />);
+    const card = await fill("raul", "clave-admin-1");
+    fireEvent.keyDown(within(card).getByLabelText("Contraseña"), { key: "Enter" });
+    await opened();
+  });
+
+  it("una cuenta que no es de administrador no entra", async () => {
+    render(<AdminApp />);
+    const card = await fill("tania", "clave-12345");
+    fireEvent.click(within(card).getByRole("button", { name: "Entrar" }));
+    expect(await within(card).findByText("Esta cuenta no es de administrador.")).toBeTruthy();
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("una contraseña mala muestra el aviso del buzón", async () => {
+    render(<AdminApp />);
+    const card = await fill("raul", "mala-clave");
+    fireEvent.click(within(card).getByRole("button", { name: "Entrar" }));
+    expect(await within(card).findByText("Usuario o contraseña incorrectos.")).toBeTruthy();
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("sin escribir usuario o contraseña no manda nada", async () => {
+    render(<AdminApp />);
+    const card = await fill("", "");
+    fireEvent.click(within(card).getByRole("button", { name: "Entrar" }));
+    expect(await within(card).findByText("Escribe el usuario y la contraseña.")).toBeTruthy();
+    expect(loginCalls()).toHaveLength(0);
   });
 });
 

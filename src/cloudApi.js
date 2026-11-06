@@ -104,7 +104,9 @@ export function createCloudApi({ url, token, fetchImpl, timeoutMs = DEFAULT_TIME
     adminCierre: () => request("GET", "/admin/cierre"),
     saveCierre: (body) => request("PUT", "/admin/cierre", body),
     sales: (fecha) => request("GET", fecha ? `/summary?fecha=${enc(fecha)}` : "/summary"),
-    saveAccount: (slug, body) => request("PUT", `/admin/accounts/${enc(slug)}`, body),
+    // Usuarios con usuario y contraseña: crear uno ({ rol, usuario, clave }) o cambiar uno por su id.
+    createAccount: (body) => request("POST", "/admin/accounts", body),
+    updateAccount: (id, body) => request("PUT", `/admin/accounts/${enc(id)}`, body),
     adminVendors: () => request("GET", "/admin/vendors"),
     addVendor: (name) => request("POST", "/admin/vendors", { name }),
     updateVendor: (id, patch) => request("PUT", `/admin/vendors/${enc(id)}`, patch),

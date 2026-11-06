@@ -23,7 +23,8 @@ export function createMemoryStore() {
     async putSetting(key, value) {
       settings.set(key, String(value));
     },
-    // Cuentas de facturación y supervisión (ver accounts.js): una por rol.
+    // Cuentas con usuario y contraseña de ANTES (una por rol): solo se leen para pasarlas a la lista nueva,
+    // que vive en los ajustes (ver api.js, loadAccounts).
     async listAccounts() {
       return [...accounts.values()].map(copy);
     },
@@ -36,8 +37,8 @@ export function createMemoryStore() {
     async getSession(tokenHash) {
       return copy(sessions.get(tokenHash));
     },
-    async deleteSessionsByRole(role) {
-      for (const [hash, s] of sessions) if (s.role === role) sessions.delete(hash);
+    async deleteSessionsByAccount(accountId) {
+      for (const [hash, s] of sessions) if (s.accountId === accountId) sessions.delete(hash);
     },
     async purgeSessions(nowIso) {
       for (const [hash, s] of sessions) if (s.expiresAt <= nowIso) sessions.delete(hash);

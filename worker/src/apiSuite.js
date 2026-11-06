@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { handleRequest } from "./api";
+import { hashPassword } from "./accounts";
 
 // Buzón de pedidos entre los vendedores y la facturadora (ver
 // docs/superpowers/specs/2026-10-30-facturacion-nube-design.md).
@@ -460,34 +461,41 @@ export function apiSuite(label, makeStore) {
 
     describe("cuentas de facturación y supervisión (usuario y contraseña)", () => {
       const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
-      const setAccount = (slug, body) => admin("PUT", `/accounts/${slug}`, body);
+      const ROLES = ["facturacion", "supervision", "administrador"];
+      // Crea o cambia "la" cuenta de ese rol (la primera que haya).
+      const setAccount = async (slug, body) => {
+        if (!ROLES.includes(slug)) return admin("PUT", `/accounts/${slug}`, body);
+        const existing = (await admin("GET", "/accounts")).json.cuentas.find((c) => c.rol === slug);
+        return existing ? admin("PUT", `/accounts/${existing.id}`, body) : admin("POST", "/accounts", { rol: slug, ...body });
+      };
       const login = (usuario, clave) => call("POST", "/login", { body: { usuario, clave } });
       const later = (ms) => new Date(new Date(NOW).getTime() + ms).toISOString();
 
       it("al principio no hay cuentas; solo el administrador las ve y las cambia", async () => {
-        expect((await admin("GET", "/accounts")).json).toEqual({ facturacion: null, supervision: null });
+        expect((await admin("GET", "/accounts")).json).toEqual({ cuentas: [] });
         expect((await call("GET", "/admin/accounts")).status).toBe(401);
         for (const token of ["tok-carlos", "tok-fact"]) {
           expect((await call("GET", "/admin/accounts", { token })).status).toBe(403);
-          expect((await call("PUT", "/admin/accounts/facturacion", { token, body: { usuario: "maria", clave: "clave-12345" } })).status).toBe(403);
+          expect((await call("POST", "/admin/accounts", { token, body: { rol: "facturacion", usuario: "maria", clave: "clave-12345" } })).status).toBe(403);
+          expect((await call("PUT", "/admin/accounts/cualquiera", { token, body: { activo: false } })).status).toBe(403);
         }
       });
 
       it("crea la cuenta de facturación y la de supervisión, sin devolver nunca la contraseña", async () => {
         const created = await setAccount("facturacion", { usuario: "Maria.Fact", clave: "clave-de-maria" });
         expect(created.status).toBe(200);
-        expect(created.json).toEqual({ usuario: "Maria.Fact", activo: true });
-        expect((await setAccount("supervision", { usuario: "supervisor1", clave: "otra-clave-9" })).json).toEqual({ usuario: "supervisor1", activo: true });
-        expect((await admin("GET", "/accounts")).json).toEqual({
-          facturacion: { usuario: "Maria.Fact", activo: true },
-          supervision: { usuario: "supervisor1", activo: true },
-        });
+        expect(created.json).toEqual({ id: expect.any(String), rol: "facturacion", usuario: "Maria.Fact", activo: true });
+        expect((await setAccount("supervision", { usuario: "supervisor1", clave: "otra-clave-9" })).json).toMatchObject({ rol: "supervision", usuario: "supervisor1", activo: true });
+        expect((await admin("GET", "/accounts")).json.cuentas.map((c) => [c.rol, c.usuario, c.activo])).toEqual([
+          ["facturacion", "Maria.Fact", true],
+          ["supervision", "supervisor1", true],
+        ]);
         expect(JSON.stringify((await admin("GET", "/accounts")).json)).not.toContain("clave");
       });
 
       it("la contraseña no queda guardada tal cual (solo su huella)", async () => {
         await setAccount("facturacion", { usuario: "maria", clave: "clave-de-maria" });
-        const [account] = await store.listAccounts();
+        const [account] = JSON.parse(await store.getSetting("cuentas"));
         expect(JSON.stringify(account)).not.toContain("clave-de-maria");
         expect(account.hash).toBeTruthy();
         expect(account.salt).toBeTruthy();
@@ -520,7 +528,7 @@ export function apiSuite(label, makeStore) {
 
       it("al cambiar solo el usuario o solo la contraseña, lo demás se conserva", async () => {
         await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
-        expect((await setAccount("facturacion", { usuario: "maria2" })).json).toEqual({ usuario: "maria2", activo: true });
+        expect((await setAccount("facturacion", { usuario: "maria2" })).json).toMatchObject({ usuario: "maria2", activo: true });
         expect((await login("maria2", "clave-12345")).status).toBe(200);
         await setAccount("facturacion", { clave: "nueva-clave-1" });
         expect((await login("maria2", "clave-12345")).status).toBe(401);
@@ -615,7 +623,7 @@ export function apiSuite(label, makeStore) {
       it("desactivar la cuenta cierra las sesiones y no deja entrar; reactivar la devuelve", async () => {
         await setAccount("supervision", { usuario: "super", clave: "clave-12345" });
         const { token } = (await login("super", "clave-12345")).json;
-        expect((await setAccount("supervision", { activo: false })).json).toEqual({ usuario: "super", activo: false });
+        expect((await setAccount("supervision", { activo: false })).json).toMatchObject({ usuario: "super", activo: false });
         expect((await call("GET", "/orders", { token })).status).toBe(401);
         expect((await login("super", "clave-12345")).status).toBe(401);
         await setAccount("supervision", { activo: true });
@@ -647,6 +655,111 @@ export function apiSuite(label, makeStore) {
         await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
         const r = await call("POST", "/login", { body: { usuario: "maria", clave: "clave-12345" }, origin: ORIGIN });
         expect(r.headers.get("Access-Control-Allow-Origin")).toBe(ORIGIN);
+      });
+    });
+
+    // Varias cuentas por rol y contraseña para el administrador (el administrador crea los usuarios).
+    describe("usuarios: varias cuentas y administrador con contraseña", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const create = (rol, usuario, clave = "clave-12345") => admin("POST", "/accounts", { rol, usuario, clave });
+      const login = (usuario, clave = "clave-12345") => call("POST", "/login", { body: { usuario, clave } });
+
+      it("se pueden crear varias cuentas del mismo rol, y cada una entra con lo suyo", async () => {
+        const maria = await create("facturacion", "maria");
+        const ana = await create("facturacion", "ana", "otra-clave-77");
+        expect([maria.status, ana.status]).toEqual([200, 200]);
+        expect(maria.json.id).not.toBe(ana.json.id);
+        expect((await admin("GET", "/accounts")).json.cuentas.map((c) => c.usuario)).toEqual(["maria", "ana"]);
+        const m = await login("maria");
+        const a = await login("ana", "otra-clave-77");
+        expect([m.json.role, a.json.role]).toEqual(["facturadora", "facturadora"]);
+        expect((await call("GET", "/me", { token: m.json.token })).json.name).toBe("maria");
+        expect((await call("GET", "/me", { token: a.json.token })).json.name).toBe("ana");
+        expect((await login("maria", "otra-clave-77")).status).toBe(401);
+      });
+
+      it("desactivar o cambiar la contraseña de una cuenta no cierra la sesión de las otras del mismo rol", async () => {
+        const maria = (await create("facturacion", "maria")).json;
+        const ana = (await create("facturacion", "ana")).json;
+        const m = (await login("maria")).json.token;
+        const a = (await login("ana")).json.token;
+        await admin("PUT", `/accounts/${maria.id}`, { activo: false });
+        expect((await call("GET", "/me", { token: m })).status).toBe(401);
+        expect((await call("GET", "/me", { token: a })).status).toBe(200);
+        await admin("PUT", `/accounts/${ana.id}`, { clave: "nueva-clave-1" });
+        expect((await call("GET", "/me", { token: a })).status).toBe(401);
+        expect((await login("ana", "nueva-clave-1")).status).toBe(200);
+      });
+
+      it("también de supervisión, y cada rol hace lo suyo", async () => {
+        await create("supervision", "super1");
+        await create("supervision", "super2");
+        const { token, role } = (await login("super2")).json;
+        expect(role).toBe("supervisor");
+        expect((await call("GET", "/orders?desde=2026-10-01", { token })).status).toBe(200);
+        expect((await call("POST", "/orders/confirm", { token, body: { ids: [] } })).status).toBe(403);
+      });
+
+      it("el administrador se puede crear con usuario y contraseña, y entra a su sitio con ellos", async () => {
+        const created = await create("administrador", "raul", "mi-clave-admin");
+        expect(created.json).toMatchObject({ rol: "administrador", usuario: "raul", activo: true });
+        const session = await login("raul", "mi-clave-admin");
+        expect(session.status).toBe(200);
+        expect(session.json.role).toBe("admin");
+        const token = session.json.token;
+        expect((await call("GET", "/admin/vendors", { token })).status).toBe(200);
+        expect((await call("GET", "/admin/accounts", { token })).json.cuentas).toHaveLength(1);
+        expect((await call("POST", "/admin/vendors", { token, body: { name: "Nuevo" } })).status).toBe(200);
+        expect((await call("GET", "/orders/status", { token })).status).toBe(403);
+      });
+
+      it("el enlace del administrador sigue sirviendo aunque tenga contraseña", async () => {
+        await create("administrador", "raul", "mi-clave-admin");
+        expect((await call("GET", "/me", { token: "tok-admin" })).status).toBe(200);
+        expect((await admin("GET", "/accounts")).status).toBe(200);
+      });
+
+      it("una cuenta de administrador desactivada no entra y su sesión se cierra", async () => {
+        const raul = (await create("administrador", "raul")).json;
+        const token = (await login("raul")).json.token;
+        await admin("PUT", `/accounts/${raul.id}`, { activo: false });
+        expect((await call("GET", "/admin/vendors", { token })).status).toBe(401);
+        expect((await login("raul")).status).toBe(401);
+      });
+
+      it("rol que no existe: 400; usuario repetido (en cualquier rol): 409; falta usuario o contraseña: 400", async () => {
+        expect((await create("jefe", "maria")).status).toBe(400);
+        expect((await call("POST", "/admin/accounts", { token: "tok-admin", body: { usuario: "maria", clave: "clave-12345" } })).status).toBe(400);
+        await create("facturacion", "María");
+        expect((await create("supervision", "maria")).status).toBe(409);
+        expect((await create("administrador", "MARIA")).status).toBe(409);
+        expect((await create("facturacion", "ab")).status).toBe(400);
+        expect((await create("facturacion", "otra", "corta")).status).toBe(400);
+        expect((await call("POST", "/admin/accounts", { token: "tok-admin" })).status).toBe(400);
+      });
+
+      it("cambiar el usuario de una cuenta no puede chocar con el de otra", async () => {
+        await create("facturacion", "maria");
+        const ana = (await create("facturacion", "ana")).json;
+        expect((await admin("PUT", `/accounts/${ana.id}`, { usuario: "Maria" })).status).toBe(409);
+        expect((await admin("PUT", `/accounts/${ana.id}`, { usuario: "ana2" })).json.usuario).toBe("ana2");
+      });
+
+      it("una cuenta que no existe: 404", async () => {
+        expect((await admin("PUT", "/accounts/no-existe", { activo: false })).status).toBe(404);
+      });
+
+      it("las cuentas de facturación y supervisión que ya existían (una por rol) se conservan y siguen entrando", async () => {
+        const { salt, hash } = await hashPassword("clave-vieja-1");
+        await store.putAccount({
+          role: "facturadora", username: "Tania", usernameKey: "tania", salt, hash, active: true, failCount: 0, lockedUntil: null, createdAt: NOW, updatedAt: NOW,
+        });
+        const listed = (await admin("GET", "/accounts")).json.cuentas;
+        expect(listed).toEqual([{ id: "facturadora", rol: "facturacion", usuario: "Tania", activo: true }]);
+        expect((await login("tania", "clave-vieja-1")).json.role).toBe("facturadora");
+        await create("facturacion", "maria");
+        expect((await login("tania", "clave-vieja-1")).status).toBe(200);
+        expect((await admin("GET", "/accounts")).json.cuentas.map((c) => c.usuario)).toEqual(["Tania", "maria"]);
       });
     });
 
@@ -1128,7 +1241,7 @@ export function apiSuite(label, makeStore) {
         expect((await call("GET", "/summary")).status).toBe(401);
         expect((await summary("?fecha=2026-10-30", "tok-fact")).status).toBe(403);
         expect((await summary("?fecha=2026-10-30", "tok-carlos")).status).toBe(403);
-        await admin("PUT", "/accounts/supervision", { usuario: "super", clave: "clave-12345" });
+        await admin("POST", "/accounts", { rol: "supervision", usuario: "super", clave: "clave-12345" });
         const { token } = (await call("POST", "/login", { body: { usuario: "super", clave: "clave-12345" } })).json;
         expect((await summary("?fecha=2026-10-30", token)).status).toBe(200);
       });

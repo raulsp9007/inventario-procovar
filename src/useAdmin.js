@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createCloudApi, CloudError } from "./cloudApi";
+import { CLOUD_URL } from "./cloudConfig";
 import { parseLinkCode } from "./linkCode";
 import { loadAdminLink, saveAdminLink } from "./adminStorage";
 
@@ -88,6 +89,17 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
     setPhase("loading");
   }, []);
 
+  // Entrar con usuario y contraseña (un usuario administrador): el buzón da una sesión que sirve igual
+  // que el código de enlace.
+  const signIn = useCallback(async ({ usuario = "", clave = "" } = {}) => {
+    const session = await apiRef.current({ url: CLOUD_URL, token: "" }).login(String(usuario).trim(), clave);
+    if (session.role !== "admin") throw new Error("Esta cuenta no es de administrador.");
+    const next = { url: CLOUD_URL, token: session.token, name: session.name, role: "admin" };
+    saveAdminLink(next);
+    setLink(next);
+    setPhase("loading");
+  }, []);
+
   const unlink = useCallback(() => {
     saveAdminLink(null);
     setLink(null);
@@ -102,12 +114,13 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
   }, []);
 
   return {
-    link, vendors, facturadora, accounts, schedule, cierre, zona, phase, error, busy, refresh, linkWith, unlink, clearError: () => setError(""),
+    link, vendors, facturadora, accounts, schedule, cierre, zona, phase, error, busy, refresh, linkWith, signIn, unlink, clearError: () => setError(""),
     addVendor: (name) => act((a) => a.addVendor(name)),
     renameVendor: (id, name) => act((a) => a.updateVendor(id, { name })),
     setActive: (id, active) => act((a) => a.updateVendor(id, { active })),
     regenerate: (id) => act((a) => a.regenerateVendor(id)),
-    saveAccount: (slug, body) => act((a) => a.saveAccount(slug, body)),
+    createAccount: (body) => act((a) => a.createAccount(body)),
+    updateAccount: (id, body) => act((a) => a.updateAccount(id, body)),
     saveSchedule: (body) => act((a) => a.saveSchedule(body)),
     saveCierre: (body) => act((a) => a.saveCierre(body)),
     saveZona: (body) => act((a) => a.saveZona(body)),

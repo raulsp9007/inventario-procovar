@@ -12,7 +12,8 @@ import { todayStr } from "./dateUtils";
 // abierta o al volver a ella si ya pasó más de una hora. No consulta al enlazar; al volver
 // la conexión solo reenvía lo que quedó en cola (sin consultar lo confirmado). Todo se guarda aparte del estado de la app (cloudStorage.js).
 
-// Solo se suben los pedidos de "Hoy" (los que ve la facturadora; a las 12 am se limpia).
+// Se suben los pedidos de hoy y los de días que vienen (los de mañana ya quedan en la nube, listos para
+// que la facturadora los vea ese día); los de días que ya pasaron no.
 
 const MESSAGES = {
   network: "Sin conexión. Se enviará al volver.",

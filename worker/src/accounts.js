@@ -1,13 +1,14 @@
-// Cuentas con usuario y contraseña para la facturación y la supervisión (las maneja el
-// administrador desde su sitio). La contraseña nunca se guarda: solo su huella
+// Cuentas con usuario y contraseña de la facturación, la supervisión y la administración (las
+// maneja el administrador desde su sitio; puede haber varias de cada una). La contraseña nunca se guarda: solo su huella
 // (PBKDF2-SHA256 con sal). Entrar (POST /login) da una sesión: un código al azar,
 // del que solo se guarda su huella, que la página usa como cualquier otro código.
 // Funciones puras salvo por crypto.
 
 import { nameKey } from "./roster.js";
 
-// "facturacion" y "supervision" son los nombres en las direcciones; el rol es el del buzón.
-export const ACCOUNT_ROLES = { facturacion: "facturadora", supervision: "supervisor" };
+// "facturacion", "supervision" y "administrador" son los nombres que ve el sitio; el rol es el del buzón.
+export const ACCOUNT_ROLES = { facturacion: "facturadora", supervision: "supervisor", administrador: "admin" };
+const SLUG_OF_ROLE = Object.fromEntries(Object.entries(ACCOUNT_ROLES).map(([slug, role]) => [role, slug]));
 
 export const USERNAME_MIN = 3;
 export const USERNAME_MAX = 40;
@@ -57,7 +58,7 @@ export async function hashToken(token) {
 export const usernameKey = (username) => nameKey(username);
 
 // Lo que se ve de una cuenta (nunca la contraseña ni su huella).
-export const accountView = (account) => (account ? { usuario: account.username, activo: !!account.active } : null);
+export const accountView = (account) => (account ? { id: account.id, rol: SLUG_OF_ROLE[account.role], usuario: account.username, activo: !!account.active } : null);
 
 // Valida lo que manda el administrador. `existing`: la cuenta actual (si ya hay una).
 // Devuelve { usuario?, clave?, activo? } limpios, o { error }.

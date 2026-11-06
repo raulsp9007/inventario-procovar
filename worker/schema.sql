@@ -27,8 +27,9 @@ CREATE TABLE IF NOT EXISTS vendors (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
--- Cuentas con usuario y contraseña de la facturación y la supervisión (una por rol; las
--- maneja el administrador). Solo se guarda la huella de la contraseña.
+-- Cuentas con usuario y contraseña de ANTES (una por rol). Las cuentas de ahora (varias por rol, y también
+-- de administrador) viven en los ajustes (`settings`, clave "cuentas"); esta tabla solo se lee, una vez,
+-- para pasarlas. Solo se guarda la huella de la contraseña.
 CREATE TABLE IF NOT EXISTS accounts (
   role         TEXT PRIMARY KEY,
   username     TEXT NOT NULL,
@@ -41,7 +42,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL
 );
--- Sesiones abiertas con usuario y contraseña (se guarda la huella del código, no el código).
+-- Sesiones abiertas con usuario y contraseña (se guarda la huella del código, no el código). La columna
+-- `role` guarda el id de la cuenta (antes, el rol, que era el id de la única cuenta de ese rol).
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   role       TEXT NOT NULL,

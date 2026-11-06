@@ -43,7 +43,7 @@ beforeEach(() => {
   server = { cierre: { activo: true, hora: "08:00", cerrado: true, mensaje: MENSAJE_8AM }, rejectPut: null };
   vi.stubGlobal("fetch", vi.fn(async (url, init) => {
     const path = url.replace(URL_OK, "");
-    calls.push({ method: init.method, path });
+    calls.push({ method: init.method, path, body: init.body ? JSON.parse(init.body) : undefined });
     const ok = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) });
     if (server.rejectPut && init.method === "PUT") return { ok: false, status: 409, json: async () => ({ error: server.rejectPut }), text: async () => "x" };
     if (path === "/me") return ok({ id: "raul", name: "Raul", role: "vendedor" });
@@ -158,6 +158,10 @@ describe("vendedor: cierre de facturación del día", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Facturar a la nube" }));
     await waitFor(() => expect(sent()).toBe(true));
     expect(screen.queryByText(MENSAJE_8AM)).toBeNull();
+    // y sube a la nube con la fecha de mañana, listo para cuando la facturadora abra su sitio ese día
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0].path).toBe("/orders/o1");
+    expect(puts()[0].body).toMatchObject({ date: "2026-09-22" });
   });
 
   it("antes de la hora de cierre se envía normal", async () => {

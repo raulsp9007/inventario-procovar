@@ -41,7 +41,8 @@ export function createD1Store(db) {
     async putSetting(key, value) {
       await db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, String(value)).run();
     },
-    // Cuentas de facturación y supervisión (ver accounts.js): una por rol.
+    // Cuentas con usuario y contraseña de ANTES (una por rol): solo se leen para pasarlas a la lista nueva,
+    // que vive en los ajustes (ver api.js, loadAccounts).
     async listAccounts() {
       const { results } = await db.prepare("SELECT * FROM accounts ORDER BY role").bind().all();
       return results.map((r) => ({
@@ -52,15 +53,17 @@ export function createD1Store(db) {
     async putAccount(a) {
       await db.prepare(accountUpsert).bind(a.role, a.username, a.usernameKey, a.salt, a.hash, a.active ? 1 : 0, a.failCount || 0, a.lockedUntil || null, a.createdAt, a.updatedAt).run();
     },
+    // La columna `role` de las sesiones guarda el id de la cuenta (antes guardaba el rol, que era el id de la
+    // única cuenta de ese rol: las sesiones abiertas de entonces siguen sirviendo).
     async putSession(s) {
-      await db.prepare("INSERT OR REPLACE INTO sessions (token_hash, role, created_at, expires_at) VALUES (?, ?, ?, ?)").bind(s.tokenHash, s.role, s.createdAt, s.expiresAt).run();
+      await db.prepare("INSERT OR REPLACE INTO sessions (token_hash, role, created_at, expires_at) VALUES (?, ?, ?, ?)").bind(s.tokenHash, s.accountId, s.createdAt, s.expiresAt).run();
     },
     async getSession(tokenHash) {
       const r = await db.prepare("SELECT * FROM sessions WHERE token_hash = ?").bind(tokenHash).first();
-      return r ? { tokenHash: r.token_hash, role: r.role, createdAt: r.created_at, expiresAt: r.expires_at } : null;
+      return r ? { tokenHash: r.token_hash, accountId: r.role, createdAt: r.created_at, expiresAt: r.expires_at } : null;
     },
-    async deleteSessionsByRole(role) {
-      await db.prepare("DELETE FROM sessions WHERE role = ?").bind(role).run();
+    async deleteSessionsByAccount(accountId) {
+      await db.prepare("DELETE FROM sessions WHERE role = ?").bind(accountId).run();
     },
     async purgeSessions(nowIso) {
       await db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(nowIso).run();

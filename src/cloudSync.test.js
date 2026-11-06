@@ -118,23 +118,41 @@ describe("reconcile: qué subir", () => {
     expect(reconcile({ orders: [order({ confirmed: true })], products, map }).ops).toEqual([]);
   });
 
-  // Solo cuentan los pedidos de "Hoy": el sitio de la facturadora se limpia a las
-  // 12 am, así que ni los viejos ni los de mañana se suben.
-  describe("solo los pedidos de hoy", () => {
+  // Suben los pedidos de hoy y los de días que vienen (los de mañana enviados a facturación ya quedan
+  // en la nube, listos para cuando la facturadora abra su sitio ese día). Los de días que ya pasaron
+  // no (ni el historial al enlazar).
+  describe("pedidos de hoy y de días que vienen", () => {
     const TODAY = "2026-10-30";
 
-    it("sube los de hoy; los de otros días no (ni el historial al enlazar ni los de 'Para mañana')", () => {
+    it("sube los de hoy y los de mañana; los de días que ya pasaron no (ni el historial al enlazar)", () => {
       const old = order({ orderId: "viejo", date: "2026-10-29" });
       const tomorrow = order({ orderId: "manana", date: "2026-10-31" });
       const { ops, nextMap } = reconcile({ orders: [old, tomorrow, order()], products, map: {}, today: TODAY });
-      expect(ops.map((o) => o.orderId)).toEqual(["o1"]);
+      expect(ops.map((o) => o.orderId).sort()).toEqual(["manana", "o1"]);
       expect(nextMap.viejo).toBeUndefined();
-      expect(nextMap.manana).toBeUndefined();
+      expect(nextMap.manana).toMatchObject({ published: true, status: "pendiente" });
     });
 
-    it("el de mañana se sube cuando llega su día", () => {
+    it("también sube un pedido de más adelante (por ejemplo el lunes, si mañana es domingo)", () => {
+      const monday = order({ orderId: "lunes", date: "2026-11-02" });
+      expect(reconcile({ orders: [monday], products, map: {}, today: TODAY }).ops.map((o) => o.orderId)).toEqual(["lunes"]);
+    });
+
+    it("un pedido de mañana que no está enviado a facturación no se sube", () => {
+      const tomorrow = order({ orderId: "manana", date: "2026-10-31", sent: false });
+      expect(reconcile({ orders: [tomorrow], products, map: {}, today: TODAY }).ops).toEqual([]);
+    });
+
+    it("el de mañana, ya subido, no se vuelve a subir cuando llega su día", () => {
       const tomorrow = order({ orderId: "manana", date: "2026-10-31" });
-      expect(reconcile({ orders: [tomorrow], products, map: {}, today: "2026-10-31" }).ops.map((o) => o.orderId)).toEqual(["manana"]);
+      const first = reconcile({ orders: [tomorrow], products, map: {}, today: TODAY });
+      expect(reconcile({ orders: [tomorrow], products, map: first.nextMap, today: "2026-10-31" }).ops).toEqual([]);
+    });
+
+    it("un pedido de mañana ya subido, si deja de estar enviado, se borra de la nube", () => {
+      const tomorrow = order({ orderId: "manana", date: "2026-10-31" });
+      const first = reconcile({ orders: [tomorrow], products, map: {}, today: TODAY });
+      expect(reconcile({ orders: [{ ...tomorrow, sent: false }], products, map: first.nextMap, today: TODAY }).ops.map((o) => o.kind)).toEqual(["delete"]);
     });
 
     it("un pedido ya subido cuyo día pasó se deja quieto: no se borra ni se vuelve a subir", () => {

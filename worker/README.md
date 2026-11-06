@@ -97,23 +97,31 @@ Además de los vendedores, el administrador define desde `admin.html` dos acceso
 - **Supervisión:** **solo lectura**. Ve los pedidos por vendedor con sus estados; el buzón le
   responde 403 si intenta confirmar, deshacer o cambiar algo.
 
-Hay uno de cada. Entran en `…/facturadora.html` escribiendo su usuario y contraseña; la página
-muestra solo el acceso hasta entrar. La contraseña (8 a 100 caracteres) no se guarda: el buzón
+El administrador crea **todos los usuarios que haga falta** (tarjeta "Usuarios", `POST /admin/accounts`
+con `{ rol, usuario, clave }`; se cambian por su id con `PUT /admin/accounts/:id`): varios de
+facturación y de supervisión, y también **usuarios administrador**, que entran a `…/admin.html` con
+usuario y contraseña (el código de enlace del administrador sigue sirviendo como respaldo). Los de
+facturación y supervisión entran en `…/facturadora.html` escribiendo su usuario y contraseña; la
+página muestra solo el acceso hasta entrar. La contraseña (8 a 100 caracteres) no se guarda: el buzón
 solo guarda su huella, y no se puede volver a leer (se puede cambiar). Tras 5 intentos fallidos
 la cuenta se bloquea 5 minutos. Entrar da una sesión de 24 horas (pasado ese tiempo hay que volver a entrar); cambiar la contraseña o
-desactivar el acceso cierra las sesiones abiertas. El usuario no puede repetirse entre las dos
-cuentas.
+desactivar el acceso cierra las sesiones abiertas de **esa** cuenta (las demás siguen). El usuario no
+puede repetirse entre las cuentas, sea del rol que sea.
 
 Mientras no se cree la cuenta de facturación, sigue sirviendo el código de la facturadora del
 secreto `USERS` (o su contraseña/enlace de antes: se escribe sin usuario). Al crearla, la cuenta
 nueva **reemplaza** a ese código.
 
-Activarlo (una sola vez, en este orden):
+Las cuentas viven ahora en los ajustes del buzón (no hace falta una tabla nueva). Las que ya existían
+(una de facturación y una de supervisión) se pasan solas la primera vez, con sus contraseñas, y siguen
+entrando. Para activarlo basta publicar el buzón (`npx wrangler deploy`) y la página (push).
 
-1. Aplica la tabla nueva: `npx wrangler d1 execute procovar-buzon --remote --file=schema.sql`
-   (crea `accounts` y `sessions`; se puede repetir sin problema).
-2. Publica el buzón: `npx wrangler deploy`.
-3. Publica la página (push). Después entra a `admin.html` y crea los accesos.
+## Pedidos para mañana
+
+La app del vendedor también envía a la nube los pedidos **de mañana** (o del próximo día hábil) que
+se marcan como enviados a facturación, aunque el cierre del día ya haya pasado: así quedan listos en
+el sitio de la facturadora, que los muestra el día que les toca (su tablero solo enseña los de hoy).
+Los de días que ya pasaron no se suben.
 
 ## Horario de facturación
 

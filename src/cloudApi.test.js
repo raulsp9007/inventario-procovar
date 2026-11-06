@@ -62,13 +62,13 @@ describe("createCloudApi: usuario y contraseña", () => {
     const cloud = createCloudApi({ url: URL_OK, token: TOKEN, fetchImpl });
     await cloud.login("maria", "clave-12345");
     await cloud.adminAccounts();
-    await cloud.saveAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
-    await cloud.saveAccount("supervision", { activo: false });
+    await cloud.createAccount({ rol: "facturacion", usuario: "maria", clave: "clave-12345" });
+    await cloud.updateAccount("abc123", { activo: false });
     expect(calls).toEqual([
       ["POST", "/login", { usuario: "maria", clave: "clave-12345" }],
       ["GET", "/admin/accounts", undefined],
-      ["PUT", "/admin/accounts/facturacion", { usuario: "maria", clave: "clave-12345" }],
-      ["PUT", "/admin/accounts/supervision", { activo: false }],
+      ["POST", "/admin/accounts", { rol: "facturacion", usuario: "maria", clave: "clave-12345" }],
+      ["PUT", "/admin/accounts/abc123", { activo: false }],
     ]);
   });
 
