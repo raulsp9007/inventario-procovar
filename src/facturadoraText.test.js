@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { clock12, connectionText, newOrdersText } from "./facturadoraText";
+import { clock12, connectionText, newOrdersText, sentArrivalText, lastReceivedText } from "./facturadoraText";
 import { playChime } from "./alertSound";
 
 // Textos de la página de la facturadora, en palabras de todos los días y con la hora en
@@ -78,5 +78,46 @@ describe("playChime", () => {
   it("si el audio falla, no rompe la página", () => {
     window.AudioContext = vi.fn(() => { throw new Error("bloqueado"); });
     expect(() => playChime()).not.toThrow();
+  });
+});
+
+// Hora de envío y de llegada: si el pedido tardó (2 minutos o más) en llegar, se dicen las dos.
+describe("sentArrivalText", () => {
+  const order = (sent, created) => ({ sentAt: sent && new Date(2026, 9, 30, ...sent).toISOString(), createdAt: new Date(2026, 9, 30, ...created).toISOString() });
+
+  it("sin hora de envío (pedidos de antes) o a tiempo, solo la hora en que llegó", () => {
+    expect(sentArrivalText({ createdAt: new Date(2026, 9, 30, 16, 3).toISOString() })).toBe("4:03 p. m.");
+    expect(sentArrivalText(order([16, 2], [16, 3]))).toBe("4:03 p. m.");
+  });
+
+  it("si tardó 2 minutos o más, dice cuándo se envió y cuándo llegó", () => {
+    expect(sentArrivalText(order([15, 58], [16, 3]))).toBe("enviado 3:58 p. m. · llegó 4:03 p. m.");
+    expect(sentArrivalText(order([16, 1], [16, 3]))).toBe("enviado 4:01 p. m. · llegó 4:03 p. m.");
+  });
+
+  it("datos que no sirven no rompen: lo que haya", () => {
+    expect(sentArrivalText({})).toBe("");
+    expect(sentArrivalText({ sentAt: "x", createdAt: new Date(2026, 9, 30, 9, 5).toISOString() })).toBe("9:05 a. m.");
+  });
+});
+
+describe("lastReceivedText", () => {
+  const orders = (...times) => times.map((t, i) => ({ id: `o${i}`, createdAt: new Date(2026, 9, 30, ...t).toISOString() }));
+  const now = new Date(2026, 9, 30, 11, 0, 0).getTime();
+
+  it("sin pedidos, dice que todavía no ha llegado ninguno", () => {
+    expect(lastReceivedText([], now)).toBe("Todavía no ha llegado ningún pedido");
+  });
+
+  it("dice hace cuánto llegó el último", () => {
+    expect(lastReceivedText(orders([10, 30], [10, 57]), now)).toBe("Último pedido recibido hace 3 min");
+    expect(lastReceivedText(orders([10, 59, 30]), now)).toBe("Último pedido recibido hace unos segundos");
+    expect(lastReceivedText(orders([10, 0]), now)).toBe("Último pedido recibido hace 1 h");
+    expect(lastReceivedText(orders([9, 45]), now)).toBe("Último pedido recibido hace 1 h 15 min");
+    expect(lastReceivedText(orders([8, 0]), now)).toBe("Último pedido recibido hace 3 h");
+  });
+
+  it("si el reloj de esta computadora va atrasado y el pedido parece del futuro, dice unos segundos", () => {
+    expect(lastReceivedText(orders([11, 5]), now)).toBe("Último pedido recibido hace unos segundos");
   });
 });

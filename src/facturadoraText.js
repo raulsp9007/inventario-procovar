@@ -12,6 +12,29 @@ export function clock12(value) {
   return `${hour12}:${String(d.getMinutes()).padStart(2, "0")} ${hours < 12 ? "a. m." : "p. m."}`;
 }
 
+// Cuándo se envió y cuándo llegó un pedido: normalmente llegan al instante, así que se dice solo la hora; si tardó 2
+// minutos o más (mala señal del vendedor), se dicen las dos. Los pedidos de antes no traen hora de envío.
+const LATE_MS = 2 * 60000;
+export function sentArrivalText(order) {
+  const arrived = clock12(order.createdAt);
+  const sentMs = order.sentAt ? new Date(order.sentAt).getTime() : NaN;
+  const arrivedMs = order.createdAt ? new Date(order.createdAt).getTime() : NaN;
+  if (Number.isNaN(sentMs) || Number.isNaN(arrivedMs) || arrivedMs - sentMs < LATE_MS) return arrived;
+  return `enviado ${clock12(order.sentAt)} · llegó ${arrived}`;
+}
+
+// Hace cuánto llegó el último pedido (para ver que el flujo sigue vivo).
+export function lastReceivedText(orders, nowMs) {
+  const times = orders.map((o) => new Date(o.createdAt).getTime()).filter((n) => !Number.isNaN(n));
+  if (times.length === 0) return "Todavía no ha llegado ningún pedido";
+  const minutes = Math.max(0, Math.floor((nowMs - Math.max(...times)) / 60000));
+  if (minutes < 1) return "Último pedido recibido hace unos segundos";
+  if (minutes < 60) return `Último pedido recibido hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return `Último pedido recibido hace ${hours} h${rest ? ` ${rest} min` : ""}`;
+}
+
 // Cómo va la conexión con la nube, dicho sin tecnicismos.
 export function connectionText(f) {
   const time = clock12(f.lastSyncAt);

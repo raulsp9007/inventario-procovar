@@ -341,6 +341,56 @@ describe("facturadora: los vendedores", () => {
   });
 });
 
+describe("facturadora: cuándo se envió y cuándo llegó", () => {
+  it("un pedido que llegó a tiempo muestra solo la hora (como siempre)", async () => {
+    linkStorage();
+    Object.assign(server.sellers[0].orders[0], { createdAt: new Date(2026, 9, 30, 9, 5).toISOString(), sentAt: new Date(2026, 9, 30, 9, 4).toISOString() });
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    expect(within(cardOf("Ana López")).getByText("Carlos Pérez · 9:05 a. m.")).toBeTruthy();
+  });
+
+  it("uno que tardó 2 minutos o más muestra cuándo se envió y cuándo llegó", async () => {
+    linkStorage();
+    Object.assign(server.sellers[0].orders[0], { createdAt: new Date(2026, 9, 30, 9, 5).toISOString(), sentAt: new Date(2026, 9, 30, 8, 58).toISOString() });
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    expect(within(cardOf("Ana López")).getByText("Carlos Pérez · enviado 8:58 a. m. · llegó 9:05 a. m.")).toBeTruthy();
+  });
+});
+
+describe("facturadora: último pedido recibido", () => {
+  const lastText = () => document.querySelector("[data-last-received]");
+
+  it("dice hace cuánto llegó el último pedido", async () => {
+    linkStorage();
+    server.sellers.forEach((s) => s.orders.forEach((o) => { o.createdAt = new Date(2026, 9, 30, 8, 0).toISOString(); }));
+    server.sellers[0].orders[0].createdAt = new Date(2026, 9, 30, 10, 57).toISOString();
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    expect(lastText().textContent).toBe("Último pedido recibido hace 3 min");
+  });
+
+  it("se actualiza solo con el paso del tiempo", async () => {
+    linkStorage();
+    server.sellers.forEach((s) => s.orders.forEach((o) => { o.createdAt = new Date(2026, 9, 30, 8, 0).toISOString(); }));
+    server.sellers[0].orders[0].createdAt = new Date(2026, 9, 30, 10, 57).toISOString();
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    await act(async () => { vi.advanceTimersByTime(5 * 60000); });
+    await waitFor(() => expect(lastText().textContent).toMatch(/hace [78] min/));
+  });
+
+  it("sin pedidos dice que todavía no ha llegado ninguno", async () => {
+    linkStorage();
+    server.sellers = [recount({ id: "carlos", name: "Carlos Pérez", orders: [] })];
+    render(<FacturadoraApp />);
+    await waitFor(() => expect(calls.some((c) => c.path.startsWith("/orders"))).toBe(true));
+    await waitFor(() => expect(lastText()).toBeTruthy());
+    expect(lastText().textContent).toBe("Todavía no ha llegado ningún pedido");
+  });
+});
+
 describe("facturadora: la tarjeta del pedido", () => {
   it("lista los pendientes del más antiguo al más nuevo", async () => {
     await openBoard();

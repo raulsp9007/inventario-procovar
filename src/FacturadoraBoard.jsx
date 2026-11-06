@@ -4,7 +4,7 @@ import { formatCUP } from "./money";
 import { formatDateShort } from "./dateUtils";
 import { openPortalSearch, portalSearchText } from "./portalLink";
 import { flattenOrders, filterOrders } from "./facturadoraData";
-import { clock12, connectionText, newOrdersText } from "./facturadoraText";
+import { clock12, connectionText, newOrdersText, sentArrivalText, lastReceivedText } from "./facturadoraText";
 import { playChime } from "./alertSound";
 import SalesSummary from "./SalesSummary.jsx";
 
@@ -66,7 +66,7 @@ const confirmButton = { ...bigButton, background: "var(--green)", color: "var(--
 function OrderCard({ order, readOnly, paused, onConfirm, onUndo }) {
   const done = order.status === "confirmado";
   const byFacturadora = order.confirmedBy === "facturadora";
-  const when = clock12(order.createdAt);
+  const when = sentArrivalText(order);
   const confirmedText = `Confirmado a las ${clock12(order.confirmedAt)}${order.confirmedBy === "vendedor" ? " (por el vendedor)" : ""}`;
   return (
     <article
@@ -189,6 +189,12 @@ export default function FacturadoraBoard({ f, sellers }) {
   const paused = !!f.closedMessage;
 
   const all = useMemo(() => flattenOrders(sellers), [sellers]);
+  // "Último pedido recibido hace N min": se actualiza solo cada medio minuto.
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setTick(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
   const inSeller = useMemo(() => (sellerId === "todos" ? all : all.filter((o) => o.sellerId === sellerId)), [all, sellerId]);
   const filtered = useMemo(() => filterOrders(all, { sellerId, tab: "todos", query }), [all, sellerId, query]);
   const pending = filtered.filter((o) => o.status === "pendiente");
@@ -291,6 +297,7 @@ export default function FacturadoraBoard({ f, sellers }) {
           <Wifi size={18} aria-hidden="true" />
           <span>{connectionText(f)}</span>
         </div>
+        <div data-last-received style={{ fontSize: px(15), color: "var(--text-muted)", margin: "-8px 0 16px" }}>{lastReceivedText(all, tick)}</div>
 
         {paused && (
           <div role="status" data-closed style={{ background: "var(--warn-tint)", border: "1px solid var(--border-warn)", color: "var(--orange-text)", borderRadius: 12, padding: "14px 18px", marginBottom: 16, fontSize: px(18), fontWeight: 700 }}>

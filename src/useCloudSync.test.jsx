@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { CloudError } from "./cloudApi";
 import { makeLinkCode } from "./linkCode";
 import { loadCloud } from "./cloudStorage";
 import { useCloudSync } from "./useCloudSync";
+import { siteNow, hasSiteClock, clearSiteClock } from "./siteClock";
 
 // Hook del vendedor: sube los pedidos enviados a facturación, consulta lo que
 // confirmó la facturadora y marca CONF. en la app. El buzón se simula con un
@@ -27,7 +28,8 @@ function fakeCloud() {
     putOrder: vi.fn(async () => ({})),
     deleteOrder: vi.fn(async () => ({})),
     confirmOrder: vi.fn(async () => ({})),
-    statusSince: vi.fn(async () => ({ now: state.now, orders: state.rows })),
+    statusSince: vi.fn(async () => ({ now: state.now, orders: state.rows, ...(state.site || {}) })),
+    time: vi.fn(async () => state.timeReply || { now: new Date().toISOString(), zona: "America/Havana", ajuste: 0, hoy: "2026-10-30", hora: "11:00" }),
   };
   return { api, state, createApi: vi.fn(() => api) };
 }
@@ -45,7 +47,141 @@ const linked = async (ctx) => {
   await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalled());
 };
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => { localStorage.clear(); clearSiteClock(); });
+
+describe("useCloudSync: envío en lote", () => {
+  const sent = (id) => order({ orderId: id, customerName: `Cliente ${id}` });
+
+  it("varios pedidos enviados juntos suben en una sola petición, cada uno con cuándo se hizo el cambio", async () => {
+    const ctx = setup({ orders: [sent("o1"), sent("o2"), sent("o3")] });
+    ctx.api.putOrders = vi.fn(async (ops) => ({ resultados: ops.map((o) => ({ id: o.orderId, ok: true })) }));
+    await act(async () => { await ctx.hook.result.current.linkWith(CODE); });
+    await waitFor(() => expect(ctx.api.putOrders).toHaveBeenCalledTimes(1));
+    const ops = ctx.api.putOrders.mock.calls[0][0];
+    expect(ops.map((o) => o.orderId).sort()).toEqual(["o1", "o2", "o3"]);
+    expect(ops.every((o) => typeof o.queuedAt === "string" && o.content.customerName)).toBe(true);
+    expect(ctx.api.putOrder).not.toHaveBeenCalled();
+    await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(0));
+    expect(ctx.hook.result.current.chips.o2).toEqual({ state: "cloud", text: "En nube" });
+  });
+
+  it("si el lote falla por la conexión, se reintenta solo y llegan todos", async () => {
+    const ctx = setup({ orders: [sent("o1"), sent("o2")], retryDelaysMs: [30, 30] });
+    ctx.api.putOrders = vi.fn()
+      .mockRejectedValueOnce(new CloudError("network", 0, "x"))
+      .mockImplementation(async (ops) => ({ resultados: ops.map((o) => ({ id: o.orderId, ok: true })) }));
+    await act(async () => { await ctx.hook.result.current.linkWith(CODE); });
+    await waitFor(() => expect(ctx.api.putOrders).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(0));
+  });
+
+  it("un pedido que la nube rechaza dentro del lote sale en rojo y los otros quedan en la nube", async () => {
+    const ctx = setup({ orders: [sent("o1"), sent("o2")] });
+    ctx.api.putOrders = vi.fn(async (ops) => ({ resultados: ops.map((o) => (o.orderId === "o2" ? { id: "o2", ok: false, status: 409, error: "La facturación de hoy cerró." } : { id: o.orderId, ok: true })) }));
+    await act(async () => { await ctx.hook.result.current.linkWith(CODE); });
+    await waitFor(() => expect(ctx.hook.result.current.chips.o2).toEqual({ state: "rejected", text: "La facturación de hoy cerró." }));
+    expect(ctx.hook.result.current.chips.o1).toEqual({ state: "cloud", text: "En nube" });
+  });
+});
+
+// Mientras haya pedidos enviados que la facturadora no confirmó (o cosas en cola), con la app a la vista se consulta cada
+// pocos minutos, en vez de cada hora: el vendedor se entera antes de lo confirmado o de un problema.
+describe("useCloudSync: vigilancia mientras hay pedidos sin confirmar", () => {
+  const setVisibility = (state) => { Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state }); };
+  afterEach(() => { delete document.visibilityState; });
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  it("con un pedido enviado sin confirmar consulta cada tanto", async () => {
+    const ctx = setup({ watchMs: 30 });
+    await linked(ctx);
+    await waitFor(() => expect(ctx.api.statusSince.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("sin pedidos pendientes no consulta (solo cada hora)", async () => {
+    const ctx = setup({ watchMs: 30, orders: [] });
+    await act(async () => { await ctx.hook.result.current.linkWith(CODE); });
+    await wait(150);
+    expect(ctx.api.statusSince).not.toHaveBeenCalled();
+  });
+
+  it("cuando ya está todo confirmado deja de consultar", async () => {
+    const ctx = setup({ watchMs: 30 });
+    ctx.state.rows = [{ id: "o1", status: "confirmado", rev: 1, modified: false, confirmedAt: "2026-10-30T15:10:00.000Z", confirmedBy: "facturadora", updatedAt: "x" }];
+    await linked(ctx);
+    await waitFor(() => expect(ctx.api.statusSince).toHaveBeenCalled());
+    await wait(60);
+    const calls = ctx.api.statusSince.mock.calls.length;
+    await wait(150);
+    expect(ctx.api.statusSince.mock.calls.length).toBe(calls);
+  });
+
+  it("con la app oculta no consulta", async () => {
+    const ctx = setup({ watchMs: 30 });
+    await linked(ctx);
+    setVisibility("hidden");
+    await wait(60);
+    const calls = ctx.api.statusSince.mock.calls.length;
+    await wait(150);
+    expect(ctx.api.statusSince.mock.calls.length).toBe(calls);
+  });
+
+  it("por defecto es cada 5 minutos (no hace nada de más en las pruebas ni al abrir)", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    await wait(100);
+    expect(ctx.api.statusSince).not.toHaveBeenCalled();
+  });
+});
+
+// La hora del sitio: la app la aprende del buzón (al abrir y en cada comprobación) y la usa para el día y las horas.
+describe("useCloudSync: hora del sitio", () => {
+  it("al abrir la app enlazada pregunta la hora del sitio (una consulta liviana, no la lista de pedidos)", async () => {
+    const ctx = setup();
+    ctx.state.timeReply = { now: new Date().toISOString(), zona: "America/Havana", ajuste: 120, hoy: "2026-10-30", hora: "11:00" };
+    await linked(ctx);
+    await waitFor(() => expect(ctx.api.time).toHaveBeenCalled());
+    await waitFor(() => expect(hasSiteClock()).toBe(true));
+    expect(ctx.api.statusSince).not.toHaveBeenCalled();
+  });
+
+  it("al comprobar aprende la hora del sitio de la respuesta", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    clearSiteClock();
+    ctx.state.site = { zona: "America/Havana", ajuste: 90 };
+    ctx.state.now = new Date().toISOString();
+    await act(async () => { await ctx.hook.result.current.syncNow(); });
+    expect(hasSiteClock()).toBe(true);
+    // la hora del sitio va 90 minutos delante de la de Cuba en ese momento
+    const havana = new Intl.DateTimeFormat("en-US", { timeZone: "America/Havana", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+    const wall = Number(havana.find((p) => p.type === "hour").value) * 60 + Number(havana.find((p) => p.type === "minute").value) + 90;
+    const now = siteNow();
+    expect((now.getHours() * 60 + now.getMinutes() - wall + 1440) % 1440).toBeLessThanOrEqual(2);
+  });
+
+  it("si el buzón no contesta la hora, la app sigue con la del teléfono", async () => {
+    const ctx = setup();
+    ctx.api.time.mockRejectedValue(new CloudError("network", 0, "x"));
+    await linked(ctx);
+    await waitFor(() => expect(ctx.api.time).toHaveBeenCalled());
+    expect(hasSiteClock()).toBe(false);
+  });
+
+  it("al desenlazar vuelve a la hora del teléfono", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    await waitFor(() => expect(hasSiteClock()).toBe(true));
+    act(() => { ctx.hook.result.current.unlink(); });
+    expect(hasSiteClock()).toBe(false);
+  });
+
+  it("una API vieja sin esa consulta no rompe nada", async () => {
+    const ctx = setup();
+    delete ctx.api.time;
+    await linked(ctx);
+    expect(ctx.hook.result.current.link).toBeTruthy();
+  });
+});
 
 describe("useCloudSync: enlazar", () => {
   it("sin enlace no hace nada", async () => {

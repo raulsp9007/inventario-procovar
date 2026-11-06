@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import SalesSummary from "./SalesSummary.jsx";
+import ShipmentsSummary from "./ShipmentsSummary.jsx";
 import { clock12 } from "./cierreFacturacion";
 import { Copy, RefreshCw, Power, Check } from "lucide-react";
 import { useAdmin } from "./useAdmin";
@@ -612,6 +613,9 @@ export default function AdminApp() {
 
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "18px 2px 8px" }}>VENTAS POR DÍA</div>
         <SalesSummary load={admin.loadSales} />
+
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "18px 2px 8px" }}>ENVÍOS DEL DÍA</div>
+        <ShipmentsSummary load={admin.loadShipments} />
 
         {admin.accounts && admin.accounts.cuentas && (
           <>

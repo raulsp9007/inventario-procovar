@@ -6,18 +6,23 @@ const COLUMNS = [
   "confirmed_at", "confirmed_by", "created_at", "updated_at",
 ];
 
+// La hora de envío (sentAt) viaja dentro de la columna `lines`, sin cambiar la tabla: antes era la lista de
+// productos; si hay hora de envío, es { l: productos, s: hora }. Los pedidos de antes siguen leyéndose igual.
 function fromRow(r) {
   if (!r) return null;
+  const stored = JSON.parse(r.lines);
+  const lines = Array.isArray(stored) ? stored : stored.l;
+  const sentAt = Array.isArray(stored) ? null : stored.s;
   return {
     id: r.id, sellerId: r.seller_id, sellerName: r.seller_name, date: r.date, customerName: r.customer_name,
     ...(r.customer_code ? { customerCode: r.customer_code } : {}), ...(r.business_name ? { businessName: r.business_name } : {}),
-    lines: JSON.parse(r.lines), total: r.total, status: r.status, rev: r.rev, modified: !!r.modified,
+    lines, ...(sentAt ? { sentAt } : {}), total: r.total, status: r.status, rev: r.rev, modified: !!r.modified,
     confirmedAt: r.confirmed_at, confirmedBy: r.confirmed_by, createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
 
 const toValues = (o) => [
-  o.id, o.sellerId, o.sellerName, o.date, o.customerName, o.customerCode || null, o.businessName || null, JSON.stringify(o.lines), o.total, o.status, o.rev, o.modified ? 1 : 0,
+  o.id, o.sellerId, o.sellerName, o.date, o.customerName, o.customerCode || null, o.businessName || null, JSON.stringify(o.sentAt ? { l: o.lines, s: o.sentAt } : o.lines), o.total, o.status, o.rev, o.modified ? 1 : 0,
   o.confirmedAt, o.confirmedBy, o.createdAt, o.updatedAt,
 ];
 
@@ -94,12 +99,21 @@ export function createD1Store(db) {
         .all();
       return results.map(fromRow);
     },
+    // Ver memoryStore.js (versionFrom): una sola fila, en vez de toda la lista.
+    async versionFrom(desde) {
+      const r = await db.prepare("SELECT COUNT(*) AS c, MAX(updated_at) AS m FROM orders WHERE date >= ?").bind(desde).first();
+      return `${r.c}:${r.m || ""}`;
+    },
     async listFrom(desde) {
       const { results } = await db
         .prepare("SELECT * FROM orders WHERE status != 'cancelado' AND date >= ? ORDER BY date DESC, created_at DESC")
         .bind(desde)
         .all();
       return results.map(fromRow);
+    },
+    // Borra del todo los pedidos con fecha anterior a `date` (AAAA-MM-DD); usa el índice por fecha.
+    async purgeBefore(date) {
+      await db.prepare("DELETE FROM orders WHERE date < ?").bind(date).run();
     },
     async purge(beforeIso) {
       await db.prepare("DELETE FROM orders WHERE updated_at < ?").bind(beforeIso).run();

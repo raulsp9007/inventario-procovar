@@ -57,9 +57,19 @@ export function createMemoryStore() {
     async listBySeller(sellerId, since) {
       return [...orders.values()].filter((o) => o.sellerId === sellerId && (!since || o.updatedAt > since)).map(copy);
     },
+    // "Versión" de los pedidos con fecha desde `desde` (inclusive), cancelados incluidos: cambia con cada pedido
+    // nuevo, cambiado, confirmado, cancelado o borrado. Sirve para decir "sin cambios" sin mandar toda la lista.
+    async versionFrom(desde) {
+      const mine = [...orders.values()].filter((o) => o.date >= desde);
+      return `${mine.length}:${mine.reduce((max, o) => (o.updatedAt > max ? o.updatedAt : max), "")}`;
+    },
     // Pedidos no cancelados con fecha desde `desde` (inclusive).
     async listFrom(desde) {
       return [...orders.values()].filter((o) => o.status !== "cancelado" && o.date >= desde).map(copy);
+    },
+    // Borra del todo los pedidos con fecha anterior a `date` (AAAA-MM-DD).
+    async purgeBefore(date) {
+      for (const [id, o] of orders) if (o.date < date) orders.delete(id);
     },
     async purge(beforeIso) {
       for (const [id, o] of orders) if (o.updatedAt < beforeIso) orders.delete(id);

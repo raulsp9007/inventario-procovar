@@ -1,3 +1,5 @@
+import { siteNow } from "./siteClock";
+
 function pad(n) {
   return String(n).padStart(2, "0");
 }
@@ -6,12 +8,13 @@ function toDateStr(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// Hoy y mañana, con la hora del sitio (ver siteClock.js; sin ella, la del teléfono).
 export function todayStr() {
-  return toDateStr(new Date());
+  return toDateStr(siteNow());
 }
 
 export function tomorrowStr() {
-  const d = new Date();
+  const d = siteNow();
   d.setDate(d.getDate() + 1);
   return toDateStr(d);
 }

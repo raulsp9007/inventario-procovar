@@ -287,6 +287,99 @@ describe("flushQueue: vaciar la cola", () => {
     expect(api.deleteOrder).toHaveBeenCalledWith("b");
   });
 
+  // Con varios pedidos seguidos en la cola se mandan juntos en una sola petición (más rápido y con menos
+  // oportunidades de que una conexión mala los demore); cada pedido sale con su resultado.
+  describe("envío en lote", () => {
+    const putOps = (n, extra = {}) => Array.from({ length: n }, (_, i) => ({ kind: "put", orderId: `p${i}`, content: { total: i }, queuedAt: "2026-10-30T14:50:00.000Z", ...extra }));
+    const okAll = (batch) => ({ resultados: batch.map((op) => ({ id: op.orderId, ok: true })) });
+    const batchApi = (over = {}) => ({ ...apiOf(), putOrders: vi.fn(async (batch) => okAll(batch)), ...over });
+
+    it("varios 'put' seguidos van en una sola petición", async () => {
+      const api = batchApi();
+      const out = await flushQueue({ queue: putOps(3), api });
+      expect(api.putOrders).toHaveBeenCalledTimes(1);
+      expect(api.putOrders.mock.calls[0][0].map((o) => o.orderId)).toEqual(["p0", "p1", "p2"]);
+      expect(api.putOrder).not.toHaveBeenCalled();
+      expect(out).toMatchObject({ remaining: [], sent: 3, rejected: [], stopped: null });
+    });
+
+    it("un solo 'put' va por el camino de siempre", async () => {
+      const api = batchApi();
+      await flushQueue({ queue: putOps(1), api });
+      expect(api.putOrders).not.toHaveBeenCalled();
+      expect(api.putOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it("en lotes de a lo más 20", async () => {
+      const api = batchApi();
+      const out = await flushQueue({ queue: putOps(45), api });
+      expect(api.putOrders.mock.calls.map((c) => c[0].length)).toEqual([20, 20, 5]);
+      expect(out.sent).toBe(45);
+      expect(out.remaining).toEqual([]);
+    });
+
+    it("lo demás de la cola (confirmar, borrar) sigue en su orden, después del lote", async () => {
+      const api = batchApi();
+      const queue = [...putOps(2), { kind: "confirm", orderId: "p0" }, { kind: "delete", orderId: "z" }];
+      const out = await flushQueue({ queue, api });
+      expect(api.putOrders.mock.invocationCallOrder[0]).toBeLessThan(api.confirmOrder.mock.invocationCallOrder[0]);
+      expect(api.confirmOrder).toHaveBeenCalledWith("p0");
+      expect(api.deleteOrder).toHaveBeenCalledWith("z");
+      expect(out.remaining).toEqual([]);
+    });
+
+    it("un pedido rechazado dentro del lote se reporta y se descarta; los demás siguen", async () => {
+      const api = batchApi({
+        putOrders: vi.fn(async (batch) => ({ resultados: batch.map((op) => (op.orderId === "p1"
+          ? { id: "p1", ok: false, status: 409, error: "La facturación de hoy cerró." }
+          : { id: op.orderId, ok: true })) })),
+      });
+      const out = await flushQueue({ queue: putOps(3), api });
+      expect(out.rejected).toEqual([{ orderId: "p1", kind: "put", message: "La facturación de hoy cerró." }]);
+      expect(out.remaining).toEqual([]);
+      expect(out.sent).toBe(2);
+    });
+
+    it("sin conexión se detiene y conserva todo el lote", async () => {
+      const api = batchApi({ putOrders: vi.fn(async () => { throw new CloudError("network", 0, "x"); }) });
+      const out = await flushQueue({ queue: putOps(3), api });
+      expect(out.stopped).toBe("network");
+      expect(out.remaining).toHaveLength(3);
+      expect(out.rejected).toEqual([]);
+    });
+
+    it("fuera del horario (423) se detiene con el mensaje y conserva todo el lote", async () => {
+      const api = batchApi({ putOrders: vi.fn(async () => { throw new CloudError("closed", 423, "La facturación está cerrada."); }) });
+      const out = await flushQueue({ queue: putOps(2), api });
+      expect(out.stopped).toBe("closed");
+      expect(out.stoppedMessage).toBe("La facturación está cerrada.");
+      expect(out.remaining).toHaveLength(2);
+    });
+
+    it("un buzón viejo sin esa ruta (404): sigue uno por uno", async () => {
+      const api = batchApi({ putOrders: vi.fn(async () => { throw new CloudError("notfound", 404, "No existe esa ruta."); }) });
+      const out = await flushQueue({ queue: putOps(3), api });
+      expect(api.putOrder).toHaveBeenCalledTimes(3);
+      expect(out.remaining).toEqual([]);
+      expect(out.sent).toBe(3);
+    });
+
+    it("sin esa función en la API, sigue uno por uno", async () => {
+      const api = apiOf();
+      const out = await flushQueue({ queue: putOps(3), api });
+      expect(api.putOrder).toHaveBeenCalledTimes(3);
+      expect(out.sent).toBe(3);
+    });
+
+    it("si el buzón no contesta por alguno de los pedidos, ese queda en cola", async () => {
+      const api = batchApi({ putOrders: vi.fn(async (batch) => ({ resultados: [{ id: batch[0].orderId, ok: true }] })) });
+      const out = await flushQueue({ queue: putOps(3), api });
+      expect(out.sent).toBe(1);
+      expect(out.remaining.map((o) => o.orderId)).toEqual(["p1", "p2"]);
+      expect(out.stopped).toBe("server");
+    });
+  });
+
   it("un 'put' con queuedAt lo manda como tercer dato (cuándo se hizo el cambio)", async () => {
     const api = apiOf();
     await flushQueue({ queue: [{ kind: "put", orderId: "a", content: { total: 1 }, queuedAt: "2026-10-30T14:50:00.000Z" }], api });

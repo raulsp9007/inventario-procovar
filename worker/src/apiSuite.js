@@ -630,13 +630,14 @@ export function apiSuite(label, makeStore) {
         expect((await login("super", "clave-12345")).status).toBe(200);
       });
 
-      it("una sesión vence a las 24 horas", async () => {
+      it("una sesión sin usar vence a las 24 horas (usada, se renueva sola)", async () => {
         await setAccount("facturacion", { usuario: "maria", clave: "clave-12345" });
         const { token } = (await login("maria", "clave-12345")).json;
         clock = later(23 * 60 * 60 * 1000);
-        expect((await call("GET", "/me", { token })).status).toBe(200);
-        clock = later(25 * 60 * 60 * 1000);
-        expect((await call("GET", "/me", { token })).status).toBe(401);
+        expect((await call("GET", "/me", { token })).status).toBe(200); // aún vale (y se renueva)
+        const other = (await login("maria", "clave-12345")).json.token;
+        clock = later(48 * 60 * 60 * 1000);
+        expect((await call("GET", "/me", { token: other })).status).toBe(401); // esta nunca se usó después de entrar
       });
 
       it("con una cuenta de facturación creada, el código viejo de la facturadora deja de servir", async () => {
@@ -1317,10 +1318,415 @@ export function apiSuite(label, makeStore) {
       });
     });
 
-    describe("limpieza", () => {
-      it("al subir un pedido se borran los de más de 60 días", async () => {
+    // ---- Envío de pedidos: hora del sitio, lotes, hora de envío y llegada, cambios, limpieza y rechazos ----
+    describe("hora del sitio para las apps (GET /time)", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+
+      it("cualquiera con acceso (vendedor, facturadora) recibe la hora y el día del sitio", async () => {
+        clock = "2026-10-30T15:00:00.000Z";
+        for (const token of ["tok-carlos", "tok-fact"]) {
+          const r = await call("GET", "/time", { token });
+          expect(r.status).toBe(200);
+          expect(r.json).toEqual({ now: clock, zona: "America/Havana", ajuste: 0, hoy: "2026-10-30", hora: "11:00" });
+        }
+      });
+
+      it("sin acceso: 401", async () => {
+        expect((await call("GET", "/time")).status).toBe(401);
+      });
+
+      it("con la hora puesta a mano, dice la hora y el día correctos", async () => {
+        clock = "2026-10-31T03:30:00.000Z"; // 23:30 del 30 en Cuba
+        await admin("PUT", "/zona", { manual: "00:15" }); // en el sitio ya es el 31
+        const r = await call("GET", "/time", { token: "tok-carlos" });
+        expect(r.json).toMatchObject({ ajuste: 45, hoy: "2026-10-31", hora: "00:15" });
+      });
+    });
+
+    describe("subir varios pedidos de una vez (POST /orders/batch)", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const batch = (pedidos, extra = {}, token = "tok-carlos") => call("POST", "/orders/batch", { token, body: { pedidos, ...extra } });
+      const item = (id, over = {}) => ({ id, ...order(), ...over });
+      const VIERNES_11AM = "2026-10-30T15:00:00.000Z";
+
+      it("sube todos y dice cómo le fue a cada uno", async () => {
+        const r = await batch([item("b1"), item("b2", { customerName: "Beto" }), item("b3", { customerName: "Carla" })]);
+        expect(r.status).toBe(200);
+        expect(r.json.resultados).toEqual([{ id: "b1", ok: true }, { id: "b2", ok: true }, { id: "b3", ok: true }]);
+        const list = await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(list.json.sellers.find((s) => s.id === "carlos").orders.map((o) => o.id).sort()).toEqual(["b1", "b2", "b3"]);
+      });
+
+      it("un pedido mal hecho no tumba a los demás: solo él sale con su motivo", async () => {
+        const r = await batch([item("b1"), item("b2", { customerName: "" }), item("b3")]);
+        expect(r.json.resultados[0]).toEqual({ id: "b1", ok: true });
+        expect(r.json.resultados[1]).toMatchObject({ id: "b2", ok: false, status: 400 });
+        expect(r.json.resultados[1].error).toMatch(/nombre/i);
+        expect(r.json.resultados[2]).toEqual({ id: "b3", ok: true });
+        expect(store.dump().map((o) => o.id).sort()).toEqual(["b1", "b3"]);
+      });
+
+      it("el cierre del día se cuenta por pedido: los de hoy se rechazan (409) y los de otro día pasan", async () => {
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        const r = await batch([item("hoy1"), item("man1", { date: "2026-10-31" })]);
+        expect(r.json.resultados[0]).toMatchObject({ id: "hoy1", ok: false, status: 409 });
+        expect(r.json.resultados[0].error).toContain("10:00 a. m.");
+        expect(r.json.resultados[1]).toEqual({ id: "man1", ok: true });
+      });
+
+      it("cada pedido lleva cuándo se hizo el cambio: uno enviado antes del cierre llega aunque se demore", async () => {
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        const now = new Date(clock).getTime();
+        const before = new Date(now - 90 * 60000).toISOString(); // 09:30 en Cuba
+        const after = new Date(now - 30 * 60000).toISOString(); // 10:30 en Cuba
+        const r = await batch([item("antes", { enviadoEn: before }), item("despues", { enviadoEn: after })], { ahora: new Date(now).toISOString() });
+        expect(r.json.resultados[0]).toEqual({ id: "antes", ok: true });
+        expect(r.json.resultados[1]).toMatchObject({ id: "despues", ok: false, status: 409 });
+      });
+
+      it("fuera del horario del sitio todo el lote se rechaza con 423", async () => {
+        await admin("PUT", "/schedule", { activo: true, abre: "09:00", cierra: "10:00" });
+        clock = VIERNES_11AM;
+        expect((await batch([item("b1")])).status).toBe(423);
+      });
+
+      it("un pedido de otro vendedor sale con 403 y no se toca", async () => {
+        await call("PUT", "/orders/ajeno", { token: "tok-marta", body: order({ customerName: "De Marta" }) });
+        const r = await batch([item("ajeno", { customerName: "Cambiado" }), item("b1")]);
+        expect(r.json.resultados[0]).toMatchObject({ id: "ajeno", ok: false, status: 403 });
+        expect(r.json.resultados[1]).toEqual({ id: "b1", ok: true });
+        expect((await call("GET", "/orders/status", { token: "tok-marta" })).json.orders.find((o) => o.id === "ajeno").rev).toBe(1);
+      });
+
+      it("subir el mismo lote otra vez no cambia nada (no queda como 'modificado')", async () => {
+        await batch([item("b1")]);
+        await batch([item("b1")]);
+        const list = await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(list.json.sellers.find((s) => s.id === "carlos").orders[0]).toMatchObject({ rev: 1, modified: false });
+      });
+
+      it("valida el lote: sin lista, vacío o de más de 50 pedidos: 400; solo el vendedor puede", async () => {
+        expect((await call("POST", "/orders/batch", { token: "tok-carlos", body: {} })).status).toBe(400);
+        expect((await batch([])).status).toBe(400);
+        expect((await batch(Array.from({ length: 51 }, (_, i) => item(`m${i}`)))).status).toBe(400);
+        expect((await batch(Array.from({ length: 50 }, (_, i) => item(`n${i}`)))).status).toBe(200);
+        expect((await batch([item("b1")], {}, "tok-fact")).status).toBe(403);
+        expect((await call("POST", "/orders/batch", { body: { pedidos: [item("b1")] } })).status).toBe(401);
+      });
+
+      it("un id mal escrito sale con 400 y no tumba al resto", async () => {
+        const r = await batch([item("con espacio"), item("b1")]);
+        expect(r.json.resultados[0]).toMatchObject({ ok: false, status: 400 });
+        expect(r.json.resultados[1]).toEqual({ id: "b1", ok: true });
+      });
+    });
+
+    describe("hora de envío y de llegada de cada pedido", () => {
+      const withWait = (waitMs, over = {}) => {
+        const now = new Date(clock).getTime();
+        return order({ enviadoEn: new Date(now - waitMs).toISOString(), ahora: new Date(now).toISOString(), ...over });
+      };
+      const listed = async () => (await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" })).json.sellers.find((s) => s.id === "carlos").orders;
+
+      it("sin datos de espera, se envió cuando llegó", async () => {
+        await put("o1", order());
+        expect((await listed())[0]).toMatchObject({ createdAt: clock, sentAt: clock });
+      });
+
+      it("con espera, la hora de envío es la de llegada menos lo que esperó (sin fiarse del reloj del teléfono)", async () => {
+        await put("o1", withWait(5 * 60000));
+        const [o] = await listed();
+        expect(o.createdAt).toBe(clock);
+        expect(o.sentAt).toBe(new Date(new Date(clock).getTime() - 5 * 60000).toISOString());
+      });
+
+      it("subir lo mismo otra vez conserva la hora de envío; un cambio de contenido la actualiza", async () => {
+        await put("o1", withWait(5 * 60000));
+        const first = (await listed())[0].sentAt;
+        clock = "2026-10-30T15:10:00.000Z";
+        await put("o1", withWait(0));
+        expect((await listed())[0].sentAt).toBe(first);
+        await put("o1", withWait(0, { total: 9999 }));
+        expect((await listed())[0].sentAt).toBe(clock);
+      });
+    });
+
+    describe("lista de la facturadora: solo si hay cambios", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const list = (v, token = "tok-fact") => call("GET", `/orders?desde=2026-10-30${v ? `&v=${encodeURIComponent(v)}` : ""}`, { token });
+
+      it("la lista completa trae su versión", async () => {
+        await put("o1", order());
+        const r = await list();
+        expect(typeof r.json.version).toBe("string");
+        expect(r.json.sellers).toBeTruthy();
+      });
+
+      it("con la misma versión responde 'sin cambios', corto, y con el día de trabajo y el horario", async () => {
+        await put("o1", order());
+        const { version } = (await list()).json;
+        const r = await list(version);
+        expect(r.status).toBe(200);
+        expect(r.json).toMatchObject({ sinCambios: true, version, hoy: "2026-10-30", dia: "2026-10-30" });
+        expect(r.json.horario).toBeTruthy();
+        expect(r.json.sellers).toBeUndefined();
+      });
+
+      it("un pedido nuevo, un cambio, una confirmación o una cancelación cambian la versión", async () => {
+        await put("o1", order());
+        const v0 = (await list()).json.version;
+        clock = "2026-10-30T15:00:05.000Z";
+        await put("o2", order({ customerName: "Beto" }));
+        const v1 = (await list(v0)).json;
+        expect(v1.sinCambios).toBeUndefined();
+        clock = "2026-10-30T15:00:10.000Z";
+        await call("POST", "/orders/confirm", { token: "tok-fact", body: { ids: ["o1"] } });
+        const v2 = (await list(v1.version)).json;
+        expect(v2.sinCambios).toBeUndefined();
+        clock = "2026-10-30T15:00:15.000Z";
+        await call("DELETE", "/orders/o2", { token: "tok-carlos" });
+        const v3 = (await list(v2.version)).json;
+        expect(v3.sinCambios).toBeUndefined();
+        expect(new Set([v0, v1.version, v2.version, v3.version]).size).toBe(4);
+      });
+
+      it("cambiar los vendedores (el administrador renombra uno) también cambia la versión", async () => {
+        await put("o1", order());
+        const { version } = (await list()).json;
+        await admin("PUT", "/vendors/carlos", { name: "Carlos P." });
+        expect((await list(version)).json.sinCambios).toBeUndefined();
+      });
+
+      it("aunque no haya pedidos nuevos, el día de trabajo sigue al día (al llegar el cierre cambia)", async () => {
+        clock = "2026-10-30T13:00:00.000Z"; // 09:00 en Cuba
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        await put("o1", order());
+        const { version, dia } = (await list()).json;
+        expect(dia).toBe("2026-10-30");
+        clock = "2026-10-30T15:00:00.000Z"; // 11:00: ya cerró
+        const r = (await list(version)).json;
+        expect(r).toMatchObject({ sinCambios: true, dia: "2026-10-31" });
+      });
+
+      it("una versión que no es la actual (o rara) trae la lista completa", async () => {
+        await put("o1", order());
+        expect((await list("otra-version")).json.sellers).toBeTruthy();
+      });
+
+      it("la supervisión también recibe 'sin cambios'", async () => {
+        await put("o1", order());
+        await admin("POST", "/accounts", { rol: "supervision", usuario: "super", clave: "clave-12345" });
+        const { token } = (await call("POST", "/login", { body: { usuario: "super", clave: "clave-12345" } })).json;
+        const { version } = (await list("", token)).json;
+        expect((await list(version, token)).json.sinCambios).toBe(true);
+      });
+    });
+
+    describe("la sesión se renueva sola mientras se usa", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const HOUR = 60 * 60 * 1000;
+      const at = (h) => new Date(new Date(NOW).getTime() + h * HOUR).toISOString();
+
+      it("usarla pasada la mitad de su vida la alarga otras 24 horas", async () => {
+        await admin("POST", "/accounts", { rol: "facturacion", usuario: "maria", clave: "clave-12345" });
+        const { token } = (await call("POST", "/login", { body: { usuario: "maria", clave: "clave-12345" } })).json;
+        clock = at(13); // pasó más de la mitad de las 24 h
+        expect((await call("GET", "/me", { token })).status).toBe(200);
+        clock = at(30); // sin renovar ya habría vencido (24 h)
+        expect((await call("GET", "/me", { token })).status).toBe(200);
+        clock = at(70);
+        expect((await call("GET", "/me", { token })).status).toBe(401);
+      });
+
+      it("si no se usa, vence a las 24 horas como siempre", async () => {
+        await admin("POST", "/accounts", { rol: "facturacion", usuario: "maria", clave: "clave-12345" });
+        const { token } = (await call("POST", "/login", { body: { usuario: "maria", clave: "clave-12345" } })).json;
+        clock = at(25);
+        expect((await call("GET", "/me", { token })).status).toBe(401);
+      });
+
+      it("al principio de su vida no se escribe nada de más", async () => {
+        await admin("POST", "/accounts", { rol: "facturacion", usuario: "maria", clave: "clave-12345" });
+        const { token, expiresAt } = (await call("POST", "/login", { body: { usuario: "maria", clave: "clave-12345" } })).json;
+        clock = at(1);
+        await call("GET", "/me", { token });
+        clock = at(24.5);
+        expect(new Date(expiresAt).getTime()).toBeLessThan(new Date(clock).getTime()); // el original ya venció
+        expect((await call("GET", "/me", { token })).status).toBe(401);
+      });
+    });
+
+    describe("limpieza de pedidos viejos: una vez al día, después del cierre", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+
+      it("con el cierre activo no se limpia antes de la hora de cierre", async () => {
         clock = "2026-08-01T10:00:00.000Z";
         await put("viejo", order({ date: "2026-08-01" }));
+        clock = "2026-10-30T13:00:00.000Z"; // 09:00 en Cuba
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        await put("o1", order());
+        expect(store.dump().map((o) => o.id).sort()).toEqual(["o1", "viejo"]);
+      });
+
+      it("pasada la hora de cierre se limpia, y se hace una sola vez al día", async () => {
+        clock = "2026-08-01T10:00:00.000Z";
+        await put("viejo", order({ date: "2026-08-01" }));
+        clock = "2026-10-30T13:00:00.000Z";
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = "2026-10-30T15:00:00.000Z"; // 11:00: ya cerró
+        await put("o1", order({ date: "2026-10-31" }));
+        expect(store.dump().map((o) => o.id)).toEqual(["o1"]);
+        // un pedido viejo que aparece después no se vuelve a limpiar el mismo día
+        await store.put({ id: "viejo2", sellerId: "carlos", sellerName: "Carlos", date: "2026-08-01", customerName: "x", lines: [], total: 0, status: "pendiente", rev: 1, modified: false, confirmedAt: null, confirmedBy: null, createdAt: "2026-08-01T10:00:00.000Z", updatedAt: "2026-08-01T10:00:00.000Z" });
+        clock = "2026-10-30T16:00:00.000Z";
+        await put("o2", order({ date: "2026-10-31", customerName: "Beto" }));
+        expect(store.dump().map((o) => o.id).sort()).toEqual(["o1", "o2", "viejo2"]);
+        // al día siguiente, después del cierre, sí
+        clock = "2026-10-31T15:00:00.000Z";
+        await put("o3", order({ date: "2026-11-02", customerName: "Carla" }));
+        expect(store.dump().map((o) => o.id).sort()).toEqual(["o1", "o2", "o3"]);
+      });
+
+      it("también la dispara la lista de la facturadora (no hace falta que suban pedidos)", async () => {
+        clock = "2026-08-01T10:00:00.000Z";
+        await put("viejo", order({ date: "2026-08-01" }));
+        clock = "2026-10-30T13:00:00.000Z";
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = "2026-10-30T15:00:00.000Z";
+        await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" });
+        expect(store.dump()).toEqual([]);
+      });
+
+      it("subir un pedido ya no borra nada por su cuenta antes del cierre", async () => {
+        clock = "2026-08-01T10:00:00.000Z";
+        await put("viejo", order({ date: "2026-08-01" }));
+        clock = "2026-10-30T13:00:00.000Z";
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        await put("a", order());
+        await put("b", order({ customerName: "Beto" }));
+        expect(store.dump().map((o) => o.id).sort()).toEqual(["a", "b", "viejo"]);
+      });
+    });
+
+    describe("rechazos y resumen de envíos del día (admin)", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const summary = (q = "") => admin("GET", `/envios${q}`);
+      const VIERNES_11AM = "2026-10-30T15:00:00.000Z";
+
+      it("solo el administrador lo ve", async () => {
+        expect((await call("GET", "/admin/envios")).status).toBe(401);
+        for (const token of ["tok-carlos", "tok-fact"]) expect((await call("GET", "/admin/envios", { token })).status).toBe(403);
+      });
+
+      it("sin movimiento: ceros y listas vacías", async () => {
+        expect((await summary()).json).toEqual({ fecha: "2026-10-30", recibidos: 0, porVendedor: [], tardios: [], rechazos: [], umbralMin: 2 });
+      });
+
+      it("cuenta los pedidos recibidos hoy, por vendedor", async () => {
+        await put("a", order());
+        await put("b", order({ customerName: "Beto" }));
+        await call("PUT", "/orders/c", { token: "tok-marta", body: order({ customerName: "Carla" }) });
+        const r = (await summary()).json;
+        expect(r.recibidos).toBe(3);
+        expect(r.porVendedor).toEqual([
+          { id: "carlos", name: "Carlos Pérez", recibidos: 2, tardios: 0 },
+          { id: "marta", name: "Marta Díaz", recibidos: 1, tardios: 0 },
+        ]);
+      });
+
+      it("los que tardaron 2 minutos o más en llegar salen como tardíos, con cuánto", async () => {
+        const now = new Date(clock).getTime();
+        await put("rapido", order({ enviadoEn: new Date(now - 60000).toISOString(), ahora: new Date(now).toISOString() }));
+        await put("lento", order({ customerName: "Lenta", enviadoEn: new Date(now - 7 * 60000).toISOString(), ahora: new Date(now).toISOString() }));
+        const r = (await summary()).json;
+        expect(r.tardios).toEqual([{ id: "lento", vendedor: "Carlos Pérez", cliente: "Lenta", enviado: new Date(now - 7 * 60000).toISOString(), llego: clock, demoraMin: 7 }]);
+        expect(r.porVendedor.find((v) => v.id === "carlos").tardios).toBe(1);
+      });
+
+      it("anota los rechazos por el cierre, por el horario y por datos mal hechos", async () => {
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        await put("c1", order({ customerName: "Cerrada" })); // 409 cierre
+        await put("d1", order({ customerName: "", date: "2026-10-31" })); // 400 datos
+        await admin("PUT", "/schedule", { activo: true, abre: "09:00", cierra: "10:00" });
+        await put("h1", order({ date: "2026-10-31", customerName: "Sin horario" })); // 423 horario
+        const r = (await summary()).json;
+        expect(r.rechazos.map((x) => [x.vendedor, x.motivo]).sort()).toEqual([["Carlos Pérez", "cierre"], ["Carlos Pérez", "datos"], ["Carlos Pérez", "horario"]]);
+        const cierre = r.rechazos.find((x) => x.motivo === "cierre");
+        expect(cierre.detalle).toContain("10:00 a. m.");
+        expect(cierre.cliente).toBe("Cerrada");
+        expect(cierre.at).toBe(clock);
+      });
+
+      it("los rechazos dentro de un lote también se anotan", async () => {
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        await call("POST", "/orders/batch", { token: "tok-carlos", body: { pedidos: [{ id: "x1", ...order() }, { id: "x2", ...order({ date: "2026-10-31" }) }] } });
+        const r = (await summary()).json;
+        expect(r.rechazos.map((x) => x.motivo)).toEqual(["cierre"]);
+      });
+
+      it("solo muestra los del día pedido", async () => {
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        await put("c1", order());
+        expect((await summary()).json.rechazos).toHaveLength(1);
+        expect((await summary("?fecha=2026-10-29")).json.rechazos).toEqual([]);
+        expect((await summary("?fecha=mal")).status).toBe(400);
+      });
+
+      it("guarda solo los últimos 100 rechazos", async () => {
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        clock = VIERNES_11AM;
+        for (let i = 0; i < 105; i += 1) await put(`c${i}`, order({ customerName: `Cliente ${i}` }));
+        const { rechazos } = (await summary()).json;
+        expect(rechazos).toHaveLength(100);
+        expect(rechazos.some((x) => x.cliente === "Cliente 104")).toBe(true);
+        expect(rechazos.some((x) => x.cliente === "Cliente 0")).toBe(false);
+      });
+    });
+
+    // No se guarda historia: solo lo del día (lo que se vende hoy) y lo que ya está montado para los días que vienen.
+    describe("limpieza", () => {
+      it("al empezar el día se borran los pedidos de días anteriores", async () => {
+        clock = "2026-08-01T10:00:00.000Z";
+        await put("viejo", order({ date: "2026-08-01" }));
+        clock = "2026-10-30T15:00:00.000Z";
+        await put("o1", order());
+        expect(store.dump().map((o) => o.id)).toEqual(["o1"]);
+      });
+
+      it("solo se conserva lo de hoy y lo de los días que vienen (ayer ya no)", async () => {
+        clock = "2026-10-29T15:00:00.000Z";
+        await put("ayer", order({ date: "2026-10-29" }));
+        clock = "2026-10-30T15:00:00.000Z";
+        await put("hoy", order({ date: "2026-10-30", customerName: "Hoy" }));
+        await put("manana", order({ date: "2026-10-31", customerName: "Mañana" }));
+        await put("lunes", order({ date: "2026-11-02", customerName: "Lunes" }));
+        expect(store.dump().map((o) => o.id).sort()).toEqual(["hoy", "lunes", "manana"]);
+      });
+
+      it("lo de hoy sigue ahí después del cierre del día (se ve lo vendido) y se borra el día siguiente", async () => {
+        const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+        clock = "2026-10-30T13:00:00.000Z"; // 09:00 en Cuba
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+        await put("hoy", order());
+        clock = "2026-10-30T15:00:00.000Z"; // 11:00: ya cerró
+        await put("manana", order({ date: "2026-10-31", customerName: "Mañana" }));
+        expect(store.dump().map((o) => o.id).sort()).toEqual(["hoy", "manana"]);
+        const summary = await call("GET", "/summary?fecha=2026-10-30", { token: "tok-admin" });
+        expect(summary.json.totales.pedidos).toBe(1);
+        clock = "2026-10-31T15:00:00.000Z"; // el día siguiente, pasado el cierre
+        await put("otro", order({ date: "2026-11-02", customerName: "Otro" }));
+        expect(store.dump().map((o) => o.id).sort()).toEqual(["manana", "otro"]);
+      });
+
+      it("también se van los cancelados de días anteriores", async () => {
+        clock = "2026-10-29T15:00:00.000Z";
+        await put("c1", order({ date: "2026-10-29" }));
+        await call("DELETE", "/orders/c1", { token: "tok-carlos" });
         clock = "2026-10-30T15:00:00.000Z";
         await put("o1", order());
         expect(store.dump().map((o) => o.id)).toEqual(["o1"]);

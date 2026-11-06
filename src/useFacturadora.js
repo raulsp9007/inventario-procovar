@@ -24,7 +24,10 @@ const MESSAGES = {
 // lista se limpia y van apareciendo los pedidos de mañana. Lo guardado de otro día no se muestra.
 // `today` (AAAA-MM-DD) se puede fijar para pruebas; sin él, el del buzón y, si no lo dice, el de hoy
 // en este equipo.
-export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000, ready = true, today, cloudUrl = CLOUD_URL } = {}) {
+// Cada cuánto se consulta la lista (el buzón contesta "sin cambios", corto, si no hay nada nuevo).
+export const FACTURADORA_POLL_MS = 15000;
+
+export function useFacturadora({ createApi = createCloudApi, intervalMs = FACTURADORA_POLL_MS, ready = true, today, cloudUrl = CLOUD_URL } = {}) {
   const [cloud, setCloud] = useState(() => loadCloud(SCOPE));
   const [sellersRaw, setSellersRaw] = useState(() => (loadCloud(SCOPE).data ? loadCloud(SCOPE).data.sellers : []));
   // El día de trabajo y el de hoy que dijo el buzón la última vez (también lo guardado, para verlo sin conexión).
@@ -34,6 +37,11 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
   });
   const daysRef = useRef(days);
   daysRef.current = days;
+  // La versión de la lista que ya se tiene (y el día desde el que se pidió): si no cambió, el buzón no la manda otra vez.
+  const versionRef = useRef((() => {
+    const data = loadCloud(SCOPE).data;
+    return data && data.version && data.desde ? { desde: data.desde, version: data.version } : null;
+  })());
   const [status, setStatus] = useState(() => {
     const data = loadCloud(SCOPE).data;
     return { phase: "idle", message: "", lastSyncAt: data ? data.at : null, horario: null };
@@ -80,12 +88,21 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
     let fetched = false;
     if (!stopped) {
       try {
-        const data = await api.listOrders(todayRef.current || (daysRef.current && daysRef.current.dia) || todayStr());
+        const desde = todayRef.current || (daysRef.current && daysRef.current.dia) || todayStr();
+        const known = versionRef.current && versionRef.current.desde === desde ? versionRef.current.version : null;
+        const data = await (known ? api.listOrders(desde, known) : api.listOrders(desde));
         const at = Date.now();
-        setSellersRaw(data.sellers);
         const nextDays = data.dia ? { dia: data.dia, hoy: data.hoy || data.dia } : null;
         setDays(nextDays);
-        commit({ data: { sellers: data.sellers, at, ...(nextDays || {}) } });
+        if (data.sinCambios) {
+          // Nada nuevo en los pedidos: se conserva la lista y solo se pone al día el día de trabajo y la hora.
+          const cached = cloudRef.current.data;
+          if (cached) commit({ data: { ...cached, at, ...(nextDays || {}) } });
+        } else {
+          setSellersRaw(data.sellers);
+          versionRef.current = data.version ? { desde, version: data.version } : null;
+          commit({ data: { sellers: data.sellers, at, ...(nextDays || {}), ...(data.version ? { version: data.version, desde } : {}) } });
+        }
         setStatus({ phase: "ok", message: "", lastSyncAt: at, horario: data.horario || null });
         fetched = true;
       } catch (e) {

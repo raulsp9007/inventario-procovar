@@ -125,6 +125,29 @@ lunes: el domingo no se trabaja). Así, a la hora del cierre el tablero se **lim
 van apareciendo los pedidos de mañana que los vendedores envían. El título del tablero dice "Hoy",
 "Para mañana" o "Próximo día" con la fecha. Sin cierre activado, el día de trabajo es hoy.
 
+## Envío y llegada de los pedidos
+
+- **La hora del sitio manda.** La app del vendedor aprende del buzón qué hora y qué día es (`GET /time`: la zona y,
+  si el administrador la puso a mano, la corrección) y la usa para el día de los pedidos (hoy / mañana) y para las
+  horas de cierre, en vez de fiarse del reloj del teléfono. La pregunta se hace al abrir la app y en cada comprobación.
+- **Envío en lote.** Varios pedidos en cola van juntos en una sola petición (`POST /orders/batch`, hasta 50; la app
+  manda de 20 en 20); cada pedido sale con su resultado, y uno rechazado (cierre, datos) no tumba a los demás.
+- **Consulta del vendedor.** Con la app a la vista y pedidos enviados sin confirmar (o cosas en cola), se consulta cada
+  5 minutos; si no, cada hora. La respuesta del cierre al tocar FACT. se recuerda un minuto si el cierre queda lejos.
+- **Hora de envío y de llegada.** Cada pedido guarda cuándo se envió (la llegada menos lo que esperó en la cola de la
+  app) y cuándo llegó; la página de la facturadora dice las dos si tardó 2 minutos o más, y muestra "Último pedido
+  recibido hace N min".
+- **Lista solo si hay cambios.** La página consulta cada 15 segundos mandando la versión de la lista que tiene; si no
+  cambió nada, el buzón contesta "sin cambios" (corto, solo con el día de trabajo y el horario).
+- **Sesión que se renueva.** Mientras se usa, pasada la mitad de su vida la sesión se alarga otras 24 horas.
+- **Sin historia.** El buzón solo guarda lo del día (lo que se vende hoy, y se sigue viendo en "Ventas por día" y en
+  "Envíos del día") y lo ya montado para los días que vienen. Los pedidos de días anteriores se **borran del todo**,
+  **una vez al día, pasada la hora de cierre** del día (o a la primera petición del día si no hay cierre), antes de
+  recibir el siguiente pedido. Así la base se mantiene pequeña y cada consulta rápida; lo borrado no se recupera.
+- **Envíos del día (administrador).** `GET /admin/envios?fecha=`: pedidos recibidos (por vendedor), los que tardaron
+  2 minutos o más en llegar y los envíos rechazados (por el cierre, por el horario o por datos mal hechos; se guardan
+  los últimos 100). Tarjeta "Envíos del día" en el admin.
+
 ## Pedidos para mañana
 
 La app del vendedor también envía a la nube los pedidos **de mañana** (o del próximo día hábil) que
@@ -202,4 +225,4 @@ repite el 6 y entrega los códigos nuevos; los anteriores dejan de servir.
 ## Qué guarda el buzón
 
 Cliente (con su código del portal y su negocio, si los tiene), fecha, productos con
-cantidad y precio, total y estado. **No** guarda teléfonos ni notas. Los pedidos de más de 60 días se borran solos.
+cantidad y precio, total y estado. **No** guarda teléfonos ni notas. Los de días anteriores se borran solos (ver "Sin historia").

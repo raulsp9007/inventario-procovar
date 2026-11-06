@@ -28,6 +28,7 @@ function installFetch() {
     facturadora: { id: "fact", name: "Facturadora", token: "f".repeat(24) },
     accounts: { cuentas: [] },
     nextAccount: 1,
+    envios: { fecha: "2026-10-30", recibidos: 0, porVendedor: [], tardios: [], rechazos: [], umbralMin: 2 },
     schedule: { activo: false, abre: "09:00", cierra: "15:00", abierto: true, mensaje: "" },
     cierre: { activo: false, hora: "15:00", cerrado: false, mensaje: "" },
     zona: { zona: "America/Havana", etiqueta: "Cuba (La Habana)", ahora: "11:00", manual: false, ajuste: 0, zonas: [{ id: "America/Havana", label: "Cuba (La Habana)" }, { id: "Europe/Madrid", label: "España (Madrid)" }, { id: "America/Mexico_City", label: "México (Ciudad de México)" }] },
@@ -71,6 +72,7 @@ function installFetch() {
       server.cierre = { activo: body.activo, hora: body.hora, cerrado: false, mensaje: "" };
       return reply(server.cierre);
     }
+    if (path.startsWith("/admin/envios")) return reply(server.enviosError ? { error: "No se pudo." } : server.envios, server.enviosError ? 500 : 200);
     if (path.startsWith("/summary")) return reply(server.summary || { fecha: "2026-10-30", vendedores: [], productos: [], totales: { pedidos: 0, unidades: 0 } });
     if (path === "/admin/accounts" && init.method === "POST") {
       if (body.usuario === "repetido") return reply({ error: "Ya hay una cuenta con ese usuario." }, 409);
@@ -755,5 +757,84 @@ describe("administración: hora del sitio a mano", () => {
     fireEvent.click(within(group).getByRole("button", { name: "Guardar hora" }));
     expect(await within(group).findByText("Escribe la hora que es ahora.")).toBeTruthy();
     expect(putZona()).toHaveLength(0);
+  });
+});
+
+// Envíos del día: cuántos pedidos llegaron, cuáles tardaron en llegar y qué envíos se rechazaron (y por qué). Sirve para
+// saber qué pasó cuando algo no llegó a tiempo.
+describe("administración: envíos del día", () => {
+  const region = () => screen.findByRole("region", { name: "Envíos del día" });
+  const enviosCalls = () => calls.filter((c) => c.path.startsWith("/admin/envios"));
+  const at = (h, m) => new Date(2026, 9, 30, h, m).toISOString();
+
+  it("sin movimiento dice que todavía no llegó ningún pedido y que no hubo rechazos", async () => {
+    link();
+    render(<AdminApp />);
+    const box = await region();
+    expect(await within(box).findByText("Todavía no llegó ningún pedido ese día.")).toBeTruthy();
+    expect(within(box).getByText("Ningún envío rechazado.")).toBeTruthy();
+  });
+
+  it("muestra cuántos llegaron, por vendedor, y cuántos tardaron", async () => {
+    server.envios = { fecha: "2026-10-30", recibidos: 25, umbralMin: 2, tardios: [], rechazos: [], porVendedor: [{ id: "raul", name: "Raul", recibidos: 23, tardios: 2 }, { id: "eddy", name: "Eddy", recibidos: 2, tardios: 0 }] };
+    link();
+    render(<AdminApp />);
+    const box = await region();
+    expect(await within(box).findByText("25 pedidos recibidos")).toBeTruthy();
+    const raul = within(box).getByRole("group", { name: "Envíos de Raul" });
+    expect(within(raul).getByText(/23 recibidos/)).toBeTruthy();
+    expect(within(raul).getByText(/2 tardaron más de 2 min/)).toBeTruthy();
+    expect(within(within(box).getByRole("group", { name: "Envíos de Eddy" })).queryByText(/tardaron/)).toBeNull();
+  });
+
+  it("lista los que tardaron en llegar con la hora de envío, la de llegada y cuánto", async () => {
+    server.envios = {
+      fecha: "2026-10-30", recibidos: 1, umbralMin: 2, rechazos: [], porVendedor: [{ id: "raul", name: "Raul", recibidos: 1, tardios: 1 }],
+      tardios: [{ id: "p1", vendedor: "Raul", cliente: "Ana López", enviado: at(15, 58), llego: at(16, 3), demoraMin: 5 }],
+    };
+    link();
+    render(<AdminApp />);
+    const box = await region();
+    const late = await within(box).findByRole("group", { name: "Pedidos que tardaron en llegar" });
+    expect(within(late).getByText("Ana López · Raul")).toBeTruthy();
+    expect(within(late).getByText("enviado 3:58 p. m. · llegó 4:03 p. m. · 5 min")).toBeTruthy();
+  });
+
+  it("lista los envíos rechazados con la hora, el vendedor y el motivo", async () => {
+    server.envios = {
+      fecha: "2026-10-30", recibidos: 0, umbralMin: 2, porVendedor: [], tardios: [],
+      rechazos: [
+        { at: at(16, 2), vendedor: "Raul", motivo: "cierre", detalle: "La facturación de hoy cerró a las 4:00 p. m. Pasa el pedido para mañana.", cliente: "Ana López" },
+        { at: at(16, 5), vendedor: "Eddy", motivo: "horario", detalle: "La facturación está cerrada. Abre mañana a las 7:00 a. m." },
+        { at: at(16, 9), vendedor: "Raul", motivo: "datos", detalle: "Falta el nombre del cliente." },
+      ],
+    };
+    link();
+    render(<AdminApp />);
+    const box = await region();
+    const bad = await within(box).findByRole("group", { name: "Envíos rechazados" });
+    expect(within(bad).getByText("4:02 p. m. · Raul · Cierre del día")).toBeTruthy();
+    expect(within(bad).getByText(/Ana López/)).toBeTruthy();
+    expect(within(bad).getByText("4:05 p. m. · Eddy · Fuera de horario")).toBeTruthy();
+    expect(within(bad).getByText("4:09 p. m. · Raul · Datos no válidos")).toBeTruthy();
+    expect(within(bad).getByText("Falta el nombre del cliente.")).toBeTruthy();
+    expect(within(box).queryByText("Ningún envío rechazado.")).toBeNull();
+  });
+
+  it("cambiar el día pide ese día al buzón", async () => {
+    link();
+    render(<AdminApp />);
+    const box = await region();
+    await within(box).findByText("Todavía no llegó ningún pedido ese día.");
+    fireEvent.change(within(box).getByLabelText("Día de los envíos"), { target: { value: "2026-10-28" } });
+    await waitFor(() => expect(enviosCalls().at(-1).path).toBe("/admin/envios?fecha=2026-10-28"));
+  });
+
+  it("si el buzón no contesta, lo dice", async () => {
+    server.enviosError = true;
+    link();
+    render(<AdminApp />);
+    const box = await region();
+    expect(await within(box).findByRole("alert")).toBeTruthy();
   });
 });

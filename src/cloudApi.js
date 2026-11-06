@@ -78,15 +78,26 @@ export function createCloudApi({ url, token, fetchImpl, timeoutMs = DEFAULT_TIME
   const enc = encodeURIComponent;
   return {
     me: () => request("GET", "/me"),
+    // La hora del sitio (su zona y la corrección del administrador): la correcta para el día y las horas de cierre.
+    time: () => request("GET", "/time"),
     // vendedor
     // `queuedAt`: cuándo hizo el vendedor el cambio (puede subirse más tarde, por la cola). Se manda junto con la
     // hora de la app al subirlo, para que el buzón cuente el cierre del día en el momento del envío.
     putOrder: (id, content, extra) => request("PUT", `/orders/${enc(id)}`, extra && extra.queuedAt ? { ...content, enviadoEn: extra.queuedAt, ahora: new Date().toISOString() } : content),
+    // Varios pedidos de una vez: ops = [{ orderId, content, queuedAt }]. Cada pedido sale con su resultado.
+    putOrders: (ops) => request("POST", "/orders/batch", {
+      ahora: new Date().toISOString(),
+      pedidos: ops.map((op) => ({ id: op.orderId, ...op.content, ...(op.queuedAt ? { enviadoEn: op.queuedAt } : {}) })),
+    }),
     deleteOrder: (id) => request("DELETE", `/orders/${enc(id)}`),
     confirmOrder: (id) => request("POST", `/orders/${enc(id)}/confirm`),
     statusSince: (since) => request("GET", since ? `/orders/status?since=${enc(since)}` : "/orders/status"),
     // facturadora
-    listOrders: (desde) => request("GET", desde ? `/orders?desde=${enc(desde)}` : "/orders"),
+    // `version`: la que ya tiene la página; si no cambió nada, el buzón contesta "sin cambios" (corto).
+    listOrders: (desde, version) => {
+      const query = [desde ? `desde=${enc(desde)}` : "", version ? `v=${enc(version)}` : ""].filter(Boolean).join("&");
+      return request("GET", query ? `/orders?${query}` : "/orders");
+    },
     confirmMany: (ids) => request("POST", "/orders/confirm", { ids }),
     unconfirmMany: (ids) => request("POST", "/orders/unconfirm", { ids }),
     // administrador (lista de vendedores)
@@ -94,6 +105,8 @@ export function createCloudApi({ url, token, fetchImpl, timeoutMs = DEFAULT_TIME
     login: (usuario, clave) => request("POST", "/login", { usuario, clave }),
     // Cuentas de facturación y supervisión (administrador).
     adminAccounts: () => request("GET", "/admin/accounts"),
+    // Envíos del día (administrador): pedidos recibidos, los que tardaron y los envíos rechazados.
+    adminEnvios: (fecha) => request("GET", fecha ? `/admin/envios?fecha=${enc(fecha)}` : "/admin/envios"),
     // Horario de facturación (administrador) y resumen de ventas de un día (administrador y supervisión).
     adminSchedule: () => request("GET", "/admin/schedule"),
     saveSchedule: (body) => request("PUT", "/admin/schedule", body),

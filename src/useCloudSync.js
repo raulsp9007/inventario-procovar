@@ -4,6 +4,8 @@ import { parseLinkCode } from "./linkCode";
 import { loadCloud, saveCloud, clearCloud } from "./cloudStorage";
 import { reconcile, applyStatuses, mergeOps, flushQueue, chipFor, markRejected } from "./cloudSync";
 import { todayStr } from "./dateUtils";
+import { setSiteClock, clearSiteClock } from "./siteClock";
+import { minutesUntilCierre } from "./cierreFacturacion";
 
 // Sincronización del vendedor con la nube de facturación. Orquesta las piezas
 // puras de cloudSync.js: sube lo enviado a facturación, vacía la cola cuando hay
@@ -30,8 +32,16 @@ const CIERRE_CHECK_MS = 2500;
 // pocos segundos (cada vez más espaciado) en vez de esperar a la comprobación de cada hora.
 const RETRY_DELAYS_MS = [10000, 30000, 60000, 120000];
 
+// Mientras haya pedidos enviados que la facturadora no ha confirmado (o cosas en cola), con la app a la vista se
+// consulta cada 5 minutos, en vez de cada hora: el vendedor se entera antes de lo confirmado o de un problema.
+const WATCH_MS = 5 * 60 * 1000;
+
+// La respuesta del buzón sobre el cierre se recuerda un minuto, si el cierre queda a más de 3 minutos.
+const CIERRE_CACHE_MS = 60000;
+const CIERRE_CACHE_MIN_LEFT = 3;
+
 export function useCloudSync({
-  orders, products, customers = [], setOrdersConfirmed, createApi = createCloudApi, debounceMs = 400, today, ready = true, intervalMs = 3600000, retryDelaysMs = RETRY_DELAYS_MS,
+  orders, products, customers = [], setOrdersConfirmed, createApi = createCloudApi, debounceMs = 400, today, ready = true, intervalMs = 3600000, retryDelaysMs = RETRY_DELAYS_MS, watchMs = WATCH_MS,
 }) {
   const [cloud, setCloud] = useState(() => loadCloud());
   const [status, setStatus] = useState({ phase: "idle", message: "", lastSyncAt: null, rejected: [], lastCheck: null });
@@ -87,6 +97,7 @@ export function useCloudSync({
         const data = await api.statusSince(cloudRef.current.since);
         horario = data.horario || null;
         cierre = data.cierre ? { ...data.cierre, zona: data.zona, ajuste: data.ajuste } : null;
+        if (data.zona !== undefined) setSiteClock({ now: data.now, zona: data.zona, ajuste: data.ajuste });
         const { orders: ordersNow, setOrdersConfirmed: confirmOrders } = propsRef.current;
         const result = applyStatuses({ rows: data.orders, orders: ordersNow, map: cloudRef.current.map });
         if (result.toConfirm.length > 0) confirmOrders(result.toConfirm, true);
@@ -148,6 +159,28 @@ export function useCloudSync({
 
   const linked = ready && !!cloud.link && cloud.enabled;
 
+  // Vigilancia: con la app a la vista y pedidos sin confirmar (o en cola), se consulta cada pocos minutos.
+  useEffect(() => {
+    if (!linked) return undefined;
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      const { map, queue } = cloudRef.current;
+      const waiting = queue.length > 0 || Object.values(map).some((entry) => entry && entry.published && entry.status === "pendiente");
+      if (waiting) sync({ pull: true });
+    }, watchMs);
+    return () => clearInterval(intervalId);
+  }, [linked, watchMs, sync]);
+
+  // Al abrir la app enlazada se pregunta la hora del sitio (una consulta liviana; no la lista de pedidos): así el día y
+  // las horas de cierre de la app son los del sitio aunque el reloj del teléfono no coincida.
+  useEffect(() => {
+    if (!linked) return;
+    const { link } = cloudRef.current;
+    const api = propsRef.current.createApi({ url: link.url, token: link.token });
+    if (typeof api.time !== "function") return;
+    api.time().then((data) => setSiteClock(data), () => {});
+  }, [linked]);
+
   // Cambios en los pedidos: subir lo que corresponda (sin consultar la nube).
   useEffect(() => {
     if (!linked) return undefined;
@@ -188,6 +221,7 @@ export function useCloudSync({
   const unlink = useCallback(() => {
     clearTimeout(retryRef.current);
     attemptRef.current = 0;
+    clearSiteClock();
     clearCloud();
     cloudRef.current = loadCloud();
     setCloud(cloudRef.current);
@@ -200,17 +234,24 @@ export function useCloudSync({
   // hoy (no al abrir la app). Sin conexión, o si el buzón tarda, vale lo último que se supo.
   const statusRef = useRef(status);
   statusRef.current = status;
+  const cierreCacheRef = useRef(null);
   const checkCierre = useCallback(async () => {
     const current = cloudRef.current;
     const lastKnown = statusRef.current.cierre || null;
     if (!current.link || !current.enabled) return lastKnown;
+    const cached = cierreCacheRef.current;
+    if (cached && Date.now() - cached.at < CIERRE_CACHE_MS && !cached.cierre.cerrado && minutesUntilCierre(cached.cierre) > CIERRE_CACHE_MIN_LEFT) {
+      return { ...cached.cierre, fresco: true };
+    }
     try {
       const api = propsRef.current.createApi({ url: current.link.url, token: current.link.token });
       const timeout = new Promise((resolve) => { setTimeout(() => resolve(null), CIERRE_CHECK_MS); });
       const data = await Promise.race([api.statusSince(new Date().toISOString()), timeout]);
       if (!data) return lastKnown;
       const cierre = data.cierre ? { ...data.cierre, zona: data.zona, ajuste: data.ajuste } : null;
+      if (data.zona !== undefined) setSiteClock({ now: data.now, zona: data.zona, ajuste: data.ajuste });
       setStatus((prev) => ({ ...prev, cierre }));
+      cierreCacheRef.current = cierre ? { at: Date.now(), cierre } : null;
       // Recién preguntado al buzón: su "cerrado" vale más que la cuenta con el reloj del teléfono.
       return cierre ? { ...cierre, fresco: true } : null;
     } catch {

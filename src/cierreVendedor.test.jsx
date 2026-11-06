@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import InventoryApp from "./InventoryApp";
 import { cierreBlockMessage } from "./cierreFacturacion";
+import { clearSiteClock } from "./siteClock";
 
 // Cierre de facturación del día (lo pone el administrador): pasada la hora, el vendedor ya no puede
 // enviar a facturación un pedido de hoy (queda para mañana); los de otro día sí. Hoy fijo: lunes
@@ -36,6 +37,7 @@ let server;
 
 beforeEach(() => {
   localStorage.clear();
+  clearSiteClock();
   Element.prototype.scrollIntoView = () => {};
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date("2026-09-21T09:00:00"));
@@ -94,6 +96,22 @@ describe("cierreBlockMessage con la zona del sitio", () => {
   it("una zona desconocida se ignora y se usa la hora del teléfono", () => {
     expect(cierreBlockMessage(cierre, new Date(2026, 8, 21, 16, 0), "Mars/Olympus")).toContain("3:00 p. m.");
     expect(cierreBlockMessage(cierre, new Date(2026, 8, 21, 14, 0), undefined)).toBe("");
+  });
+});
+
+describe("cierreBlockMessage con el reloj del sitio ya conocido", () => {
+  const cierre = { activo: true, hora: "10:00", cerrado: false, mensaje: "", zona: "America/Havana", ajuste: 60 };
+
+  it("sin pasar la hora usa el reloj del sitio (ya trae la zona y el ajuste) y no los vuelve a sumar", async () => {
+    const { setSiteClock, clearSiteClock } = await import("./siteClock");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T13:00:00.000Z")); // 09:00 en Cuba
+    setSiteClock({ now: "2026-09-21T13:00:00.000Z", zona: "America/Havana", ajuste: 60 }); // en el sitio son las 10:00
+    expect(cierreBlockMessage(cierre)).toContain("10:00 a. m.");
+    vi.setSystemTime(new Date("2026-09-21T12:30:00.000Z")); // media hora antes
+    expect(cierreBlockMessage(cierre)).toBe("");
+    clearSiteClock();
+    vi.useRealTimers();
   });
 });
 
@@ -259,5 +277,56 @@ describe("vendedor: el cierre se cuenta en la zona del sitio", () => {
     render(<InventoryApp />);
     fireEvent.click(await screen.findByRole("button", { name: "Facturar a la nube" }));
     await waitFor(() => expect(sent()).toBe(true));
+  });
+});
+
+// La pregunta al buzón antes de enviar se recuerda un minuto si el cierre queda lejos: el segundo FACT. seguido no espera
+// otra vuelta por la red.
+describe("vendedor: la pregunta del cierre se recuerda un minuto", () => {
+  const twoOrders = () => [line(), line({ id: "m-2", orderId: "o2", orderSeq: 2, customerName: "Beto Ruiz" })];
+  const asks = () => calls.filter((c) => c.path.startsWith("/orders/status"));
+
+  it("dos FACT. seguidos preguntan una sola vez si falta tiempo para el cierre", async () => {
+    server.cierre = { activo: true, hora: "15:00", cerrado: false, mensaje: "" };
+    seed({ movements: twoOrders() });
+    render(<InventoryApp />);
+    const buttons = await screen.findAllByRole("button", { name: "Facturar a la nube" });
+    fireEvent.click(buttons[0]);
+    await waitFor(() => expect(saved().movements.filter((m) => m.sent)).toHaveLength(1));
+    fireEvent.click(screen.getAllByRole("button", { name: "Facturar a la nube" })[1]);
+    await waitFor(() => expect(saved().movements.filter((m) => m.sent)).toHaveLength(2));
+    expect(asks()).toHaveLength(1);
+  });
+
+  it("si el cierre está a punto (menos de 3 minutos), vuelve a preguntar", async () => {
+    server.cierre = { activo: true, hora: "09:02", cerrado: false, mensaje: "" };
+    seed({ movements: twoOrders() });
+    render(<InventoryApp />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Facturar a la nube" }))[0]);
+    await waitFor(() => expect(saved().movements.filter((m) => m.sent)).toHaveLength(1));
+    fireEvent.click(screen.getAllByRole("button", { name: "Facturar a la nube" })[1]);
+    await waitFor(() => expect(saved().movements.filter((m) => m.sent)).toHaveLength(2));
+    expect(asks()).toHaveLength(2);
+  });
+
+  it("pasado un minuto vuelve a preguntar", async () => {
+    server.cierre = { activo: true, hora: "15:00", cerrado: false, mensaje: "" };
+    seed({ movements: twoOrders() });
+    render(<InventoryApp />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Facturar a la nube" }))[0]);
+    await waitFor(() => expect(saved().movements.filter((m) => m.sent)).toHaveLength(1));
+    await act(async () => { vi.advanceTimersByTime(61000); });
+    fireEvent.click(screen.getAllByRole("button", { name: "Facturar a la nube" })[1]);
+    await waitFor(() => expect(saved().movements.filter((m) => m.sent)).toHaveLength(2));
+    expect(asks()).toHaveLength(2);
+  });
+
+  it("si en el buzón ya había cerrado, no se recuerda: avisa cada vez", async () => {
+    seed({ movements: twoOrders() }); // por defecto el cierre de las 8:00 ya pasó
+    render(<InventoryApp />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Facturar a la nube" }))[0]);
+    expect(await screen.findByText(MENSAJE_8AM)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Facturar a la nube" })[1]);
+    await waitFor(() => expect(asks()).toHaveLength(2));
   });
 });

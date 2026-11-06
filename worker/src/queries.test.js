@@ -55,12 +55,21 @@ describe.skipIf(!createFakeD1)("consultas a la base por petición", () => {
     facturadoraToken = (await call("POST", "/login", { body: { usuario: "maria", clave: "clave-12345" } })).json.token;
   });
 
-  it("la lista de la facturadora lee todos los ajustes en una sola consulta (4 consultas en total)", async () => {
+  it("la lista de la facturadora lee todos los ajustes en una sola consulta (5 consultas con la lista completa)", async () => {
     const { result, seen, settingsReads } = await counted(() => call("GET", "/orders?desde=2026-10-30", { token: facturadoraToken }));
     expect(result.status).toBe(200);
     expect(result.json.sellers.find((s) => s.id === "carlos").orders).toHaveLength(1);
     expect(settingsReads).toBe(1);
+    expect(seen.length).toBeLessThanOrEqual(5);
+  });
+
+  it("si no hay cambios responde con 4 consultas y sin traer los pedidos", async () => {
+    const full = await call("GET", "/orders?desde=2026-10-30", { token: facturadoraToken });
+    const { result, seen, settingsReads } = await counted(() => call("GET", `/orders?desde=2026-10-30&v=${encodeURIComponent(full.json.version)}`, { token: facturadoraToken }));
+    expect(result.json.sinCambios).toBe(true);
+    expect(settingsReads).toBe(1);
     expect(seen.length).toBeLessThanOrEqual(4);
+    expect(seen.some((sql) => /SELECT \* FROM orders/i.test(sql))).toBe(false);
   });
 
   it("la comprobación del vendedor también (3 consultas en total)", async () => {

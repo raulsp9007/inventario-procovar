@@ -15,7 +15,6 @@ const ALLOWED_ORIGINS = ["https://raulsp9007.github.io"];
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const RETENTION_DAYS = 60;
 const DEFAULT_WINDOW_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -102,6 +101,17 @@ function statusRow(o) {
   return { id: o.id, status: o.status, rev: o.rev, modified: o.modified, confirmedAt: o.confirmedAt, confirmedBy: o.confirmedBy, updatedAt: o.updatedAt };
 }
 
+// Huella corta de un texto (para saber si cambió algo, no para seguridad).
+function shortHash(text) {
+  let h = 5381;
+  for (let i = 0; i < text.length; i += 1) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+const MAX_REJECTIONS = 100;
+const MAX_BATCH = 50;
+const LATE_MINUTES = 2;
+
 const byRecent = (a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt);
 
 async function readJson(request) {
@@ -142,7 +152,7 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   // Todos los ajustes del buzón (cuentas, horario, cierre, zona y hora a mano) se leen de una sola vez al
   // empezar la petición: cada consulta a la base cuenta, y antes eran hasta cinco por petición. Lo que se
   // guarda en esta petición se refleja aquí al momento.
-  const SETTING_KEYS = ["cuentas", "horario", "cierre", "zona", "zona_ajuste"];
+  const SETTING_KEYS = ["cuentas", "horario", "cierre", "zona", "zona_ajuste", "limpieza", "rechazos"];
   const settings = await store.getSettings(SETTING_KEYS);
   const setting = (key) => (Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : null);
   const saveSetting = async (key, value) => {
@@ -206,12 +216,22 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
     const session = token ? await store.getSession(await hashToken(token)) : null;
     const account = session && session.expiresAt > stamp ? accounts.find((a) => a.id === session.accountId) : null;
-    if (account && account.active) user = { id: `cuenta-${account.id}`, name: account.username, role: account.role, token: "" };
+    if (account && account.active) {
+      user = { id: `cuenta-${account.id}`, name: account.username, role: account.role, token: "" };
+      // Mientras se usa, la sesión se renueva sola: pasada la mitad de su vida se alarga otras 24 horas (así no
+      // vence en plena jornada). Una escritura como mucho cada 12 horas por sesión.
+      if (new Date(session.expiresAt).getTime() - new Date(stamp).getTime() < SESSION_MS / 2) {
+        await store.putSession({ ...session, expiresAt: new Date(new Date(stamp).getTime() + SESSION_MS).toISOString() });
+      }
+    }
   }
   if (!user) return fail(origin, 401, "Código no válido.");
   const only = (role) => (user.role === role ? null : fail(origin, 403, "Esto no es para tu usuario."));
 
   if (method === "GET" && path === "/me") return reply(origin, { id: user.id, name: user.name, role: user.role });
+
+  // La hora de las apps, en la hora del sitio: la zona y, si el administrador la puso a mano, el ajuste. Las apps la
+  // usan para contar el día y la hora de cierre igual que el buzón (ver loadSiteClock).
 
   // Horario de facturación: fuera de horario se pausa lo que el vendedor envía, borra o confirma a
   // mano, y lo que la facturadora confirma o deshace. Ver pedidos y todo lo del administrador sigue.
@@ -224,12 +244,49 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     const adjust = parseAdjust(setting("zona_ajuste"));
     return { zone, adjust, at: shiftIso(stamp, adjust) };
   };
+  if (method === "GET" && path === "/time") {
+    const site = await loadSiteClock();
+    return reply(origin, { now: stamp, zona: site.zone, ajuste: site.adjust, hoy: cubaDate(site.at, site.zone), hora: siteNow(site.at, site.zone).hora });
+  }
+
+  // Los envíos rechazados (por el cierre, por el horario o por datos mal hechos) se anotan, los últimos 100, para
+  // que el administrador vea qué pasó (resumen de envíos del día).
+  const readRejections = () => {
+    try {
+      const list = JSON.parse(setting("rechazos") || "[]");
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  };
+  const recordRejection = async (motivo, detalle, cliente) => {
+    const entry = { at: stamp, vendedorId: user.id, vendedor: user.name, motivo, detalle, ...(cliente ? { cliente } : {}) };
+    await saveSetting("rechazos", JSON.stringify([...readRejections(), entry].slice(-MAX_REJECTIONS)));
+  };
+
+  // Limpieza: no se guarda historia, solo lo del día (lo que se vende hoy) y lo montado para los días que vienen; los pedidos de
+  // días anteriores se borran del todo. Una sola vez al día, pasada la hora de cierre del día (o a la
+  // primera petición del día si no hay cierre), en vez de cada vez que se sube un pedido.
+  const maybeCleanup = async () => {
+    const site = await loadSiteClock();
+    const hoy = cubaDate(site.at, site.zone);
+    if (setting("limpieza") === hoy) return;
+    const cierre = cierreStatus(await loadCierre(), site.at, site.zone);
+    if (cierre.activo && !cierre.cerrado) return;
+    await store.purgeBefore(hoy);
+    await saveSetting("limpieza", hoy);
+  };
+
+  const isUpload = user.role === "vendedor" && ((method === "PUT" && /^\/orders\/[^/]+$/.test(path)) || (method === "POST" && path === "/orders/batch"));
   const vendorWrite = user.role === "vendedor" && method !== "GET" && (path === "/orders" || path.startsWith("/orders/"));
   const factWrite = user.role === "facturadora" && method === "POST" && (path === "/orders/confirm" || path === "/orders/unconfirm");
   if (vendorWrite || factWrite) {
     const site = await loadSiteClock();
     const status = scheduleStatus(await loadSchedule(), site.at, site.zone);
-    if (!status.abierto) return fail(origin, 423, status.mensaje);
+    if (!status.abierto) {
+      if (isUpload) await recordRejection("horario", status.mensaje);
+      return fail(origin, 423, status.mensaje);
+    }
   }
 
   // Resumen de ventas de un día: lo enviado a facturación por cada vendedor, producto por producto
@@ -280,50 +337,81 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   const one = path.match(/^\/orders\/([^/]+)$/);
   const confirmOne = path.match(/^\/orders\/([^/]+)\/confirm$/);
 
-  if (method === "PUT" && one && one[1] !== "confirm" && one[1] !== "unconfirm") {
-    const denied = only("vendedor");
-    if (denied) return denied;
-    const id = decodeURIComponent(one[1]);
-    if (!ID_PATTERN.test(id)) return fail(origin, 400, "El id del pedido no es válido.");
-    const read = await readJson(request);
-    if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
-    const parsed = parseOrder(read.body);
-    if (parsed.error) return fail(origin, 400, parsed.error);
-    // Cierre de facturación del día: pasada la hora no se envía ni se cambia un pedido de hoy (los de
-    // otro día sí). Es aparte del horario del sitio, que ya se revisó arriba.
-    // Si la subida se demoró (mala señal, cola), la app dice cuándo se hizo el cambio (enviadoEn) y su hora
-    // al subirlo (ahora): el cierre se cuenta en el momento del envío y no cuando por fin llega. La espera
-    // es la diferencia entre esas dos horas de la app (el reloj del teléfono no importa); si no tiene
-    // sentido (falta, negativa o de más de 12 horas), no se tiene en cuenta.
+  // Guarda un pedido (uno solo o de un lote). Devuelve { status, json }: el pedido, o { error } con su estado.
+  // El cierre de facturación del día: pasada la hora no se envía ni se cambia un pedido de hoy (los de otro día
+  // sí). Si la subida se demoró (mala señal, cola), la app dice cuándo se hizo el cambio (enviadoEn) y su hora al
+  // subirlo (ahora): el cierre se cuenta en el momento del envío y no cuando por fin llega. La espera es la
+  // diferencia entre esas dos horas de la app (el reloj del teléfono no importa); si no tiene sentido (falta,
+  // negativa o de más de 12 horas), no se tiene en cuenta. Esa espera también da la hora real de envío (sentAt).
+  const saveOrder = async (id, body, ahora) => {
+    const customer = body && typeof body.customerName === "string" ? cleanText(body.customerName, 120) : "";
+    const rejected = async (status, message, motivo) => {
+      await recordRejection(motivo, message, customer);
+      return { status, json: { error: message } };
+    };
+    if (typeof id !== "string" || !ID_PATTERN.test(id)) return rejected(400, "El id del pedido no es válido.", "datos");
+    const parsed = parseOrder(body);
+    if (parsed.error) return rejected(400, parsed.error, "datos");
     const site = await loadSiteClock();
     const isoText = (value) => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value) ? Date.parse(value) : NaN);
-    const waited = isoText(read.body.ahora) - isoText(read.body.enviadoEn);
+    const waited = isoText(ahora) - isoText(body.enviadoEn);
     const waitedMs = Number.isFinite(waited) && waited > 0 && waited <= 12 * 3600000 ? waited : 0;
-    const sentAt = shiftIso(site.at, -waitedMs / 60000);
-    const cierre = cierreStatus(await loadCierre(), sentAt, site.zone);
-    if (cierre.cerrado && parsed.value.date === cubaDate(sentAt, site.zone)) return fail(origin, 409, cierre.mensaje);
+    const sentAt = shiftIso(stamp, -waitedMs / 60000);
+    const cierre = cierreStatus(await loadCierre(), shiftIso(site.at, -waitedMs / 60000), site.zone);
+    if (cierre.cerrado && parsed.value.date === cubaDate(shiftIso(site.at, -waitedMs / 60000), site.zone)) return rejected(409, cierre.mensaje, "cierre");
 
     const existing = await store.get(id);
-    if (existing && existing.sellerId !== user.id) return fail(origin, 403, "Ese pedido es de otro vendedor.");
+    if (existing && existing.sellerId !== user.id) return { status: 403, json: { error: "Ese pedido es de otro vendedor." } };
 
     let order;
     if (!existing) {
       order = {
         id, sellerId: user.id, sellerName: user.name, ...parsed.value, ...parsed.extra, status: "pendiente", rev: 1, modified: false,
-        confirmedAt: null, confirmedBy: null, createdAt: stamp, updatedAt: stamp,
+        confirmedAt: null, confirmedBy: null, createdAt: stamp, updatedAt: stamp, sentAt,
       };
     } else if (existing.status === "cancelado") {
-      order = withExtra({ ...existing, ...parsed.value, status: "pendiente", rev: existing.rev + 1, modified: false, confirmedAt: null, confirmedBy: null, updatedAt: stamp }, parsed.extra);
+      order = withExtra({ ...existing, ...parsed.value, status: "pendiente", rev: existing.rev + 1, modified: false, confirmedAt: null, confirmedBy: null, updatedAt: stamp, sentAt }, parsed.extra);
     } else if (sameContent(existing, parsed.value)) {
       // Mismo pedido: solo se ponen al día el código y el negocio, sin tocar su estado.
-      if (sameExtra(existing, parsed.extra)) return reply(origin, existing);
+      if (sameExtra(existing, parsed.extra)) return { status: 200, json: existing };
       order = withExtra({ ...existing }, parsed.extra);
     } else {
-      order = withExtra({ ...existing, ...parsed.value, status: "pendiente", rev: existing.rev + 1, modified: true, confirmedAt: null, confirmedBy: null, updatedAt: stamp }, parsed.extra);
+      order = withExtra({ ...existing, ...parsed.value, status: "pendiente", rev: existing.rev + 1, modified: true, confirmedAt: null, confirmedBy: null, updatedAt: stamp, sentAt }, parsed.extra);
     }
     await store.put(order);
-    await store.purge(new Date(new Date(stamp).getTime() - RETENTION_DAYS * DAY_MS).toISOString());
-    return reply(origin, order);
+    return { status: 200, json: order };
+  };
+
+  if (method === "PUT" && one && one[1] !== "confirm" && one[1] !== "unconfirm" && one[1] !== "batch") {
+    const denied = only("vendedor");
+    if (denied) return denied;
+    const id = decodeURIComponent(one[1]);
+    const read = await readJson(request);
+    if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
+    const body = read.body && typeof read.body === "object" ? read.body : null;
+    await maybeCleanup();
+    const saved = await saveOrder(id, body, body && body.ahora);
+    return reply(origin, saved.json, saved.status);
+  }
+
+  // Varios pedidos de una vez (la cola de la app, cuando hay muchos): { pedidos: [{ id, ...pedido, enviadoEn }], ahora }.
+  // Cada pedido sale con su resultado: uno rechazado (cierre, datos, de otro vendedor) no tumba a los demás.
+  if (method === "POST" && path === "/orders/batch") {
+    const denied = only("vendedor");
+    if (denied) return denied;
+    const read = await readJson(request);
+    const body = !read.error && read.body && typeof read.body === "object" ? read.body : null;
+    if (!body || !Array.isArray(body.pedidos) || body.pedidos.length < 1 || body.pedidos.length > MAX_BATCH) {
+      return fail(origin, 400, `Manda de 1 a ${MAX_BATCH} pedidos en "pedidos".`);
+    }
+    await maybeCleanup();
+    const resultados = [];
+    for (const item of body.pedidos) {
+      const entry = item && typeof item === "object" ? item : {};
+      const saved = await saveOrder(entry.id, entry, entry.ahora !== undefined ? entry.ahora : body.ahora);
+      resultados.push(saved.status === 200 ? { id: entry.id, ok: true } : { id: entry.id, ok: false, status: saved.status, error: saved.json.error });
+    }
+    return reply(origin, { resultados });
   }
 
   if (method === "DELETE" && one) {
@@ -360,8 +448,21 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     const desde = requested && DATE_PATTERN.test(requested)
       ? requested
       : new Date(new Date(stamp).getTime() - DEFAULT_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10);
+    const activeSellers = roster.filter((u) => u.role === "vendedor" && u.active);
+    // La versión: cambia con cualquier pedido nuevo, cambiado, confirmado o cancelado, o si cambian los vendedores. Si
+    // la página ya tiene esa versión, no hace falta mandarle toda la lista (solo el día de trabajo y el horario).
+    const version = `${await store.versionFrom(desde)}|${shortHash(activeSellers.map((s) => `${s.id}:${s.name}`).sort().join(","))}`;
+    await maybeCleanup();
+    const site = await loadSiteClock();
+    // El día de trabajo: hoy, y pasada la hora de cierre del día (la que pone el administrador) el siguiente día
+    // de trabajo. La página muestra solo los pedidos de ese día: a la hora del cierre se limpia lo de hoy y
+    // van apareciendo los de mañana. `hoy` es la fecha de hoy en la hora del sitio.
+    const hoy = cubaDate(site.at, site.zone);
+    const cierre = cierreStatus(await loadCierre(), site.at, site.zone);
+    const common = { now: stamp, horario: scheduleStatus(await loadSchedule(), site.at, site.zone), hoy, dia: cierre.cerrado ? nextWorkingDay(hoy) : hoy, version };
+    if (url.searchParams.get("v") === version) return reply(origin, { ...common, sinCambios: true });
     const orders = await store.listFrom(desde);
-    const sellers = roster.filter((u) => u.role === "vendedor" && u.active).map((seller) => {
+    const sellers = activeSellers.map((seller) => {
       const mine = orders.filter((o) => o.sellerId === seller.id).sort(byRecent);
       return {
         id: seller.id, name: seller.name,
@@ -370,15 +471,7 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
         orders: mine,
       };
     });
-    const site = await loadSiteClock();
-    // El día de trabajo: hoy, y pasada la hora de cierre del día (la que pone el administrador) el siguiente día
-    // de trabajo. La página muestra solo los pedidos de ese día: a la hora del cierre se limpia lo de hoy y
-    // van apareciendo los de mañana. `hoy` es la fecha de hoy en la hora del sitio.
-    const hoy = cubaDate(site.at, site.zone);
-    const cierre = cierreStatus(await loadCierre(), site.at, site.zone);
-    return reply(origin, {
-      now: stamp, sellers, horario: scheduleStatus(await loadSchedule(), site.at, site.zone), hoy, dia: cierre.cerrado ? nextWorkingDay(hoy) : hoy,
-    });
+    return reply(origin, { ...common, sellers });
   }
 
   if (method === "POST" && (path === "/orders/confirm" || path === "/orders/unconfirm")) {
@@ -410,6 +503,39 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   if (path.startsWith("/admin/")) {
     const denied = only("admin");
     if (denied) return denied;
+
+    // Envíos del día: cuántos pedidos llegaron, cuáles tardaron en llegar y qué envíos se rechazaron (y por qué).
+    if (method === "GET" && path === "/admin/envios") {
+      const site = await loadSiteClock();
+      const hoy = cubaDate(site.at, site.zone);
+      const fecha = url.searchParams.get("fecha") || hoy;
+      const parsedDate = new Date(`${fecha}T00:00:00Z`);
+      if (!DATE_PATTERN.test(fecha) || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== fecha) return fail(origin, 400, "La fecha no es válida (AAAA-MM-DD).");
+      const dayOf = (iso) => cubaDate(shiftIso(iso, site.adjust), site.zone);
+      const from = new Date(parsedDate.getTime() - DAY_MS).toISOString().slice(0, 10);
+      const received = (await store.listFrom(from)).filter((o) => dayOf(o.createdAt) === fecha);
+      const delayOf = (o) => new Date(o.createdAt).getTime() - new Date(o.sentAt || o.createdAt).getTime();
+      const late = received.filter((o) => delayOf(o) >= LATE_MINUTES * 60000);
+      const bySeller = new Map();
+      received.forEach((o) => {
+        const row = bySeller.get(o.sellerId) || { id: o.sellerId, name: o.sellerName, recibidos: 0, tardios: 0 };
+        row.recibidos += 1;
+        if (delayOf(o) >= LATE_MINUTES * 60000) row.tardios += 1;
+        bySeller.set(o.sellerId, row);
+      });
+      return reply(origin, {
+        fecha,
+        recibidos: received.length,
+        porVendedor: [...bySeller.values()].sort((a, b) => a.name.localeCompare(b.name, "es")),
+        tardios: late
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+          .map((o) => ({ id: o.id, vendedor: o.sellerName, cliente: o.customerName, enviado: o.sentAt || o.createdAt, llego: o.createdAt, demoraMin: Math.round(delayOf(o) / 60000) })),
+        rechazos: readRejections()
+          .filter((r) => dayOf(r.at) === fecha)
+          .map(({ at, vendedor, motivo, detalle, cliente }) => ({ at, vendedor, motivo, detalle, ...(cliente ? { cliente } : {}) })),
+        umbralMin: LATE_MINUTES,
+      });
+    }
 
     // La hora del sitio: la zona horaria en la que trabajan el horario, el cierre del día y el resumen.
     if (path === "/admin/zona") {

@@ -138,10 +138,47 @@ describe("createCloudApi: peticiones", () => {
     expect(Number.isNaN(new Date(body.ahora).getTime())).toBe(false);
   });
 
+  it("putOrders: POST /orders/batch con todos los pedidos, cada uno con cuándo se hizo el cambio, y la hora de la app", async () => {
+    const { api: cloud, fetchImpl } = api({ status: 200, body: { resultados: [{ id: "a", ok: true }, { id: "b", ok: true }] } });
+    const out = await cloud.putOrders([
+      { orderId: "a", content: { customerName: "Ana", total: 1 }, queuedAt: "2026-10-30T14:50:00.000Z" },
+      { orderId: "b", content: { customerName: "Beto", total: 2 } },
+    ]);
+    expect(out.resultados).toHaveLength(2);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe(`${URL_OK}/orders/batch`);
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(init.body);
+    expect(body.pedidos).toEqual([
+      { id: "a", customerName: "Ana", total: 1, enviadoEn: "2026-10-30T14:50:00.000Z" },
+      { id: "b", customerName: "Beto", total: 2 },
+    ]);
+    expect(Number.isNaN(new Date(body.ahora).getTime())).toBe(false);
+  });
+
   it("sin respuesta del buzón en el tiempo dado, falla como 'network' (no se queda esperando)", async () => {
     const fetchImpl = vi.fn(() => new Promise(() => {}));
     const cloud = createCloudApi({ url: URL_OK, token: TOKEN, fetchImpl, timeoutMs: 20 });
     await expect(cloud.putOrder("o1", {})).rejects.toMatchObject({ kind: "network" });
+  });
+
+  it("adminEnvios: GET /admin/envios (con o sin día)", async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push([init.method, url.replace(URL_OK, "")]);
+      return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+    });
+    const cloud = createCloudApi({ url: URL_OK, token: TOKEN, fetchImpl });
+    await cloud.adminEnvios();
+    await cloud.adminEnvios("2026-10-30");
+    expect(calls).toEqual([["GET", "/admin/envios"], ["GET", "/admin/envios?fecha=2026-10-30"]]);
+  });
+
+  it("time: GET /time (la hora del sitio)", async () => {
+    const { api: cloud, fetchImpl } = api({ status: 200, body: { now: "x", zona: "America/Havana", ajuste: 0, hoy: "2026-10-30", hora: "11:00" } });
+    expect((await cloud.time()).zona).toBe("America/Havana");
+    expect(fetchImpl.mock.calls[0][0]).toBe(`${URL_OK}/time`);
+    expect(fetchImpl.mock.calls[0][1].method).toBe("GET");
   });
 
   it("deleteOrder, confirmOrder, statusSince, listOrders, confirmMany, unconfirmMany", async () => {
@@ -156,6 +193,7 @@ describe("createCloudApi: peticiones", () => {
     await cloud.statusSince("2026-10-30T15:00:00.000Z");
     await cloud.statusSince("");
     await cloud.listOrders("2026-10-23");
+    await cloud.listOrders("2026-10-23", "3:2026-10-30T15:00:00.000Z|abc");
     await cloud.confirmMany(["a", "b"]);
     await cloud.unconfirmMany(["a"]);
     expect(calls).toEqual([
@@ -164,6 +202,7 @@ describe("createCloudApi: peticiones", () => {
       ["GET", "/orders/status?since=2026-10-30T15%3A00%3A00.000Z", undefined],
       ["GET", "/orders/status", undefined],
       ["GET", "/orders?desde=2026-10-23", undefined],
+      ["GET", "/orders?desde=2026-10-23&v=3%3A2026-10-30T15%3A00%3A00.000Z%7Cabc", undefined],
       ["POST", "/orders/confirm", { ids: ["a", "b"] }],
       ["POST", "/orders/unconfirm", { ids: ["a"] }],
     ]);

@@ -78,6 +78,7 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
   }, [api, fail, refresh]);
 
   const loadSales = useCallback((fecha) => api().sales(fecha), [api]);
+  const loadShipments = useCallback((fecha) => api().adminEnvios(fecha), [api]);
 
   const linkWith = useCallback(async (code) => {
     const { url, token } = parseLinkCode(code);
@@ -126,5 +127,6 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
     saveZona: (body) => act((a) => a.saveZona(body)),
     // Resumen de ventas de un día (para el contador).
     loadSales,
+    loadShipments,
   };
 }

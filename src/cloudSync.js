@@ -138,18 +138,59 @@ export function mergeOps(queue, newOps) {
   return next;
 }
 
-// Manda la cola en orden. Sin conexión, código vencido, fallo del servidor o fuera del
-// horario de facturación se detiene y conserva lo que falta; lo que la nube rechaza (datos inválidos) se
-// descarta y se reporta; borrar o confirmar algo que no existe cuenta como hecho.
+// Cuántos pedidos van juntos en una sola petición (el buzón acepta hasta 50).
+const BATCH_SIZE = 20;
+
+// Manda la cola en orden. Varios 'put' seguidos van juntos en una sola petición (más rápido, y con menos
+// oportunidades de que una conexión mala los demore); cada pedido del lote sale con su resultado. Sin conexión,
+// código vencido, fallo del servidor o fuera del horario de facturación se detiene y conserva lo que falta; lo que
+// la nube rechaza (datos inválidos, cierre del día) se descarta y se reporta; borrar o confirmar algo que no existe
+// cuenta como hecho. Con un buzón viejo (sin envío en lote) o una API sin esa función, sigue uno por uno.
 export async function flushQueue({ queue, api }) {
   const remaining = [...queue];
   const rejected = [];
   let sent = 0;
   let stopped = null;
   let stoppedMessage = "";
+  let batchWorks = typeof api.putOrders === "function";
+
+  // true si el fallo detiene la cola (y la deja anotada).
+  const stops = (e) => {
+    const kind = e instanceof CloudError ? e.kind : "server";
+    if (kind === "network" || kind === "auth" || kind === "server" || kind === "closed") {
+      stopped = kind;
+      stoppedMessage = kind === "closed" ? e.message : "";
+      return true;
+    }
+    return false;
+  };
 
   while (remaining.length > 0) {
     const op = remaining[0];
+
+    if (op.kind === "put" && batchWorks && remaining[1] && remaining[1].kind === "put") {
+      const batch = [];
+      for (let i = 0; i < remaining.length && batch.length < BATCH_SIZE && remaining[i].kind === "put"; i += 1) batch.push(remaining[i]);
+      try {
+        const out = await api.putOrders(batch);
+        const results = new Map(((out && out.resultados) || []).map((r) => [r.id, r]));
+        let missing = false;
+        for (const item of batch) {
+          const result = results.get(item.orderId);
+          if (!result) { missing = true; break; }
+          remaining.shift();
+          if (result.ok) sent += 1;
+          else rejected.push({ orderId: item.orderId, kind: "put", message: result.error || "Datos no válidos." });
+        }
+        if (missing) { stopped = "server"; break; }
+        continue;
+      } catch (e) {
+        if (stops(e)) break;
+        batchWorks = false; // sin esa ruta (buzón viejo) o lote mal recibido: uno por uno
+        continue;
+      }
+    }
+
     try {
       if (op.kind === "put") await (op.queuedAt ? api.putOrder(op.orderId, op.content, { queuedAt: op.queuedAt }) : api.putOrder(op.orderId, op.content));
       else if (op.kind === "confirm") await api.confirmOrder(op.orderId);
@@ -157,12 +198,8 @@ export async function flushQueue({ queue, api }) {
       remaining.shift();
       sent += 1;
     } catch (e) {
+      if (stops(e)) break;
       const kind = e instanceof CloudError ? e.kind : "server";
-      if (kind === "network" || kind === "auth" || kind === "server" || kind === "closed") {
-        stopped = kind;
-        stoppedMessage = kind === "closed" ? e.message : "";
-        break;
-      }
       remaining.shift();
       if (kind !== "notfound") rejected.push({ orderId: op.orderId, kind: op.kind, message: e.message });
     }

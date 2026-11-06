@@ -3,7 +3,7 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { CloudError } from "./cloudApi";
 import { makeLinkCode } from "./linkCode";
 import { loadCloud } from "./cloudStorage";
-import { useFacturadora } from "./useFacturadora";
+import { useFacturadora, FACTURADORA_POLL_MS } from "./useFacturadora";
 
 // Hook de la app de la facturadora: lista los pedidos por vendedor, manda su 👍
 // (y el deshacer) y, sin internet, los guarda en cola y los muestra ya
@@ -30,7 +30,12 @@ function fakeCloud() {
       if (state.badLogin) throw new CloudError("auth", 401, "Usuario o contraseña incorrectos.");
       return { token: "sesion-abc-123", role: state.loginRole, name: usuario, expiresAt: "2026-11-30T00:00:00.000Z" };
     }),
-    listOrders: vi.fn(async () => ({ now: "2026-10-30T16:00:00.000Z", sellers: state.sellers, ...(state.horario ? { horario: state.horario } : {}), ...(state.dia ? { dia: state.dia, hoy: state.hoy } : {}) })),
+    listOrders: vi.fn(async (desde, version) => {
+      if (state.version && version === state.version) {
+        return { now: "2026-10-30T16:00:00.000Z", sinCambios: true, version: state.version, ...(state.horario ? { horario: state.horario } : {}), ...(state.dia ? { dia: state.dia, hoy: state.hoy } : {}) };
+      }
+      return { now: "2026-10-30T16:00:00.000Z", sellers: state.sellers, ...(state.version ? { version: state.version } : {}), ...(state.horario ? { horario: state.horario } : {}), ...(state.dia ? { dia: state.dia, hoy: state.hoy } : {}) };
+    }),
     sales: vi.fn(async (fecha) => ({ fecha, vendedores: [], productos: [], totales: { pedidos: 0, unidades: 0 } })),
     confirmMany: vi.fn(async (ids) => ({ confirmed: ids, missing: [] })),
     unconfirmMany: vi.fn(async (ids) => ({ unconfirmed: ids, missing: [] })),
@@ -96,6 +101,93 @@ describe("useFacturadora: pestaña oculta", () => {
     const before = ctx.api.listOrders.mock.calls.length;
     await act(async () => { await ctx.hook.result.current.confirm(["a"]); });
     await waitFor(() => expect(ctx.api.listOrders.mock.calls.length).toBeGreaterThan(before));
+  });
+});
+
+// La lista solo se trae completa cuando cambió algo: la página manda la versión que ya tiene y el buzón contesta "sin
+// cambios" (corto) si sigue igual. Se consulta cada 15 segundos.
+describe("useFacturadora: solo si hay cambios", () => {
+  it("consulta cada 15 segundos", () => {
+    expect(FACTURADORA_POLL_MS).toBe(15000);
+  });
+
+  it("la primera vez pide la lista completa y después manda la versión que tiene", async () => {
+    const ctx = setup();
+    ctx.state.version = "v1";
+    await linked(ctx);
+    expect(ctx.api.listOrders.mock.calls[0]).toEqual(["2026-10-30"]);
+    await act(async () => { await ctx.hook.result.current.refresh(); });
+    expect(ctx.api.listOrders.mock.calls.at(-1)).toEqual(["2026-10-30", "v1"]);
+  });
+
+  it("con 'sin cambios' conserva la lista que ya tenía", async () => {
+    const ctx = setup();
+    ctx.state.version = "v1";
+    await linked(ctx);
+    await act(async () => { await ctx.hook.result.current.refresh(); });
+    expect(ctx.hook.result.current.sellers[0].orders.map((o) => o.id)).toEqual(["a", "b"]);
+    expect(ctx.hook.result.current.phase).toBe("ok");
+    expect(ctx.hook.result.current.lastSyncAt).toBeTruthy();
+  });
+
+  it("con 'sin cambios' igual se pone al día el día de trabajo y el horario", async () => {
+    const ctx = setup({ today: undefined });
+    ctx.state.version = "v1";
+    ctx.state.dia = "2026-10-30";
+    ctx.state.hoy = "2026-10-30";
+    ctx.state.sellers = [{ id: "carlos", name: "Carlos Pérez", pending: 2, confirmed: 0, orders: [order("a"), order("b"), order("c", { date: "2026-10-31" })] }];
+    await linked(ctx);
+    expect(ctx.hook.result.current.nextDay).toBe(false);
+    ctx.state.dia = "2026-10-31"; // llegó la hora de cierre: sin pedidos nuevos, solo cambió el día
+    ctx.state.horario = { activo: true, abierto: false, mensaje: "La facturación está cerrada." };
+    await act(async () => { await ctx.hook.result.current.refresh(); });
+    expect(ctx.hook.result.current.nextDay).toBe(true);
+    expect(ctx.hook.result.current.day).toBe("2026-10-31");
+    expect(ctx.hook.result.current.sellers[0].orders.map((o) => o.id)).toEqual(["c"]);
+    expect(ctx.hook.result.current.closedMessage).toBe("La facturación está cerrada.");
+  });
+
+  it("si cambia el día que se pide, no manda la versión (era de otra lista)", async () => {
+    const ctx = setup({ today: undefined });
+    ctx.state.version = "v1";
+    ctx.state.dia = "2026-10-30";
+    ctx.state.hoy = "2026-10-30";
+    await linked(ctx);
+    ctx.state.dia = "2026-10-31";
+    ctx.state.version = "v2";
+    await act(async () => { await ctx.hook.result.current.refresh(); }); // pide desde 10-30 con v1 -> completa (v2)
+    await act(async () => { await ctx.hook.result.current.refresh(); }); // ahora pide desde 10-31, sin versión
+    const last = ctx.api.listOrders.mock.calls.at(-1);
+    expect(last).toEqual(["2026-10-31"]);
+  });
+
+  it("una versión nueva del buzón trae la lista nueva", async () => {
+    const ctx = setup();
+    ctx.state.version = "v1";
+    await linked(ctx);
+    ctx.state.version = "v2";
+    ctx.state.sellers = [{ id: "carlos", name: "Carlos Pérez", pending: 1, confirmed: 0, orders: [order("z")] }];
+    await act(async () => { await ctx.hook.result.current.refresh(); });
+    expect(ctx.hook.result.current.sellers[0].orders.map((o) => o.id)).toEqual(["z"]);
+  });
+
+  it("recuerda la versión en lo guardado: al abrir otra vez ya manda la versión", async () => {
+    const ctx = setup();
+    ctx.state.version = "v1";
+    await linked(ctx);
+    const again = setup();
+    again.state.version = "v1";
+    await waitFor(() => expect(again.api.listOrders).toHaveBeenCalled());
+    expect(again.api.listOrders.mock.calls[0]).toEqual(["2026-10-30", "v1"]);
+    expect(again.hook.result.current.sellers[0].orders.map((o) => o.id)).toEqual(["a", "b"]);
+  });
+
+  it("un buzón sin versiones (viejo) sigue funcionando: siempre la lista completa", async () => {
+    const ctx = setup();
+    await linked(ctx);
+    await act(async () => { await ctx.hook.result.current.refresh(); });
+    expect(ctx.api.listOrders.mock.calls.at(-1)).toEqual(["2026-10-30"]);
+    expect(ctx.hook.result.current.sellers[0].orders).toHaveLength(2);
   });
 });
 

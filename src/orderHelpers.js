@@ -1,6 +1,7 @@
 import { formatDate, isSundayStr, addDaysStr } from "./dateUtils";
 import { formatCUP, formatUSD, convertToUSD } from "./money";
 import { customerLabel, businessLabel } from "./nameLabels";
+import { siteNow } from "./siteClock";
 
 export function groupAllOrders(movements) {
   const orderMovements = movements.filter((m) => m.orderId);
@@ -77,7 +78,7 @@ export function renumberOpenOrders(movements, todayCal) {
 // Cierre de ventas: pasada esa hora ya no se capturan pedidos para hoy (los
 // nuevos van para mañana) y se avisa de lo que quedó sin cerrar. `hour` es el
 // ajuste cierreVentasHour (0-23), o null si está desactivado.
-export function isPastCierre(hour, now = new Date()) {
+export function isPastCierre(hour, now = siteNow()) {
   return hour != null && now.getHours() >= hour;
 }
 
