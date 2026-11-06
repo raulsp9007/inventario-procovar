@@ -3,7 +3,10 @@
 // Ver docs/superpowers/specs/2026-10-30-facturacion-nube-design.md.
 
 import { mergeUsers, vendorsView, freeId, nameKey } from "./roster.js";
-import { cubaDate, parseSchedule, scheduleStatus, validateSchedule, parseCierre, cierreStatus, validateCierre, parseZone, zoneLabel, siteNow, ZONES } from "./schedule.js";
+import {
+  cubaDate, parseSchedule, scheduleStatus, validateSchedule, parseCierre, cierreStatus, validateCierre, parseZone, zoneLabel, siteNow, ZONES,
+  adjustFromManual, parseAdjust, shiftIso, isTimeOfDay,
+} from "./schedule.js";
 import {
   ACCOUNT_ROLES, MAX_FAILS, LOCK_MS, SESSION_MS, accountView, hashPassword, hashToken, parseAccountInput, usernameKey, verifyPassword,
 } from "./accounts.js";
@@ -184,12 +187,18 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   // mano, y lo que la facturadora confirma o deshace. Ver pedidos y todo lo del administrador sigue.
   const loadSchedule = async () => parseSchedule(await store.getSetting("horario"));
   const loadCierre = async () => parseCierre(await store.getSetting("cierre"));
-  // La hora a la que trabaja el sitio (zona horaria elegida por el administrador).
-  const loadZone = async () => parseZone(await store.getSetting("zona"));
+  // La hora a la que trabaja el sitio: la zona horaria que eligió el administrador y, si la puso a mano,
+  // el ajuste en minutos. `at` es el instante ya corrido, para contar horario, cierre y día de hoy.
+  const loadSiteClock = async () => {
+    const zone = parseZone(await store.getSetting("zona"));
+    const adjust = parseAdjust(await store.getSetting("zona_ajuste"));
+    return { zone, adjust, at: shiftIso(stamp, adjust) };
+  };
   const vendorWrite = user.role === "vendedor" && method !== "GET" && (path === "/orders" || path.startsWith("/orders/"));
   const factWrite = user.role === "facturadora" && method === "POST" && (path === "/orders/confirm" || path === "/orders/unconfirm");
   if (vendorWrite || factWrite) {
-    const status = scheduleStatus(await loadSchedule(), stamp, await loadZone());
+    const site = await loadSiteClock();
+    const status = scheduleStatus(await loadSchedule(), site.at, site.zone);
     if (!status.abierto) return fail(origin, 423, status.mensaje);
   }
 
@@ -198,7 +207,8 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
   if (method === "GET" && path === "/summary") {
     if (user.role !== "admin" && user.role !== "supervisor") return fail(origin, 403, "Esto no es para tu usuario.");
     const requested = url.searchParams.get("fecha");
-    const fecha = requested || cubaDate(stamp, await loadZone());
+    const site = await loadSiteClock();
+    const fecha = requested || cubaDate(site.at, site.zone);
     const parsed = new Date(`${fecha}T00:00:00Z`);
     if (!DATE_PATTERN.test(fecha) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== fecha) return fail(origin, 400, "La fecha no es válida (AAAA-MM-DD).");
     const orders = (await store.listFrom(fecha)).filter((o) => o.date === fecha);
@@ -230,8 +240,11 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     const denied = only("vendedor");
     if (denied) return denied;
     const orders = await store.listBySeller(user.id, url.searchParams.get("since") || "");
-    const zone = await loadZone();
-    return reply(origin, { now: stamp, orders: orders.map(statusRow), horario: scheduleStatus(await loadSchedule(), stamp, zone), cierre: cierreStatus(await loadCierre(), stamp, zone), zona: zone });
+    const site = await loadSiteClock();
+    return reply(origin, {
+      now: stamp, orders: orders.map(statusRow), horario: scheduleStatus(await loadSchedule(), site.at, site.zone),
+      cierre: cierreStatus(await loadCierre(), site.at, site.zone), zona: site.zone, ajuste: site.adjust,
+    });
   }
 
   const one = path.match(/^\/orders\/([^/]+)$/);
@@ -248,9 +261,9 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     if (parsed.error) return fail(origin, 400, parsed.error);
     // Cierre de facturación del día: pasada la hora no se envía ni se cambia un pedido de hoy (los de
     // otro día sí). Es aparte del horario del sitio, que ya se revisó arriba.
-    const zone = await loadZone();
-    const cierre = cierreStatus(await loadCierre(), stamp, zone);
-    if (cierre.cerrado && parsed.value.date === cubaDate(stamp, zone)) return fail(origin, 409, cierre.mensaje);
+    const site = await loadSiteClock();
+    const cierre = cierreStatus(await loadCierre(), site.at, site.zone);
+    if (cierre.cerrado && parsed.value.date === cubaDate(site.at, site.zone)) return fail(origin, 409, cierre.mensaje);
 
     const existing = await store.get(id);
     if (existing && existing.sellerId !== user.id) return fail(origin, 403, "Ese pedido es de otro vendedor.");
@@ -319,7 +332,8 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
         orders: mine,
       };
     });
-    return reply(origin, { now: stamp, sellers, horario: scheduleStatus(await loadSchedule(), stamp, await loadZone()) });
+    const site = await loadSiteClock();
+    return reply(origin, { now: stamp, sellers, horario: scheduleStatus(await loadSchedule(), site.at, site.zone) });
   }
 
   if (method === "POST" && (path === "/orders/confirm" || path === "/orders/unconfirm")) {
@@ -354,22 +368,36 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
 
     // La hora del sitio: la zona horaria en la que trabajan el horario, el cierre del día y el resumen.
     if (path === "/admin/zona") {
-      const zonaView = (zone) => ({ zona: zone, etiqueta: zoneLabel(zone), ahora: siteNow(stamp, zone).hora, zonas: ZONES });
-      if (method === "GET") return reply(origin, zonaView(await loadZone()));
+      const zonaView = (zone, adjust) => ({
+        zona: zone, etiqueta: zoneLabel(zone), ahora: siteNow(shiftIso(stamp, adjust), zone).hora, manual: adjust !== 0, ajuste: adjust, zonas: ZONES,
+      });
+      if (method === "GET") {
+        const site = await loadSiteClock();
+        return reply(origin, zonaView(site.zone, site.adjust));
+      }
       if (method === "PUT") {
+        // { zona } elige la zona (y quita la hora a mano); { manual: "HH:MM" } pone la hora que es ahora
+        // en el sitio; { manual: null } vuelve a la hora automática.
         const read = await readJson(request);
-        const wanted = !read.error && read.body && typeof read.body === "object" ? read.body.zona : undefined;
-        if (typeof wanted !== "string" || !ZONES.some((z) => z.id === wanted)) return fail(origin, 400, "Esa zona horaria no está en la lista.");
-        await store.putSetting("zona", wanted);
-        return reply(origin, zonaView(wanted));
+        const body = !read.error && read.body && typeof read.body === "object" ? read.body : {};
+        const hasZone = body.zona !== undefined;
+        const hasManual = body.manual !== undefined;
+        if (!hasZone && !hasManual) return fail(origin, 400, "Falta la zona o la hora.");
+        if (hasZone && (typeof body.zona !== "string" || !ZONES.some((z) => z.id === body.zona))) return fail(origin, 400, "Esa zona horaria no está en la lista.");
+        if (hasManual && body.manual !== null && !isTimeOfDay(body.manual)) return fail(origin, 400, "La hora no es válida (formato HH:MM).");
+        const zone = hasZone ? body.zona : (await loadSiteClock()).zone;
+        const adjust = hasManual && body.manual !== null ? adjustFromManual(body.manual, stamp, zone) : 0;
+        await store.putSetting("zona", zone);
+        await store.putSetting("zona_ajuste", String(adjust));
+        return reply(origin, zonaView(zone, adjust));
       }
       return fail(origin, 404, "No existe esa ruta.");
     }
 
     if (path === "/admin/cierre") {
       const current = await loadCierre();
-      const zone = await loadZone();
-      if (method === "GET") return reply(origin, cierreStatus(current, stamp, zone));
+      const site = await loadSiteClock();
+      if (method === "GET") return reply(origin, cierreStatus(current, site.at, site.zone));
       if (method === "PUT") {
         const read = await readJson(request);
         if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
@@ -380,15 +408,15 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
         });
         if (checked.error) return fail(origin, 400, checked.error);
         await store.putSetting("cierre", JSON.stringify(checked.value));
-        return reply(origin, cierreStatus(checked.value, stamp, zone));
+        return reply(origin, cierreStatus(checked.value, site.at, site.zone));
       }
       return fail(origin, 404, "No existe esa ruta.");
     }
 
     if (path === "/admin/schedule") {
       const current = await loadSchedule();
-      const zone = await loadZone();
-      if (method === "GET") return reply(origin, scheduleStatus(current, stamp, zone));
+      const site = await loadSiteClock();
+      if (method === "GET") return reply(origin, scheduleStatus(current, site.at, site.zone));
       if (method === "PUT") {
         const read = await readJson(request);
         if (read.error) return fail(origin, 400, "El cuerpo no es JSON.");
@@ -400,7 +428,7 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
         });
         if (checked.error) return fail(origin, 400, checked.error);
         await store.putSetting("horario", JSON.stringify(checked.value));
-        return reply(origin, scheduleStatus(checked.value, stamp, zone));
+        return reply(origin, scheduleStatus(checked.value, site.at, site.zone));
       }
       return fail(origin, 404, "No existe esa ruta.");
     }

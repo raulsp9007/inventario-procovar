@@ -27,7 +27,7 @@ function installFetch() {
     accounts: { facturacion: null, supervision: null },
     schedule: { activo: false, abre: "09:00", cierra: "15:00", abierto: true, mensaje: "" },
     cierre: { activo: false, hora: "15:00", cerrado: false, mensaje: "" },
-    zona: { zona: "America/Havana", etiqueta: "Cuba (La Habana)", ahora: "11:00", zonas: [{ id: "America/Havana", label: "Cuba (La Habana)" }, { id: "Europe/Madrid", label: "España (Madrid)" }, { id: "America/Mexico_City", label: "México (Ciudad de México)" }] },
+    zona: { zona: "America/Havana", etiqueta: "Cuba (La Habana)", ahora: "11:00", manual: false, ajuste: 0, zonas: [{ id: "America/Havana", label: "Cuba (La Habana)" }, { id: "Europe/Madrid", label: "España (Madrid)" }, { id: "America/Mexico_City", label: "México (Ciudad de México)" }] },
     nextToken: 1,
   };
   const sorted = () => [...server.vendors].sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -53,8 +53,14 @@ function installFetch() {
     }
     if (path === "/admin/zona" && init.method === "GET") return reply(server.zona);
     if (path === "/admin/zona" && init.method === "PUT") {
+      if (body.manual !== undefined) {
+        server.zona = body.manual === null
+          ? { ...server.zona, manual: false, ajuste: 0, ahora: "11:00" }
+          : { ...server.zona, manual: true, ajuste: 90, ahora: body.manual };
+        return reply(server.zona);
+      }
       const found = server.zona.zonas.find((z) => z.id === body.zona);
-      server.zona = { ...server.zona, zona: body.zona, etiqueta: found.label, ahora: "16:00" };
+      server.zona = { ...server.zona, zona: body.zona, etiqueta: found.label, manual: false, ajuste: 0, ahora: "16:00" };
       return reply(server.zona);
     }
     if (path === "/admin/cierre" && init.method === "GET") return reply(server.cierre);
@@ -586,5 +592,58 @@ describe("administración: hora del sitio", () => {
     await waitFor(() => expect(putZona()).toEqual([{ method: "PUT", path: "/admin/zona", body: { zona: "Europe/Madrid" } }]));
     expect(await within(group).findByText(/Ahora en el sitio: 4:00 p\. m\./)).toBeTruthy();
     await waitFor(() => expect(within(group).queryByRole("button", { name: "Guardar zona" })).toBeNull());
+  });
+});
+
+// Hora puesta a mano (opcional): el administrador dice qué hora es ahora en el sitio.
+describe("administración: hora del sitio a mano", () => {
+  const card = () => screen.findByRole("group", { name: "Hora del sitio" });
+  const putZona = () => calls.filter((c) => c.method === "PUT" && c.path === "/admin/zona");
+
+  it("por defecto es automática: no pide hora", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Poner la hora a mano").checked).toBe(false));
+    expect(within(group).queryByLabelText("Hora que es ahora")).toBeNull();
+    expect(within(group).queryByRole("button", { name: "Guardar hora" })).toBeNull();
+  });
+
+  it("activarlo muestra la hora de ahora para corregirla, y guardarla manda la hora", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Poner la hora a mano").checked).toBe(false));
+    fireEvent.click(within(group).getByLabelText("Poner la hora a mano"));
+    const input = within(group).getByLabelText("Hora que es ahora");
+    expect(input.value).toBe("11:00");
+    fireEvent.change(input, { target: { value: "12:30" } });
+    fireEvent.click(within(group).getByRole("button", { name: "Guardar hora" }));
+    await waitFor(() => expect(putZona()).toEqual([{ method: "PUT", path: "/admin/zona", body: { manual: "12:30" } }]));
+    expect(await within(group).findByText(/Ahora en el sitio: 12:30 p\. m\./)).toBeTruthy();
+    expect(await within(group).findByText(/puesta a mano/i)).toBeTruthy();
+  });
+
+  it("con la hora a mano activa, 'Volver a la automática' la quita", async () => {
+    server.zona = { ...server.zona, manual: true, ajuste: 90, ahora: "12:30" };
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Poner la hora a mano").checked).toBe(true));
+    fireEvent.click(within(group).getByRole("button", { name: "Volver a la hora automática" }));
+    await waitFor(() => expect(putZona()).toEqual([{ method: "PUT", path: "/admin/zona", body: { manual: null } }]));
+    await waitFor(() => expect(within(group).getByLabelText("Poner la hora a mano").checked).toBe(false));
+  });
+
+  it("no manda una hora vacía", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Poner la hora a mano").checked).toBe(false));
+    fireEvent.click(within(group).getByLabelText("Poner la hora a mano"));
+    fireEvent.change(within(group).getByLabelText("Hora que es ahora"), { target: { value: "" } });
+    fireEvent.click(within(group).getByRole("button", { name: "Guardar hora" }));
+    expect(await within(group).findByText("Escribe la hora que es ahora.")).toBeTruthy();
+    expect(putZona()).toHaveLength(0);
   });
 });

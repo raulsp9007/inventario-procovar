@@ -306,7 +306,22 @@ function ScheduleCard({ schedule, busy, onSave }) {
 // ventas. Por defecto la de Cuba; el administrador elige la de su ciudad.
 function ZonaCard({ zona, busy, onSave }) {
   const [value, setValue] = useState(zona.zona);
+  // Hora puesta a mano (opcional): se enciende para corregir la hora del sitio y se vuelve a la
+  // automática con el botón.
+  const [manual, setManual] = useState(!!zona.manual);
+  const [time, setTime] = useState(zona.ahora);
+  const [error, setError] = useState("");
   useEffect(() => { setValue(zona.zona); }, [zona.zona]);
+  useEffect(() => { setManual(!!zona.manual); setTime(zona.ahora); }, [zona.manual, zona.ahora]);
+
+  async function saveTime() {
+    setError("");
+    if (!time) {
+      setError("Escribe la hora que es ahora.");
+      return;
+    }
+    await onSave({ manual: time });
+  }
   const field = { height: 36, border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", fontSize: 14, fontFamily: "inherit", background: "var(--surface)", color: "var(--text)", maxWidth: "100%" };
   return (
     <div role="group" aria-label="Hora del sitio" style={card}>
@@ -323,7 +338,29 @@ function ZonaCard({ zona, busy, onSave }) {
         </label>
         {value !== zona.zona && <button type="button" disabled={busy} onClick={() => onSave({ zona: value })} style={primary}>Guardar zona</button>}
       </div>
-      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 10 }}>Ahora en el sitio: {clock12(zona.ahora)}</div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 10 }}>
+        Ahora en el sitio: {clock12(zona.ahora)}{zona.manual ? " (hora puesta a mano)" : ""}
+      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginTop: 12 }}>
+        <input type="checkbox" aria-label="Poner la hora a mano" checked={manual} onChange={(e) => { setManual(e.target.checked); setError(""); }} />
+        Poner la hora a mano
+      </label>
+      {manual && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 8 }}>
+            Si la hora del sitio no coincide con la tuya, escribe qué hora es ahora donde estás. El sitio guarda la diferencia y la usa para el horario, el cierre del día y el contador de ventas.
+          </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
+              Hora que es ahora
+              <input type="time" aria-label="Hora que es ahora" value={time} onChange={(e) => { setTime(e.target.value); setError(""); }} style={field} />
+            </label>
+            {(time !== zona.ahora || !zona.manual) && <button type="button" disabled={busy} onClick={saveTime} style={primary}>Guardar hora</button>}
+            {zona.manual && <button type="button" disabled={busy} onClick={() => onSave({ manual: null })} style={button}>Volver a la hora automática</button>}
+          </div>
+        </div>
+      )}
+      {error && <div role="alert" style={{ fontSize: 13, color: "var(--error-text)", marginTop: 8 }}>{error}</div>}
     </div>
   );
 }

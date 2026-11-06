@@ -97,6 +97,23 @@ describe("cierreBlockMessage con la zona del sitio", () => {
   });
 });
 
+describe("cierreBlockMessage con la hora puesta a mano", () => {
+  const cierre = { activo: true, hora: "10:00", cerrado: false, mensaje: "" };
+  const now = new Date("2026-09-21T13:00:00.000Z"); // 09:00 en Cuba
+
+  it("suma el ajuste a la hora de la zona", () => {
+    expect(cierreBlockMessage({ ...cierre, zona: "America/Havana", ajuste: 0 }, now)).toBe("");
+    expect(cierreBlockMessage({ ...cierre, zona: "America/Havana", ajuste: 90 }, now)).toContain("10:00 a. m.");
+    expect(cierreBlockMessage({ ...cierre, zona: "America/Havana", ajuste: 59 }, now)).toBe("");
+  });
+
+  it("un ajuste negativo atrasa la hora", () => {
+    // en Madrid son las 15:00; 5 horas menos son las 10:00, justo la hora de cierre
+    expect(cierreBlockMessage({ ...cierre, zona: "Europe/Madrid", ajuste: -300 }, now)).toContain("10:00 a. m.");
+    expect(cierreBlockMessage({ ...cierre, zona: "Europe/Madrid", ajuste: -301 }, now)).toBe("");
+  });
+});
+
 describe("vendedor: cierre de facturación del día", () => {
   it("pasada la hora, FACT. de un pedido de hoy no lo envía y explica por qué", async () => {
     seed();

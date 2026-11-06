@@ -138,6 +138,13 @@ defecto la de Cuba (La Habana); si el sitio no coincide con la hora de tu ciudad
 lista. La tarjeta muestra la hora que es ahora en la zona elegida. La app del vendedor cuenta el
 cierre del día con esa misma zona. No hace falta tocar la base de datos (se guarda como un ajuste).
 
+Si ninguna zona de la lista sirve (o la hora del sitio no coincide con la tuya por un tiempo), en la
+misma tarjeta se puede **poner la hora a mano**: escribes qué hora es ahora donde estás
+(`PUT /admin/zona` con `{ "manual": "HH:MM" }`) y el buzón guarda la diferencia en minutos con la
+zona, y la suma al horario, al cierre del día y al día del contador. "Volver a la hora automática"
+(`{ "manual": null }`) la quita; elegir otra zona también la quita. La diferencia es fija: si pasa
+un cambio de horario de verano, hay que volver a ponerla.
+
 ## Cierre de facturación del día
 
 Aparte del horario, el administrador puede poner **una hora de cierre del día** (tarjeta "Cierre de

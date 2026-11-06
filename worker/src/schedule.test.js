@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { DEFAULT_SCHEDULE, DEFAULT_CIERRE, DEFAULT_ZONE, ZONES, parseSchedule, scheduleStatus, validateSchedule, validateCierre, parseCierre, cierreStatus, parseZone, siteNow, cubaDate } from "./schedule";
+import { DEFAULT_SCHEDULE, DEFAULT_CIERRE, DEFAULT_ZONE, ZONES, parseSchedule, scheduleStatus, validateSchedule, validateCierre, parseCierre, cierreStatus, parseZone, siteNow, cubaDate, adjustFromManual, parseAdjust, shiftIso } from "./schedule";
 
 // Horario de facturación: un solo horario (apertura y cierre) de lunes a sábado, en la hora de
 // Cuba; el domingo está cerrado. Fuera de horario se pausa el sitio. Sin horario activado,
@@ -174,5 +174,40 @@ describe("zona horaria del sitio", () => {
     const cierre = { enabled: true, time: "15:30" };
     expect(cierreStatus(cierre, VIERNES_11AM).cerrado).toBe(false);
     expect(cierreStatus(cierre, VIERNES_11AM, "Europe/Madrid").cerrado).toBe(true);
+  });
+});
+
+// Hora puesta a mano: el administrador dice qué hora es ahora en el sitio y el buzón guarda la
+// diferencia (en minutos) con la zona, para aplicarla al horario, al cierre y al día de hoy.
+describe("hora del sitio puesta a mano", () => {
+  it("adjustFromManual: cuánto se adelanta o atrasa respecto a la zona", () => {
+    expect(adjustFromManual("12:00", VIERNES_11AM)).toBe(60); // en Cuba son las 11:00
+    expect(adjustFromManual("10:30", VIERNES_11AM)).toBe(-30);
+    expect(adjustFromManual("11:00", VIERNES_11AM)).toBe(0);
+  });
+
+  it("adjustFromManual: cruzando la medianoche toma el camino corto", () => {
+    const casiMedianoche = "2026-10-31T03:50:00.000Z"; // 23:50 en Cuba
+    expect(adjustFromManual("00:10", casiMedianoche)).toBe(20);
+    expect(adjustFromManual("23:40", "2026-10-31T04:05:00.000Z")).toBe(-25); // en Cuba 00:05
+  });
+
+  it("adjustFromManual usa la zona que se le diga", () => {
+    expect(adjustFromManual("16:00", VIERNES_11AM, "Europe/Madrid")).toBe(0);
+  });
+
+  it("parseAdjust lee lo guardado; con algo roto o fuera de rango, 0", () => {
+    expect(parseAdjust("45")).toBe(45);
+    expect(parseAdjust("-30")).toBe(-30);
+    expect(parseAdjust("abc")).toBe(0);
+    expect(parseAdjust("9999")).toBe(0);
+    expect(parseAdjust(undefined)).toBe(0);
+    expect(parseAdjust(null)).toBe(0);
+  });
+
+  it("shiftIso mueve la hora esos minutos", () => {
+    expect(shiftIso("2026-10-30T15:00:00.000Z", 60)).toBe("2026-10-30T16:00:00.000Z");
+    expect(shiftIso("2026-10-30T15:00:00.000Z", -90)).toBe("2026-10-30T13:30:00.000Z");
+    expect(shiftIso("2026-10-30T15:00:00.000Z", 0)).toBe("2026-10-30T15:00:00.000Z");
   });
 });

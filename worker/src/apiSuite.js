@@ -681,7 +681,7 @@ export function apiSuite(label, makeStore) {
       });
 
       it("rechaza una zona que no está en la lista (400)", async () => {
-        for (const bad of ["Mars/Olympus", "", 5, undefined]) {
+        for (const bad of ["Mars/Olympus", "", 5]) {
           const r = await setZona(bad);
           expect(r.status).toBe(400);
           expect(r.json.error).toBeTruthy();
@@ -713,6 +713,85 @@ export function apiSuite(label, makeStore) {
         expect((await call("GET", "/orders/status", { token: "tok-carlos" })).json.zona).toBe("America/Havana");
         await setZona("Europe/Madrid");
         expect((await call("GET", "/orders/status", { token: "tok-carlos" })).json.zona).toBe("Europe/Madrid");
+      });
+    });
+
+    describe("hora del sitio puesta a mano", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const setZona = (body) => admin("PUT", "/zona", body);
+      const VIERNES_11AM = "2026-10-30T15:00:00.000Z"; // 11:00 en Cuba
+
+      it("al principio no hay ajuste", async () => {
+        clock = VIERNES_11AM;
+        expect((await admin("GET", "/zona")).json).toMatchObject({ manual: false, ajuste: 0, ahora: "11:00" });
+      });
+
+      it("el administrador pone la hora de ahora a mano y el buzón guarda la diferencia", async () => {
+        clock = VIERNES_11AM;
+        const r = await setZona({ manual: "12:30" });
+        expect(r.status).toBe(200);
+        expect(r.json).toMatchObject({ zona: "America/Havana", manual: true, ajuste: 90, ahora: "12:30" });
+        expect((await admin("GET", "/zona")).json).toMatchObject({ manual: true, ajuste: 90, ahora: "12:30" });
+      });
+
+      it("el ajuste sigue valiendo con el paso del tiempo", async () => {
+        clock = VIERNES_11AM;
+        await setZona({ manual: "12:30" });
+        clock = "2026-10-30T16:00:00.000Z"; // una hora después
+        expect((await admin("GET", "/zona")).json).toMatchObject({ ajuste: 90, ahora: "13:30" });
+      });
+
+      it("volver a la hora automática (manual: null) quita el ajuste", async () => {
+        clock = VIERNES_11AM;
+        await setZona({ manual: "12:30" });
+        const r = await setZona({ manual: null });
+        expect(r.json).toMatchObject({ manual: false, ajuste: 0, ahora: "11:00" });
+      });
+
+      it("valida la hora (400 con el motivo)", async () => {
+        for (const bad of ["9:00", "25:00", "xx", 5]) {
+          const r = await setZona({ manual: bad });
+          expect(r.status).toBe(400);
+          expect(r.json.error).toBeTruthy();
+        }
+      });
+
+      it("cambiar de zona sin poner hora quita el ajuste; poner zona y hora a la vez lo calcula en esa zona", async () => {
+        clock = VIERNES_11AM;
+        await setZona({ manual: "12:30" });
+        expect((await setZona({ zona: "Europe/Madrid" })).json).toMatchObject({ zona: "Europe/Madrid", manual: false, ajuste: 0, ahora: "16:00" });
+        expect((await setZona({ zona: "Europe/Madrid", manual: "16:20" })).json).toMatchObject({ zona: "Europe/Madrid", ajuste: 20, ahora: "16:20" });
+      });
+
+      it("el cierre del día y el horario usan la hora puesta a mano", async () => {
+        clock = VIERNES_11AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "11:30" });
+        expect((await put("o1", order())).status).toBe(200); // 11:00: todavía abierto
+        await setZona({ manual: "12:00" }); // ahora son las 12:00 en el sitio: ya pasó el cierre
+        expect((await put("o2", order())).status).toBe(409);
+        expect((await admin("GET", "/cierre")).json.cerrado).toBe(true);
+        await admin("PUT", "/schedule", { activo: true, abre: "12:30", cierra: "15:00" });
+        expect((await put("o3", order({ date: "2026-10-31" }))).status).toBe(423); // 12:00 todavía no abre
+      });
+
+      it("el día de hoy del resumen sigue la hora puesta a mano", async () => {
+        clock = "2026-10-30T23:30:00.000Z"; // 19:30 en Cuba
+        expect((await call("GET", "/summary", { token: "tok-admin" })).json.fecha).toBe("2026-10-30");
+        await setZona({ manual: "00:30" }); // en el sitio ya es el día siguiente
+        expect((await call("GET", "/summary", { token: "tok-admin" })).json.fecha).toBe("2026-10-31");
+      });
+
+      it("la lista del vendedor trae el ajuste, para que la app cuente la hora igual", async () => {
+        clock = VIERNES_11AM;
+        expect((await call("GET", "/orders/status", { token: "tok-carlos" })).json.ajuste).toBe(0);
+        await setZona({ manual: "12:30" });
+        expect((await call("GET", "/orders/status", { token: "tok-carlos" })).json.ajuste).toBe(90);
+      });
+
+      it("solo el administrador puede ponerla", async () => {
+        for (const token of ["tok-carlos", "tok-fact"]) {
+          expect((await call("PUT", "/admin/zona", { token, body: { manual: "12:00" } })).status).toBe(403);
+        }
       });
     });
 

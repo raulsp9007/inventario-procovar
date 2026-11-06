@@ -26,6 +26,25 @@ export function parseZone(raw) {
   return ZONES.some((zone) => zone.id === raw) ? raw : DEFAULT_ZONE;
 }
 
+// Hora puesta a mano: el administrador dice qué hora es ahora en el sitio ("HH:MM") y se guarda la
+// diferencia, en minutos, con la hora de la zona (la más corta: de -12 h a +12 h). Ese ajuste se
+// suma después al reloj para el horario, el cierre del día y el día de hoy.
+const DAY_MIN = 24 * 60;
+export function adjustFromManual(hhmm, nowIso, zone = DEFAULT_ZONE) {
+  const diff = toMinutes(hhmm) - cubaClock(nowIso, zone).minutes;
+  return ((((diff + DAY_MIN / 2) % DAY_MIN) + DAY_MIN) % DAY_MIN) - DAY_MIN / 2;
+}
+
+// Lo guardado (texto) como ajuste en minutos; si falta, está roto o es absurdo (más de 12 h), 0.
+export function parseAdjust(raw) {
+  const value = typeof raw === "string" && /^-?\d{1,4}$/.test(raw) ? Number(raw) : 0;
+  return Math.abs(value) <= DAY_MIN / 2 ? value : 0;
+}
+
+export const shiftIso = (nowIso, minutes) => new Date(new Date(nowIso).getTime() + minutes * 60000).toISOString();
+
+export const isTimeOfDay = (value) => typeof value === "string" && TIME_PATTERN.test(value);
+
 export const zoneLabel = (zone) => (ZONES.find((z) => z.id === zone) || ZONES[0]).label;
 export const DEFAULT_SCHEDULE = { enabled: false, open: "09:00", close: "15:00" };
 
