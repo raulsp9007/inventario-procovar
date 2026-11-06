@@ -139,11 +139,22 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
 
   const stamp = now();
 
+  // Todos los ajustes del buzón (cuentas, horario, cierre, zona y hora a mano) se leen de una sola vez al
+  // empezar la petición: cada consulta a la base cuenta, y antes eran hasta cinco por petición. Lo que se
+  // guarda en esta petición se refleja aquí al momento.
+  const SETTING_KEYS = ["cuentas", "horario", "cierre", "zona", "zona_ajuste"];
+  const settings = await store.getSettings(SETTING_KEYS);
+  const setting = (key) => (Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : null);
+  const saveSetting = async (key, value) => {
+    await store.putSetting(key, value);
+    settings[key] = String(value);
+  };
+
   // Las cuentas con usuario y contraseña (varias por rol) viven en los ajustes. La primera vez se pasan
   // las de antes (una por rol; su id es el rol, así siguen valiendo las sesiones abiertas).
-  const saveAccounts = (list) => store.putSetting("cuentas", JSON.stringify(list));
+  const saveAccounts = (list) => saveSetting("cuentas", JSON.stringify(list));
   const loadAccounts = async () => {
-    const raw = await store.getSetting("cuentas");
+    const raw = setting("cuentas");
     if (raw !== null) {
       try {
         const list = JSON.parse(raw);
@@ -204,13 +215,13 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
 
   // Horario de facturación: fuera de horario se pausa lo que el vendedor envía, borra o confirma a
   // mano, y lo que la facturadora confirma o deshace. Ver pedidos y todo lo del administrador sigue.
-  const loadSchedule = async () => parseSchedule(await store.getSetting("horario"));
-  const loadCierre = async () => parseCierre(await store.getSetting("cierre"));
+  const loadSchedule = async () => parseSchedule(setting("horario"));
+  const loadCierre = async () => parseCierre(setting("cierre"));
   // La hora a la que trabaja el sitio: la zona horaria que eligió el administrador y, si la puso a mano,
   // el ajuste en minutos. `at` es el instante ya corrido, para contar horario, cierre y día de hoy.
   const loadSiteClock = async () => {
-    const zone = parseZone(await store.getSetting("zona"));
-    const adjust = parseAdjust(await store.getSetting("zona_ajuste"));
+    const zone = parseZone(setting("zona"));
+    const adjust = parseAdjust(setting("zona_ajuste"));
     return { zone, adjust, at: shiftIso(stamp, adjust) };
   };
   const vendorWrite = user.role === "vendedor" && method !== "GET" && (path === "/orders" || path.startsWith("/orders/"));
@@ -421,8 +432,8 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
         if (hasManual && body.manual !== null && !isTimeOfDay(body.manual)) return fail(origin, 400, "La hora no es válida (formato HH:MM).");
         const zone = hasZone ? body.zona : (await loadSiteClock()).zone;
         const adjust = hasManual && body.manual !== null ? adjustFromManual(body.manual, stamp, zone) : 0;
-        await store.putSetting("zona", zone);
-        await store.putSetting("zona_ajuste", String(adjust));
+        await saveSetting("zona", zone);
+        await saveSetting("zona_ajuste", String(adjust));
         return reply(origin, zonaView(zone, adjust));
       }
       return fail(origin, 404, "No existe esa ruta.");
@@ -441,7 +452,7 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
           time: body.hora === undefined ? current.time : body.hora,
         });
         if (checked.error) return fail(origin, 400, checked.error);
-        await store.putSetting("cierre", JSON.stringify(checked.value));
+        await saveSetting("cierre", JSON.stringify(checked.value));
         return reply(origin, cierreStatus(checked.value, site.at, site.zone));
       }
       return fail(origin, 404, "No existe esa ruta.");
@@ -461,7 +472,7 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
           close: body.cierra === undefined ? current.close : body.cierra,
         });
         if (checked.error) return fail(origin, 400, checked.error);
-        await store.putSetting("horario", JSON.stringify(checked.value));
+        await saveSetting("horario", JSON.stringify(checked.value));
         return reply(origin, scheduleStatus(checked.value, site.at, site.zone));
       }
       return fail(origin, 404, "No existe esa ruta.");

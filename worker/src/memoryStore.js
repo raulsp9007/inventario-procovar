@@ -23,6 +23,10 @@ export function createMemoryStore() {
     async putSetting(key, value) {
       settings.set(key, String(value));
     },
+    // Varios ajustes de una vez: { clave: texto } con los que existen.
+    async getSettings(keys) {
+      return Object.fromEntries(keys.filter((key) => settings.has(key)).map((key) => [key, settings.get(key)]));
+    },
     // Cuentas con usuario y contraseña de ANTES (una por rol): solo se leen para pasarlas a la lista nueva,
     // que vive en los ajustes (ver api.js, loadAccounts).
     async listAccounts() {

@@ -125,7 +125,9 @@ export function useFacturadora({ createApi = createCloudApi, intervalMs = 30000,
   useEffect(() => {
     if (!linked) return undefined;
     refresh();
-    const intervalId = setInterval(() => { refresh(); }, intervalMs);
+    // Con la pestaña oculta (otra pestaña, ventana minimizada, de noche) no hay nadie mirando: no se consulta;
+    // al volver a ella se consulta enseguida (onVisible).
+    const intervalId = setInterval(() => { if (document.visibilityState !== "hidden") refresh(); }, intervalMs);
     const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
     const onOnline = () => { refresh(); };
     document.addEventListener("visibilitychange", onVisible);

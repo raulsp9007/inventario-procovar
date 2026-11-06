@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { CloudError } from "./cloudApi";
 import { makeLinkCode } from "./linkCode";
@@ -50,6 +50,54 @@ const linked = async (ctx) => {
 };
 
 beforeEach(() => localStorage.clear());
+
+// La consulta de cada 30 segundos se pausa con la pestaña oculta (otra pestaña, ventana minimizada, de noche):
+// no hay nadie mirando, así que no se gasta el buzón; al volver a la pestaña se consulta enseguida.
+describe("useFacturadora: pestaña oculta", () => {
+  const setVisibility = (state) => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+  };
+  afterEach(() => { delete document.visibilityState; });
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  it("con la pestaña visible consulta cada tanto", async () => {
+    const ctx = setup({ intervalMs: 20 });
+    await linked(ctx);
+    const before = ctx.api.listOrders.mock.calls.length;
+    await waitFor(() => expect(ctx.api.listOrders.mock.calls.length).toBeGreaterThan(before + 1));
+  });
+
+  it("con la pestaña oculta no consulta", async () => {
+    const ctx = setup({ intervalMs: 20 });
+    await linked(ctx);
+    setVisibility("hidden");
+    await wait(30);
+    const before = ctx.api.listOrders.mock.calls.length;
+    await wait(150);
+    expect(ctx.api.listOrders.mock.calls.length).toBe(before);
+  });
+
+  it("al volver a la pestaña consulta enseguida y sigue consultando", async () => {
+    const ctx = setup({ intervalMs: 20 });
+    await linked(ctx);
+    setVisibility("hidden");
+    await wait(30);
+    const before = ctx.api.listOrders.mock.calls.length;
+    setVisibility("visible");
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await waitFor(() => expect(ctx.api.listOrders.mock.calls.length).toBeGreaterThan(before));
+    const after = ctx.api.listOrders.mock.calls.length;
+    await waitFor(() => expect(ctx.api.listOrders.mock.calls.length).toBeGreaterThan(after));
+  });
+
+  it("confirmar o deshacer con la pestaña a la vista sigue refrescando la lista", async () => {
+    const ctx = setup({ intervalMs: 999999 });
+    await linked(ctx);
+    const before = ctx.api.listOrders.mock.calls.length;
+    await act(async () => { await ctx.hook.result.current.confirm(["a"]); });
+    await waitFor(() => expect(ctx.api.listOrders.mock.calls.length).toBeGreaterThan(before));
+  });
+});
 
 // El día de trabajo lo dice el buzón (con la hora del sitio): pasada la hora de cierre del día, la lista pasa
 // al siguiente día de trabajo y lo de hoy se limpia.

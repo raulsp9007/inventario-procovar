@@ -38,6 +38,11 @@ export function createD1Store(db) {
       const r = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first();
       return r ? r.value : null;
     },
+    // Varios ajustes en una sola consulta: { clave: texto } con los que existen.
+    async getSettings(keys) {
+      const { results } = await db.prepare(`SELECT key, value FROM settings WHERE key IN (${keys.map(() => "?").join(", ")})`).bind(...keys).all();
+      return Object.fromEntries(results.map((r) => [r.key, r.value]));
+    },
     async putSetting(key, value) {
       await db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, String(value)).run();
     },
