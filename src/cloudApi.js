@@ -79,6 +79,9 @@ export function createCloudApi({ url, token, fetchImpl }) {
     adminSchedule: () => request("GET", "/admin/schedule"),
     saveSchedule: (body) => request("PUT", "/admin/schedule", body),
     // Cierre de facturación del día (administrador): pasada la hora ya no se envían pedidos para hoy.
+    // La hora del sitio (zona horaria del horario, del cierre y del resumen de ventas), del administrador.
+    adminZona: () => request("GET", "/admin/zona"),
+    saveZona: (body) => request("PUT", "/admin/zona", body),
     adminCierre: () => request("GET", "/admin/cierre"),
     saveCierre: (body) => request("PUT", "/admin/cierre", body),
     sales: (fecha) => request("GET", fecha ? `/summary?fecha=${enc(fecha)}` : "/summary"),

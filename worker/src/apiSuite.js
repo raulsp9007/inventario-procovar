@@ -652,6 +652,70 @@ export function apiSuite(label, makeStore) {
 
     // Cierre de facturación del día: pasada esa hora el vendedor ya no envía pedidos de hoy (sí de otro
     // día, y puede borrarlos o pasarlos para mañana). Es aparte del horario del sitio, que lo pausa todo.
+    // Hora del sitio: el administrador elige la zona horaria en la que trabajan el horario, el cierre del
+    // día y el contador de ventas (por defecto, la de Cuba).
+    describe("hora del sitio", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const setZona = (zona) => admin("PUT", "/zona", { zona });
+      const VIERNES_11AM = "2026-10-30T15:00:00.000Z";
+
+      it("al principio es la de Cuba; solo el administrador la ve y la cambia", async () => {
+        clock = VIERNES_11AM;
+        const r = await admin("GET", "/zona");
+        expect(r.json).toMatchObject({ zona: "America/Havana", etiqueta: "Cuba (La Habana)", ahora: "11:00" });
+        expect(r.json.zonas[0]).toEqual({ id: "America/Havana", label: "Cuba (La Habana)" });
+        expect(r.json.zonas.length).toBeGreaterThan(5);
+        expect((await call("GET", "/admin/zona")).status).toBe(401);
+        for (const token of ["tok-carlos", "tok-fact"]) {
+          expect((await call("GET", "/admin/zona", { token })).status).toBe(403);
+          expect((await call("PUT", "/admin/zona", { token, body: { zona: "Europe/Madrid" } })).status).toBe(403);
+        }
+      });
+
+      it("el administrador elige otra zona y queda guardada, con la hora de allí", async () => {
+        clock = VIERNES_11AM;
+        const saved = await setZona("Europe/Madrid");
+        expect(saved.status).toBe(200);
+        expect(saved.json).toMatchObject({ zona: "Europe/Madrid", etiqueta: "España (Madrid)", ahora: "16:00" });
+        expect((await admin("GET", "/zona")).json.zona).toBe("Europe/Madrid");
+      });
+
+      it("rechaza una zona que no está en la lista (400)", async () => {
+        for (const bad of ["Mars/Olympus", "", 5, undefined]) {
+          const r = await setZona(bad);
+          expect(r.status).toBe(400);
+          expect(r.json.error).toBeTruthy();
+        }
+        expect((await call("PUT", "/admin/zona", { token: "tok-admin" })).status).toBe(400);
+      });
+
+      it("el horario y el cierre del día se cuentan en la zona elegida", async () => {
+        clock = VIERNES_11AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "15:30" });
+        await admin("PUT", "/schedule", { activo: true, abre: "09:00", cierra: "17:00" });
+        expect((await put("o1", order())).status).toBe(200); // 11:00 en Cuba: abierto y antes del cierre
+        await setZona("Europe/Madrid"); // 16:00 allí: ya pasó el cierre de las 15:30
+        const r = await put("o2", order());
+        expect(r.status).toBe(409);
+        expect(r.json.error).toContain("3:30 p. m.");
+        expect((await admin("GET", "/cierre")).json.cerrado).toBe(true);
+        expect((await admin("GET", "/schedule")).json.abierto).toBe(true); // 16:00 sigue dentro de 9 a 17
+      });
+
+      it("el día de hoy del cierre y del resumen es el de la zona elegida", async () => {
+        clock = "2026-10-30T23:30:00.000Z"; // 19:30 del 30 en Cuba; 00:30 del 31 en Madrid
+        expect((await call("GET", "/summary", { token: "tok-admin" })).json.fecha).toBe("2026-10-30");
+        await setZona("Europe/Madrid");
+        expect((await call("GET", "/summary", { token: "tok-admin" })).json.fecha).toBe("2026-10-31");
+      });
+
+      it("la lista del vendedor trae la zona, para que la app cuente la hora igual", async () => {
+        expect((await call("GET", "/orders/status", { token: "tok-carlos" })).json.zona).toBe("America/Havana");
+        await setZona("Europe/Madrid");
+        expect((await call("GET", "/orders/status", { token: "tok-carlos" })).json.zona).toBe("Europe/Madrid");
+      });
+    });
+
     describe("cierre de facturación del día", () => {
       const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
       const setCierre = (body) => admin("PUT", "/cierre", body);

@@ -118,7 +118,7 @@ Activarlo (una sola vez, en este orden):
 ## Horario de facturación
 
 Desde `admin.html` (tarjeta "Horario de facturación") el administrador puede poner **un solo
-horario**: hora de apertura y de cierre, de lunes a sábado, en la **hora de Cuba**; el domingo está
+horario**: hora de apertura y de cierre, de lunes a sábado, en la **hora del sitio** (ver abajo; por defecto la de Cuba); el domingo está
 cerrado. Fuera de horario se **pausa el sitio**:
 
 - los vendedores no pueden enviar a facturación (el buzón responde 423 y sus pedidos esperan en
@@ -130,10 +130,18 @@ cerrado. Fuera de horario se **pausa el sitio**:
 Ver pedidos, el administrador y la supervisión siguen funcionando. Sin el horario activado el
 sitio está abierto a cualquier hora (así queda al principio).
 
+## Hora del sitio
+
+El horario de facturación, el cierre del día y el día del contador de ventas se cuentan en una
+**zona horaria** que elige el administrador (tarjeta "Hora del sitio", `GET/PUT /admin/zona`): por
+defecto la de Cuba (La Habana); si el sitio no coincide con la hora de tu ciudad, elige otra de la
+lista. La tarjeta muestra la hora que es ahora en la zona elegida. La app del vendedor cuenta el
+cierre del día con esa misma zona. No hace falta tocar la base de datos (se guarda como un ajuste).
+
 ## Cierre de facturación del día
 
 Aparte del horario, el administrador puede poner **una hora de cierre del día** (tarjeta "Cierre de
-facturación del día", `GET/PUT /admin/cierre`, hora de Cuba). Pasada esa hora el vendedor ya no
+facturación del día", `GET/PUT /admin/cierre`, en la hora del sitio). Pasada esa hora el vendedor ya no
 puede enviar a facturación un pedido **de hoy** (el buzón responde 409 con el motivo, y la tarjeta
 del pedido lo muestra en rojo); los pedidos **de otro día** sí se pueden enviar, y también borrar,
 confirmar a mano o pasar para mañana. La facturadora sigue confirmando lo que ya llegó. La app del

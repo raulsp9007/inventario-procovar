@@ -27,6 +27,7 @@ function installFetch() {
     accounts: { facturacion: null, supervision: null },
     schedule: { activo: false, abre: "09:00", cierra: "15:00", abierto: true, mensaje: "" },
     cierre: { activo: false, hora: "15:00", cerrado: false, mensaje: "" },
+    zona: { zona: "America/Havana", etiqueta: "Cuba (La Habana)", ahora: "11:00", zonas: [{ id: "America/Havana", label: "Cuba (La Habana)" }, { id: "Europe/Madrid", label: "España (Madrid)" }, { id: "America/Mexico_City", label: "México (Ciudad de México)" }] },
     nextToken: 1,
   };
   const sorted = () => [...server.vendors].sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -49,6 +50,12 @@ function installFetch() {
       const next = { ...server.schedule, activo: body.activo, abre: body.abre, cierra: body.cierra };
       server.schedule = { ...next, abierto: !next.activo, mensaje: next.activo ? "La facturación está cerrada. Abre hoy a las 9:00 a. m." : "" };
       return reply(server.schedule);
+    }
+    if (path === "/admin/zona" && init.method === "GET") return reply(server.zona);
+    if (path === "/admin/zona" && init.method === "PUT") {
+      const found = server.zona.zonas.find((z) => z.id === body.zona);
+      server.zona = { ...server.zona, zona: body.zona, etiqueta: found.label, ahora: "16:00" };
+      return reply(server.zona);
     }
     if (path === "/admin/cierre" && init.method === "GET") return reply(server.cierre);
     if (path === "/admin/cierre" && init.method === "PUT") {
@@ -551,5 +558,33 @@ describe("administración: cierre de facturación del día", () => {
     fireEvent.click(within(group).getByRole("button", { name: "Guardar cierre" }));
     expect(await within(group).findByText("Elige la hora de cierre.")).toBeTruthy();
     expect(putCierre()).toHaveLength(0);
+  });
+});
+
+// Hora del sitio: la zona horaria en la que trabajan el horario, el cierre del día y el contador de
+// ventas. Por defecto la de Cuba; el administrador elige la de su ciudad.
+describe("administración: hora del sitio", () => {
+  const card = () => screen.findByRole("group", { name: "Hora del sitio" });
+  const putZona = () => calls.filter((c) => c.method === "PUT" && c.path === "/admin/zona");
+
+  it("muestra la zona de ahora y la hora que es allí", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Zona horaria").value).toBe("America/Havana"));
+    expect(within(group).getByText(/Ahora en el sitio: 11:00 a\. m\./)).toBeTruthy();
+    expect(within(group).queryByRole("button", { name: "Guardar zona" })).toBeNull();
+  });
+
+  it("elegir otra zona la guarda y actualiza la hora", async () => {
+    link();
+    render(<AdminApp />);
+    const group = await card();
+    await waitFor(() => expect(within(group).getByLabelText("Zona horaria").value).toBe("America/Havana"));
+    fireEvent.change(within(group).getByLabelText("Zona horaria"), { target: { value: "Europe/Madrid" } });
+    fireEvent.click(within(group).getByRole("button", { name: "Guardar zona" }));
+    await waitFor(() => expect(putZona()).toEqual([{ method: "PUT", path: "/admin/zona", body: { zona: "Europe/Madrid" } }]));
+    expect(await within(group).findByText(/Ahora en el sitio: 4:00 p\. m\./)).toBeTruthy();
+    await waitFor(() => expect(within(group).queryByRole("button", { name: "Guardar zona" })).toBeNull());
   });
 });

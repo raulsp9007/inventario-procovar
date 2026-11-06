@@ -75,7 +75,7 @@ export function useCloudSync({
       try {
         const data = await api.statusSince(cloudRef.current.since);
         horario = data.horario || null;
-        cierre = data.cierre || null;
+        cierre = data.cierre ? { ...data.cierre, zona: data.zona } : null;
         const { orders: ordersNow, setOrdersConfirmed: confirmOrders } = propsRef.current;
         const result = applyStatuses({ rows: data.orders, orders: ordersNow, map: cloudRef.current.map });
         if (result.toConfirm.length > 0) confirmOrders(result.toConfirm, true);
@@ -181,7 +181,7 @@ export function useCloudSync({
       const timeout = new Promise((resolve) => { setTimeout(() => resolve(null), CIERRE_CHECK_MS); });
       const data = await Promise.race([api.statusSince(new Date().toISOString()), timeout]);
       if (!data) return lastKnown;
-      const cierre = data.cierre || null;
+      const cierre = data.cierre ? { ...data.cierre, zona: data.zona } : null;
       setStatus((prev) => ({ ...prev, cierre }));
       return cierre;
     } catch {

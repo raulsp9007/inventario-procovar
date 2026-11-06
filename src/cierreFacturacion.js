@@ -8,11 +8,27 @@ export function clock12(hhmm) {
   return `${hours % 12 || 12}:${hhmm.slice(3, 5)} ${hours < 12 ? "a. m." : "p. m."}`;
 }
 
-// `cierre`: { activo, hora: "HH:MM" } como lo manda el buzón (o null si todavía no se sabe).
+// Minutos desde la medianoche en la zona horaria del sitio; con una zona desconocida (o sin zona),
+// los del teléfono.
+function minutesNow(now, zone) {
+  if (zone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+      const get = (type) => Number(parts.find((p) => p.type === type).value);
+      return get("hour") * 60 + get("minute");
+    } catch {
+      // zona que este teléfono no conoce: se usa su propia hora
+    }
+  }
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+// `cierre`: { activo, hora: "HH:MM" } como lo manda el buzón (o null si todavía no se sabe); `zone`: la
+// zona horaria del sitio (la hora de cierre es de esa zona).
 // Devuelve el aviso para el vendedor si ya cerró, o "" si todavía se puede enviar.
-export function cierreBlockMessage(cierre, now = new Date()) {
+export function cierreBlockMessage(cierre, now = new Date(), zone = cierre && cierre.zona) {
   if (!cierre || !cierre.activo || !/^\d{2}:\d{2}$/.test(cierre.hora || "")) return "";
   const closesAt = Number(cierre.hora.slice(0, 2)) * 60 + Number(cierre.hora.slice(3, 5));
-  if (now.getHours() * 60 + now.getMinutes() < closesAt) return "";
+  if (minutesNow(now, zone) < closesAt) return "";
   return `La facturación de hoy cerró a las ${clock12(cierre.hora)} Pasa el pedido para mañana.`;
 }

@@ -277,7 +277,7 @@ function ScheduleCard({ schedule, busy, onSave }) {
     <div role="group" aria-label="Horario de facturación" style={card}>
       <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Horario de facturación</div>
       <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
-        Un solo horario de lunes a sábado, en la hora de Cuba; el domingo está cerrado. Fuera de horario se pausa el sitio: los vendedores no pueden enviar a facturación (sus pedidos esperan en cola) y la facturadora no puede confirmar.
+        Un solo horario de lunes a sábado, en la hora del sitio (ver "Hora del sitio"); el domingo está cerrado. Fuera de horario se pausa el sitio: los vendedores no pueden enviar a facturación (sus pedidos esperan en cola) y la facturadora no puede confirmar.
       </div>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 10 }}>
         <input type="checkbox" aria-label="Activar el horario" checked={enabled} onChange={(e) => { setEnabled(e.target.checked); setError(""); }} />
@@ -298,6 +298,32 @@ function ScheduleCard({ schedule, busy, onSave }) {
         {schedule.activo ? (schedule.abierto ? "Ahora: abierto." : schedule.mensaje) : "Sin horario: el sitio está abierto a cualquier hora."}
       </div>
       {error && <div role="alert" style={{ fontSize: 13, color: "var(--error-text)", marginTop: 8 }}>{error}</div>}
+    </div>
+  );
+}
+
+// Hora del sitio: la zona horaria en la que trabajan el horario, el cierre del día y el contador de
+// ventas. Por defecto la de Cuba; el administrador elige la de su ciudad.
+function ZonaCard({ zona, busy, onSave }) {
+  const [value, setValue] = useState(zona.zona);
+  useEffect(() => { setValue(zona.zona); }, [zona.zona]);
+  const field = { height: 36, border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", fontSize: 14, fontFamily: "inherit", background: "var(--surface)", color: "var(--text)", maxWidth: "100%" };
+  return (
+    <div role="group" aria-label="Hora del sitio" style={card}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Hora del sitio</div>
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+        La zona horaria en la que trabaja el sitio: con ella se cuentan el horario de facturación, el cierre del día y el día del contador de ventas. Elige la de tu ciudad.
+      </div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, flexWrap: "wrap" }}>
+          Zona
+          <select aria-label="Zona horaria" value={value} onChange={(e) => setValue(e.target.value)} style={field}>
+            {zona.zonas.map((z) => <option key={z.id} value={z.id}>{z.label}</option>)}
+          </select>
+        </label>
+        {value !== zona.zona && <button type="button" disabled={busy} onClick={() => onSave({ zona: value })} style={primary}>Guardar zona</button>}
+      </div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 10 }}>Ahora en el sitio: {clock12(zona.ahora)}</div>
     </div>
   );
 }
@@ -325,7 +351,7 @@ function CierreCard({ cierre, busy, onSave }) {
     <div role="group" aria-label="Cierre de facturación del día" style={{ ...card, marginTop: 10 }}>
       <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Cierre de facturación del día</div>
       <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
-        Pasada esta hora, en la hora de Cuba, los vendedores ya no pueden enviar pedidos para hoy. Los pedidos para otro día sí se pueden enviar, y también borrar o pasar para mañana.
+        Pasada esta hora, en la hora del sitio, los vendedores ya no pueden enviar pedidos para hoy. Los pedidos para otro día sí se pueden enviar, y también borrar o pasar para mañana.
       </div>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 10 }}>
         <input type="checkbox" aria-label="Activar el cierre del día" checked={enabled} onChange={(e) => { setEnabled(e.target.checked); setError(""); }} />
@@ -442,6 +468,13 @@ export default function AdminApp() {
           />
           <button type="button" onClick={add} disabled={admin.busy} style={primary}>Agregar</button>
         </div>
+
+        {admin.zona && (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "18px 2px 8px" }}>HORA DEL SITIO</div>
+            <ZonaCard zona={admin.zona} busy={admin.busy} onSave={admin.saveZona} />
+          </>
+        )}
 
         {admin.schedule && (
           <>

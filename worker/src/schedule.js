@@ -1,9 +1,32 @@
-// Horario de facturación: un solo horario (apertura y cierre) de lunes a sábado, en la hora de
-// Cuba; el domingo está cerrado. Fuera de horario se pausa el sitio (los vendedores no pueden
+// Horario de facturación: un solo horario (apertura y cierre) de lunes a sábado, en la hora del
+// sitio (por defecto la de Cuba; el administrador puede elegir otra zona); el domingo está cerrado. Fuera de horario se pausa el sitio (los vendedores no pueden
 // enviar a facturación y la facturadora no puede confirmar). Sin horario activado, siempre está
 // abierto. Funciones puras.
 
-export const TIME_ZONE = "America/Havana";
+export const DEFAULT_ZONE = "America/Havana";
+export const TIME_ZONE = DEFAULT_ZONE;
+
+// Zonas horarias entre las que elige el administrador (la hora a la que trabaja el sitio).
+export const ZONES = [
+  { id: "America/Havana", label: "Cuba (La Habana)" },
+  { id: "America/New_York", label: "Este de EE. UU. (Miami, Nueva York)" },
+  { id: "America/Chicago", label: "Centro de EE. UU. (Chicago)" },
+  { id: "America/Mexico_City", label: "México (Ciudad de México)" },
+  { id: "America/Bogota", label: "Colombia, Perú, Ecuador (Bogotá)" },
+  { id: "America/Panama", label: "Panamá" },
+  { id: "America/Caracas", label: "Venezuela (Caracas)" },
+  { id: "America/Santo_Domingo", label: "República Dominicana" },
+  { id: "America/Argentina/Buenos_Aires", label: "Argentina (Buenos Aires)" },
+  { id: "Europe/Madrid", label: "España (Madrid)" },
+  { id: "UTC", label: "UTC" },
+];
+
+// Lo guardado como zona; si falta o no está en la lista, la de por defecto.
+export function parseZone(raw) {
+  return ZONES.some((zone) => zone.id === raw) ? raw : DEFAULT_ZONE;
+}
+
+export const zoneLabel = (zone) => (ZONES.find((z) => z.id === zone) || ZONES[0]).label;
 export const DEFAULT_SCHEDULE = { enabled: false, open: "09:00", close: "15:00" };
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -16,17 +39,24 @@ export function formatTime12(hhmm) {
   return `${hours % 12 || 12}:${hhmm.slice(3, 5)} ${hours < 12 ? "a. m." : "p. m."}`;
 }
 
-// Día de la semana (0 = domingo) y minutos desde la medianoche, en la hora de Cuba.
-function cubaClock(nowIso) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(nowIso));
+// Día de la semana (0 = domingo) y minutos desde la medianoche, en la hora de la zona.
+function cubaClock(nowIso, zone = DEFAULT_ZONE) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(nowIso));
   const get = (type) => parts.find((p) => p.type === type).value;
   const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
   return { weekday, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
 }
 
-// La fecha de hoy en Cuba (AAAA-MM-DD), no la de UTC.
-export function cubaDate(nowIso) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(nowIso));
+// La fecha de hoy en la zona del sitio (AAAA-MM-DD), no la de UTC. (El nombre viene de cuando solo
+// existía la hora de Cuba.)
+export function cubaDate(nowIso, zone = DEFAULT_ZONE) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(nowIso));
+}
+
+// La fecha y la hora ("HH:MM") que son ahora en la zona.
+export function siteNow(nowIso, zone = DEFAULT_ZONE) {
+  const { minutes } = cubaClock(nowIso, zone);
+  return { fecha: cubaDate(nowIso, zone), hora: `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}` };
 }
 
 // Valida lo que manda el administrador: { value } o { error }.
@@ -51,10 +81,10 @@ export function parseSchedule(raw) {
 }
 
 // Cómo está el horario ahora: { activo, abierto, abre, cierra, mensaje }.
-export function scheduleStatus(schedule, nowIso) {
+export function scheduleStatus(schedule, nowIso, zone = DEFAULT_ZONE) {
   const base = { activo: !!schedule.enabled, abre: schedule.open, cierra: schedule.close };
   if (!schedule.enabled) return { ...base, abierto: true, mensaje: "" };
-  const { weekday, minutes } = cubaClock(nowIso);
+  const { weekday, minutes } = cubaClock(nowIso, zone);
   const open = toMinutes(schedule.open);
   const close = toMinutes(schedule.close);
   const opens = formatTime12(schedule.open);
@@ -91,8 +121,8 @@ export function parseCierre(raw) {
 }
 
 // Cómo está el cierre ahora: { activo, hora, cerrado, mensaje }.
-export function cierreStatus(cierre, nowIso) {
+export function cierreStatus(cierre, nowIso, zone = DEFAULT_ZONE) {
   const base = { activo: !!cierre.enabled, hora: cierre.time };
-  if (!cierre.enabled || cubaClock(nowIso).minutes < toMinutes(cierre.time)) return { ...base, cerrado: false, mensaje: "" };
+  if (!cierre.enabled || cubaClock(nowIso, zone).minutes < toMinutes(cierre.time)) return { ...base, cerrado: false, mensaje: "" };
   return { ...base, cerrado: true, mensaje: `La facturación de hoy cerró a las ${formatTime12(cierre.time)} Pasa el pedido para mañana.` };
 }

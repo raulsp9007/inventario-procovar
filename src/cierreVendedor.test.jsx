@@ -47,7 +47,7 @@ beforeEach(() => {
     const ok = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) });
     if (server.rejectPut && init.method === "PUT") return { ok: false, status: 409, json: async () => ({ error: server.rejectPut }), text: async () => "x" };
     if (path === "/me") return ok({ id: "raul", name: "Raul", role: "vendedor" });
-    if (path.startsWith("/orders/status")) return ok({ now: "2026-09-21T15:00:00.000Z", orders: [], cierre: server.cierre });
+    if (path.startsWith("/orders/status")) return ok({ now: "2026-09-21T15:00:00.000Z", orders: [], cierre: server.cierre, zona: server.zona });
     return ok({});
   }));
   vi.spyOn(window, "open").mockImplementation(() => null);
@@ -78,6 +78,22 @@ describe("cierreBlockMessage", () => {
     expect(cierreBlockMessage(cierre, at(9, 59))).toBe("");
     expect(cierreBlockMessage(cierre, at(10, 0))).toBe("La facturación de hoy cerró a las 10:00 a. m. Pasa el pedido para mañana.");
     expect(cierreBlockMessage({ ...cierre, hora: "15:30" }, at(16, 0))).toContain("3:30 p. m.");
+  });
+});
+
+describe("cierreBlockMessage con la zona del sitio", () => {
+  const cierre = { activo: true, hora: "15:00", cerrado: false, mensaje: "" };
+  // 13:00 UTC = 15:00 en Madrid (verano) = 09:00 en Cuba (UTC-4)
+  const now = new Date("2026-09-21T13:00:00.000Z");
+
+  it("cuenta la hora en la zona del sitio, no en la del teléfono", () => {
+    expect(cierreBlockMessage(cierre, now, "Europe/Madrid")).toContain("3:00 p. m.");
+    expect(cierreBlockMessage(cierre, now, "America/Havana")).toBe("");
+  });
+
+  it("una zona desconocida se ignora y se usa la hora del teléfono", () => {
+    expect(cierreBlockMessage(cierre, new Date(2026, 8, 21, 16, 0), "Mars/Olympus")).toContain("3:00 p. m.");
+    expect(cierreBlockMessage(cierre, new Date(2026, 8, 21, 14, 0), undefined)).toBe("");
   });
 });
 
@@ -178,5 +194,31 @@ describe("vendedor: cuándo se revisa el cierre", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Facturar a la nube" }));
     await waitFor(() => expect(sent()).toBe(true));
     expect(screen.queryByText(MENSAJE_8AM)).toBeNull();
+  });
+});
+
+describe("vendedor: el cierre se cuenta en la zona del sitio", () => {
+  // 13:00 UTC = 15:00 en Madrid (verano) y 09:00 en Cuba
+  const at = "2026-09-21T13:00:00.000Z";
+
+  it("con la zona de Madrid, a las 15:00 de allí ya cerró, aunque el teléfono marque otra hora", async () => {
+    vi.setSystemTime(new Date(at));
+    server.cierre = { activo: true, hora: "15:00", cerrado: true, mensaje: "x" };
+    server.zona = "Europe/Madrid";
+    seed();
+    render(<InventoryApp />);
+    fireEvent.click(await screen.findByRole("button", { name: "Facturar a la nube" }));
+    expect(await screen.findByText("La facturación de hoy cerró a las 3:00 p. m. Pasa el pedido para mañana.")).toBeTruthy();
+    expect(sent()).toBe(false);
+  });
+
+  it("con la zona de Cuba, a las 09:00 de allí todavía no cerró", async () => {
+    vi.setSystemTime(new Date(at));
+    server.cierre = { activo: true, hora: "15:00", cerrado: false, mensaje: "" };
+    server.zona = "America/Havana";
+    seed();
+    render(<InventoryApp />);
+    fireEvent.click(await screen.findByRole("button", { name: "Facturar a la nube" }));
+    await waitFor(() => expect(sent()).toBe(true));
   });
 });

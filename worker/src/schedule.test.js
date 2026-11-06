@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { DEFAULT_SCHEDULE, DEFAULT_CIERRE, parseSchedule, scheduleStatus, validateSchedule, validateCierre, parseCierre, cierreStatus } from "./schedule";
+import { DEFAULT_SCHEDULE, DEFAULT_CIERRE, DEFAULT_ZONE, ZONES, parseSchedule, scheduleStatus, validateSchedule, validateCierre, parseCierre, cierreStatus, parseZone, siteNow, cubaDate } from "./schedule";
 
 // Horario de facturación: un solo horario (apertura y cierre) de lunes a sábado, en la hora de
 // Cuba; el domingo está cerrado. Fuera de horario se pausa el sitio. Sin horario activado,
@@ -135,5 +135,44 @@ describe("validateCierre y parseCierre", () => {
     expect(parseCierre(undefined)).toEqual(DEFAULT_CIERRE);
     expect(parseCierre("no es json")).toEqual(DEFAULT_CIERRE);
     expect(parseCierre(JSON.stringify({ enabled: true, time: "xx" }))).toEqual(DEFAULT_CIERRE);
+  });
+});
+
+// Hora del sitio: la zona horaria en la que trabajan el horario, el cierre del día y el contador de
+// ventas. Por defecto la de Cuba; el administrador puede poner la de su ciudad.
+describe("zona horaria del sitio", () => {
+  it("la de Cuba es la de por defecto y la primera de la lista", () => {
+    expect(DEFAULT_ZONE).toBe("America/Havana");
+    expect(ZONES[0]).toEqual({ id: "America/Havana", label: "Cuba (La Habana)" });
+  });
+
+  it("parseZone acepta solo las de la lista; lo demás vuelve a la de por defecto", () => {
+    expect(parseZone("Europe/Madrid")).toBe("Europe/Madrid");
+    expect(parseZone("Mars/Olympus")).toBe(DEFAULT_ZONE);
+    expect(parseZone(undefined)).toBe(DEFAULT_ZONE);
+    expect(parseZone(null)).toBe(DEFAULT_ZONE);
+  });
+
+  it("siteNow dice la fecha y la hora en esa zona", () => {
+    expect(siteNow(VIERNES_11AM)).toEqual({ fecha: "2026-10-30", hora: "11:00" });
+    expect(siteNow(VIERNES_11AM, "Europe/Madrid")).toEqual({ fecha: "2026-10-30", hora: "16:00" });
+    expect(siteNow("2026-10-30T23:30:00.000Z", "Europe/Madrid")).toEqual({ fecha: "2026-10-31", hora: "00:30" });
+  });
+
+  it("el día de hoy depende de la zona", () => {
+    expect(cubaDate("2026-10-30T23:30:00.000Z")).toBe("2026-10-30");
+    expect(cubaDate("2026-10-30T23:30:00.000Z", "Europe/Madrid")).toBe("2026-10-31");
+  });
+
+  it("el horario se cuenta en la zona elegida", () => {
+    // 11:00 en Cuba (dentro de 9 a 15), pero 16:00 en Madrid (ya cerró)
+    expect(scheduleStatus(on, VIERNES_11AM).abierto).toBe(true);
+    expect(scheduleStatus(on, VIERNES_11AM, "Europe/Madrid").abierto).toBe(false);
+  });
+
+  it("el cierre del día se cuenta en la zona elegida", () => {
+    const cierre = { enabled: true, time: "15:30" };
+    expect(cierreStatus(cierre, VIERNES_11AM).cerrado).toBe(false);
+    expect(cierreStatus(cierre, VIERNES_11AM, "Europe/Madrid").cerrado).toBe(true);
   });
 });

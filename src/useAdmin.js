@@ -17,6 +17,8 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
   const [schedule, setSchedule] = useState(null);
   // Cierre de facturación del día (null si el buzón no lo tiene todavía).
   const [cierre, setCierre] = useState(null);
+  // Hora del sitio: la zona horaria en la que trabaja el buzón (null si todavía no la tiene).
+  const [zona, setZona] = useState(null);
   const [phase, setPhase] = useState("idle"); // idle | loading | ok | error | auth
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,12 +39,13 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
     if (!linkRef.current) return false;
     setPhase((p) => (p === "ok" ? p : "loading"));
     try {
-      const [data, accountData, scheduleData, cierreData] = await Promise.all([api().adminVendors(), api().adminAccounts().catch(() => null), api().adminSchedule().catch(() => null), api().adminCierre().catch(() => null)]);
+      const [data, accountData, scheduleData, cierreData, zonaData] = await Promise.all([api().adminVendors(), api().adminAccounts().catch(() => null), api().adminSchedule().catch(() => null), api().adminCierre().catch(() => null), api().adminZona().catch(() => null)]);
       setVendors(data.vendors || []);
       setFacturadora(data.facturadora || null);
       setAccounts(accountData);
       setSchedule(scheduleData);
       setCierre(cierreData);
+      setZona(zonaData);
       setPhase("ok");
       setError("");
       return true;
@@ -93,12 +96,13 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
     setAccounts(null);
     setSchedule(null);
     setCierre(null);
+    setZona(null);
     setPhase("idle");
     setError("");
   }, []);
 
   return {
-    link, vendors, facturadora, accounts, schedule, cierre, phase, error, busy, refresh, linkWith, unlink, clearError: () => setError(""),
+    link, vendors, facturadora, accounts, schedule, cierre, zona, phase, error, busy, refresh, linkWith, unlink, clearError: () => setError(""),
     addVendor: (name) => act((a) => a.addVendor(name)),
     renameVendor: (id, name) => act((a) => a.updateVendor(id, { name })),
     setActive: (id, active) => act((a) => a.updateVendor(id, { active })),
@@ -106,6 +110,7 @@ export function useAdmin({ createApi = createCloudApi } = {}) {
     saveAccount: (slug, body) => act((a) => a.saveAccount(slug, body)),
     saveSchedule: (body) => act((a) => a.saveSchedule(body)),
     saveCierre: (body) => act((a) => a.saveCierre(body)),
+    saveZona: (body) => act((a) => a.saveZona(body)),
     // Resumen de ventas de un día (para el contador).
     loadSales,
   };
