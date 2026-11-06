@@ -217,6 +217,18 @@ export function useInventoryStore() {
     hlPerFormatMigrated: true,
   };
 
+  // Avisos que se quitan solos pasado un rato ("Guardado", errores). Se cancelan al cerrar la pantalla: un
+  // aviso que llega cuando la pantalla ya no existe no tiene a quién avisar.
+  const timersRef = useRef(new Set());
+  const later = useCallback((fn, ms) => {
+    const id = setTimeout(() => { timersRef.current.delete(id); fn(); }, ms);
+    timersRef.current.add(id);
+  }, []);
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => { timers.forEach(clearTimeout); timers.clear(); };
+  }, []);
+
   const persist = useCallback(async (nextState) => {
     setSaveState("saving");
     try {
@@ -238,11 +250,11 @@ export function useInventoryStore() {
       const copiedAt = await saveDailyCopy(previousRaw);
       if (copiedAt) setAutoCopyAt(copiedAt);
       setSaveState("saved");
-      setTimeout(() => setSaveState("idle"), 1200);
+      later(() => setSaveState("idle"), 1200);
     } catch (e) {
       setSaveState("idle");
       setError("No se pudo guardar. Intenta de nuevo.");
-      setTimeout(() => setError(""), 3000);
+      later(() => setError(""), 3000);
     }
   }, []);
 
@@ -438,7 +450,7 @@ export function useInventoryStore() {
       return true;
     } catch {
       setError("No se pudo restaurar la copia anterior.");
-      setTimeout(() => setError(""), 3000);
+      later(() => setError(""), 3000);
       return false;
     }
   }
@@ -513,7 +525,7 @@ export function useInventoryStore() {
         setPendingImport(parsed);
       } catch (err) {
         setError("Archivo inválido, no se pudo leer como backup.");
-        setTimeout(() => setError(""), 3000);
+        later(() => setError(""), 3000);
       }
     };
     reader.readAsText(file);
@@ -618,7 +630,7 @@ export function useInventoryStore() {
     const trimmed = newProductName.trim();
     if (!trimmed) {
       setError("Ingresa el nombre del producto.");
-      setTimeout(() => setError(""), 2500);
+      later(() => setError(""), 2500);
       return;
     }
     const code = generateProductCode(trimmed, products.map((p) => p.code));
@@ -827,7 +839,7 @@ export function useInventoryStore() {
     const { formats: nextFormats, error } = upsertProductFormat(productFormats, input);
     if (error) {
       setError(error);
-      setTimeout(() => setError(""), 3000);
+      later(() => setError(""), 3000);
       return;
     }
     setProductFormats(nextFormats);
@@ -842,7 +854,7 @@ export function useInventoryStore() {
     const { formats: nextFormats, products: nextProducts, error } = updateProductFormat(productFormats, products, oldCode, input);
     if (error) {
       setError(error);
-      setTimeout(() => setError(""), 3000);
+      later(() => setError(""), 3000);
       return;
     }
     setProductFormats(nextFormats);
@@ -857,7 +869,7 @@ export function useInventoryStore() {
     const { formats: nextFormats, error } = removeProductFormat(productFormats, code, products);
     if (error) {
       setError(error);
-      setTimeout(() => setError(""), 4000);
+      later(() => setError(""), 4000);
       return;
     }
     setProductFormats(nextFormats);
