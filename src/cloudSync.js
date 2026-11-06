@@ -151,7 +151,7 @@ export async function flushQueue({ queue, api }) {
   while (remaining.length > 0) {
     const op = remaining[0];
     try {
-      if (op.kind === "put") await api.putOrder(op.orderId, op.content);
+      if (op.kind === "put") await (op.queuedAt ? api.putOrder(op.orderId, op.content, { queuedAt: op.queuedAt }) : api.putOrder(op.orderId, op.content));
       else if (op.kind === "confirm") await api.confirmOrder(op.orderId);
       else await api.deleteOrder(op.orderId);
       remaining.shift();

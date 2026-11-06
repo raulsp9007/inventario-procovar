@@ -97,6 +97,24 @@ describe("cierreBlockMessage con la zona del sitio", () => {
   });
 });
 
+describe("cierreBlockMessage con la respuesta fresca del buzón", () => {
+  const now = new Date("2026-09-21T13:00:00.000Z");
+
+  it("si el buzón acaba de decir que está abierto, vale aunque el reloj del teléfono diga otra cosa", () => {
+    const cierre = { activo: true, hora: "08:00", cerrado: false, mensaje: "", zona: "America/Havana", ajuste: 0, fresco: true };
+    expect(cierreBlockMessage(cierre, now)).toBe("");
+  });
+
+  it("si el buzón acaba de decir que cerró, avisa con su mensaje", () => {
+    const cierre = { activo: true, hora: "23:00", cerrado: true, mensaje: "La facturación de hoy cerró a las 11:00 p. m. Pasa el pedido para mañana.", fresco: true };
+    expect(cierreBlockMessage(cierre, now)).toBe(cierre.mensaje);
+  });
+
+  it("sin respuesta fresca se calcula con la hora del teléfono, como antes", () => {
+    expect(cierreBlockMessage({ activo: true, hora: "08:00", cerrado: false, mensaje: "", zona: "America/Havana", ajuste: 0 }, now)).toContain("8:00 a. m.");
+  });
+});
+
 describe("cierreBlockMessage con la hora puesta a mano", () => {
   const cierre = { activo: true, hora: "10:00", cerrado: false, mensaje: "" };
   const now = new Date("2026-09-21T13:00:00.000Z"); // 09:00 en Cuba
@@ -220,7 +238,7 @@ describe("vendedor: el cierre se cuenta en la zona del sitio", () => {
 
   it("con la zona de Madrid, a las 15:00 de allí ya cerró, aunque el teléfono marque otra hora", async () => {
     vi.setSystemTime(new Date(at));
-    server.cierre = { activo: true, hora: "15:00", cerrado: true, mensaje: "x" };
+    server.cierre = { activo: true, hora: "15:00", cerrado: true, mensaje: "La facturación de hoy cerró a las 3:00 p. m. Pasa el pedido para mañana." };
     server.zona = "Europe/Madrid";
     seed();
     render(<InventoryApp />);

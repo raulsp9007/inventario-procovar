@@ -82,10 +82,14 @@ describe("vendedor: pedidos y nube", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.path === "/orders/o1")).toBe(true));
     const put = calls.find((c) => c.method === "PUT");
     expect(put.headers.Authorization).toBe(`Bearer ${TOKEN}`);
-    expect(put.body).toEqual({
+    // Además del pedido sube cuándo se hizo el cambio y la hora de la app (para el cierre del día).
+    const { enviadoEn, ahora, ...content } = put.body;
+    expect(content).toEqual({
       customerName: "Ana López", date: "2026-09-21", total: 4800,
       lines: [{ code: "P500", name: "Parranda 500ml", qty: 40, unitPrice: 120 }],
     });
+    expect(Number.isNaN(Date.parse(enviadoEn))).toBe(false);
+    expect(Number.isNaN(Date.parse(ahora))).toBe(false);
     expect(await screen.findByText("En nube")).toBeTruthy();
     expect(JSON.stringify(put.body)).not.toContain("5353551234");
   });

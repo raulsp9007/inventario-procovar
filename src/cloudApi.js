@@ -32,7 +32,11 @@ const MESSAGES = {
   server: "La nube tuvo un problema.",
 };
 
-export function createCloudApi({ url, token, fetchImpl }) {
+// Cuánto se espera la respuesta del buzón: con mala señal una petición puede quedarse colgada
+// minutos y trabar la cola de pedidos; pasado este tiempo se da por caída la conexión (y se reintenta).
+const DEFAULT_TIMEOUT_MS = 15000;
+
+export function createCloudApi({ url, token, fetchImpl, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   const base = String(url || "").replace(/\/+$/, "");
   const doFetch = fetchImpl || ((...args) => fetch(...args));
 
@@ -40,10 +44,23 @@ export function createCloudApi({ url, token, fetchImpl }) {
     const headers = { Authorization: `Bearer ${token}` };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     let response;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    let timer;
+    const timedOut = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        if (controller) controller.abort();
+        reject(new CloudError("network", 0, MESSAGES.network));
+      }, timeoutMs);
+    });
     try {
-      response = await doFetch(`${base}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+      response = await Promise.race([
+        doFetch(`${base}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, ...(controller ? { signal: controller.signal } : {}) }),
+        timedOut,
+      ]);
     } catch {
       throw new CloudError("network", 0, MESSAGES.network);
+    } finally {
+      clearTimeout(timer);
     }
     let data = null;
     try {
@@ -62,7 +79,9 @@ export function createCloudApi({ url, token, fetchImpl }) {
   return {
     me: () => request("GET", "/me"),
     // vendedor
-    putOrder: (id, content) => request("PUT", `/orders/${enc(id)}`, content),
+    // `queuedAt`: cuándo hizo el vendedor el cambio (puede subirse más tarde, por la cola). Se manda junto con la
+    // hora de la app al subirlo, para que el buzón cuente el cierre del día en el momento del envío.
+    putOrder: (id, content, extra) => request("PUT", `/orders/${enc(id)}`, extra && extra.queuedAt ? { ...content, enviadoEn: extra.queuedAt, ahora: new Date().toISOString() } : content),
     deleteOrder: (id) => request("DELETE", `/orders/${enc(id)}`),
     confirmOrder: (id) => request("POST", `/orders/${enc(id)}/confirm`),
     statusSince: (since) => request("GET", since ? `/orders/status?since=${enc(since)}` : "/orders/status"),

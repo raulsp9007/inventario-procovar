@@ -261,9 +261,17 @@ export async function handleRequest(request, { store, users, now, makeToken = ra
     if (parsed.error) return fail(origin, 400, parsed.error);
     // Cierre de facturación del día: pasada la hora no se envía ni se cambia un pedido de hoy (los de
     // otro día sí). Es aparte del horario del sitio, que ya se revisó arriba.
+    // Si la subida se demoró (mala señal, cola), la app dice cuándo se hizo el cambio (enviadoEn) y su hora
+    // al subirlo (ahora): el cierre se cuenta en el momento del envío y no cuando por fin llega. La espera
+    // es la diferencia entre esas dos horas de la app (el reloj del teléfono no importa); si no tiene
+    // sentido (falta, negativa o de más de 12 horas), no se tiene en cuenta.
     const site = await loadSiteClock();
-    const cierre = cierreStatus(await loadCierre(), site.at, site.zone);
-    if (cierre.cerrado && parsed.value.date === cubaDate(site.at, site.zone)) return fail(origin, 409, cierre.mensaje);
+    const isoText = (value) => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value) ? Date.parse(value) : NaN);
+    const waited = isoText(read.body.ahora) - isoText(read.body.enviadoEn);
+    const waitedMs = Number.isFinite(waited) && waited > 0 && waited <= 12 * 3600000 ? waited : 0;
+    const sentAt = shiftIso(site.at, -waitedMs / 60000);
+    const cierre = cierreStatus(await loadCierre(), sentAt, site.zone);
+    if (cierre.cerrado && parsed.value.date === cubaDate(sentAt, site.zone)) return fail(origin, 409, cierre.mensaje);
 
     const existing = await store.get(id);
     if (existing && existing.sellerId !== user.id) return fail(origin, 403, "Ese pedido es de otro vendedor.");

@@ -269,6 +269,12 @@ describe("flushQueue: vaciar la cola", () => {
     expect(api.deleteOrder).toHaveBeenCalledWith("b");
   });
 
+  it("un 'put' con queuedAt lo manda como tercer dato (cuándo se hizo el cambio)", async () => {
+    const api = apiOf();
+    await flushQueue({ queue: [{ kind: "put", orderId: "a", content: { total: 1 }, queuedAt: "2026-10-30T14:50:00.000Z" }], api });
+    expect(api.putOrder).toHaveBeenCalledWith("a", { total: 1 }, { queuedAt: "2026-10-30T14:50:00.000Z" });
+  });
+
   it("sin conexión se detiene y conserva lo que falta", async () => {
     const api = apiOf({ confirmOrder: vi.fn(async () => { throw new CloudError("network", 0, "x"); }) });
     const out = await flushQueue({ queue: ops(), api });

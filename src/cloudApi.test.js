@@ -130,6 +130,20 @@ describe("createCloudApi: peticiones", () => {
     expect(JSON.parse(init.body)).toEqual(content);
   });
 
+  it("putOrder con `queuedAt`: manda cuándo se hizo el cambio y la hora de la app al subirlo (para el cierre del día)", async () => {
+    const { api: cloud, fetchImpl } = api({ status: 200, body: {} });
+    await cloud.putOrder("o1", { total: 1 }, { queuedAt: "2026-10-30T14:50:00.000Z" });
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(body).toMatchObject({ total: 1, enviadoEn: "2026-10-30T14:50:00.000Z" });
+    expect(Number.isNaN(new Date(body.ahora).getTime())).toBe(false);
+  });
+
+  it("sin respuesta del buzón en el tiempo dado, falla como 'network' (no se queda esperando)", async () => {
+    const fetchImpl = vi.fn(() => new Promise(() => {}));
+    const cloud = createCloudApi({ url: URL_OK, token: TOKEN, fetchImpl, timeoutMs: 20 });
+    await expect(cloud.putOrder("o1", {})).rejects.toMatchObject({ kind: "network" });
+  });
+
   it("deleteOrder, confirmOrder, statusSince, listOrders, confirmMany, unconfirmMany", async () => {
     const calls = [];
     const fetchImpl = vi.fn(async (url, init) => {

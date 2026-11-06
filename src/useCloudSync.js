@@ -25,19 +25,26 @@ const CIERRE_CHECK_MS = 2500;
 
 // `ready`: la app ya cargó sus datos. Mientras no, la lista de pedidos está vacía
 // y sincronizar sería consultar la nube sin nada que subir.
+// Si el buzón no responde (mala señal, fallo del servidor), la cola de pedidos se reintenta sola cada
+// pocos segundos (cada vez más espaciado) en vez de esperar a la comprobación de cada hora.
+const RETRY_DELAYS_MS = [10000, 30000, 60000, 120000];
+
 export function useCloudSync({
-  orders, products, customers = [], setOrdersConfirmed, createApi = createCloudApi, debounceMs = 400, today, ready = true, intervalMs = 3600000,
+  orders, products, customers = [], setOrdersConfirmed, createApi = createCloudApi, debounceMs = 400, today, ready = true, intervalMs = 3600000, retryDelaysMs = RETRY_DELAYS_MS,
 }) {
   const [cloud, setCloud] = useState(() => loadCloud());
   const [status, setStatus] = useState({ phase: "idle", message: "", lastSyncAt: null, rejected: [], lastCheck: null });
   const [checking, setChecking] = useState(false);
   const cloudRef = useRef(cloud);
   const propsRef = useRef({});
-  propsRef.current = { orders, products, customers, setOrdersConfirmed, createApi, today, ready };
+  propsRef.current = { orders, products, customers, setOrdersConfirmed, createApi, today, ready, retryDelaysMs };
   const busyRef = useRef(false);
   // Cuándo se consultó por última vez la nube (para contar la hora de la comprobación automática).
   const lastPullRef = useRef(Date.now());
   const rerunRef = useRef(null);
+  const retryRef = useRef(null);
+  const attemptRef = useRef(0);
+  const syncRef = useRef(null);
 
   const commit = useCallback((patch) => {
     cloudRef.current = { ...cloudRef.current, ...patch };
@@ -52,7 +59,10 @@ export function useCloudSync({
     const today = propsRef.current.today || todayStr();
 
     const planned = reconcile({ orders: latestOrders, products: latestProducts, customers: latestCustomers, map: current.map, today });
-    const queue = mergeOps(current.queue, planned.ops);
+    // Cada subida lleva anotado cuándo se hizo el cambio: si se demora en la cola, el buzón cuenta el
+    // cierre del día en ese momento y no cuando por fin llega.
+    const queuedAt = new Date().toISOString();
+    const queue = mergeOps(current.queue, planned.ops.map((op) => (op.kind === "put" ? { ...op, queuedAt } : op)));
     commit({ map: planned.nextMap, queue });
 
     let stopped = null;
@@ -89,6 +99,17 @@ export function useCloudSync({
       }
     }
 
+    // Sin respuesta del buzón y con pedidos esperando: se vuelve a intentar solo, cada vez más espaciado.
+    clearTimeout(retryRef.current);
+    if ((stopped === "network" || stopped === "server") && cloudRef.current.queue.length > 0) {
+      const delays = propsRef.current.retryDelaysMs;
+      const delay = delays[Math.min(attemptRef.current, delays.length - 1)];
+      attemptRef.current += 1;
+      retryRef.current = setTimeout(() => { syncRef.current({ pull: false }); }, delay);
+    } else {
+      attemptRef.current = 0;
+    }
+
     setStatus((prev) => ({
       phase: stopped ? (stopped === "network" ? "offline" : stopped === "auth" ? "auth" : stopped === "closed" ? "closed" : "error") : "ok",
       message: stopped ? (stopped === "closed" ? stoppedMessage : MESSAGES[stopped] || MESSAGES.server) : "",
@@ -119,6 +140,10 @@ export function useCloudSync({
       await sync(next);
     }
   }, [runSync]);
+
+  syncRef.current = sync;
+  // Al cerrar la app (o desenlazar) no queda ningún reintento pendiente.
+  useEffect(() => () => clearTimeout(retryRef.current), []);
 
   const linked = ready && !!cloud.link && cloud.enabled;
 
@@ -160,6 +185,8 @@ export function useCloudSync({
   }, [commit]);
 
   const unlink = useCallback(() => {
+    clearTimeout(retryRef.current);
+    attemptRef.current = 0;
     clearCloud();
     cloudRef.current = loadCloud();
     setCloud(cloudRef.current);
@@ -183,7 +210,8 @@ export function useCloudSync({
       if (!data) return lastKnown;
       const cierre = data.cierre ? { ...data.cierre, zona: data.zona, ajuste: data.ajuste } : null;
       setStatus((prev) => ({ ...prev, cierre }));
-      return cierre;
+      // Recién preguntado al buzón: su "cerrado" vale más que la cuenta con el reloj del teléfono.
+      return cierre ? { ...cierre, fresco: true } : null;
     } catch {
       return lastKnown;
     }

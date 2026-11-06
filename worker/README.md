@@ -156,6 +156,14 @@ vendedor pregunta el cierre justo al tocar FACT. y avisa antes de marcar el pedi
 no hay cierre (así queda al principio). No hace falta tocar la base de datos: se guarda como un
 ajuste más. Para que funcione hay que volver a publicar el buzón (`npx wrangler deploy`).
 
+**Pedidos que se demoran en llegar.** Un pedido que el vendedor envió *antes* del cierre se acepta
+aunque la subida se demore (mala señal, cola): la app manda con cada pedido cuándo se hizo el cambio
+(`enviadoEn`) y su hora al subirlo (`ahora`); la diferencia es lo que esperó, y el buzón cuenta el
+cierre en el momento del envío (no se fía del reloj del teléfono). Una espera negativa o de más de
+12 horas no se tiene en cuenta. Un cambio hecho *después* del cierre sigue rechazándose. Además, la
+app ya no se queda esperando una respuesta que no llega (15 s) y reintenta la cola sola cada pocos
+segundos (10 s, 30 s, 1 min, 2 min…) en vez de esperar a la comprobación de cada hora.
+
 ## Ventas por día
 
 El buzón cuenta lo enviado a facturación cada día (confirmado o no; sin cancelados), producto por

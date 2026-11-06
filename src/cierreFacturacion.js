@@ -28,6 +28,8 @@ function minutesNow(now, zone) {
 // que el administrador le sumó a esa hora al ponerla a mano (0 si es la automática).
 // Devuelve el aviso para el vendedor si ya cerró, o "" si todavía se puede enviar.
 export function cierreBlockMessage(cierre, now = new Date(), zone = cierre && cierre.zona) {
+  // Si el buzón acaba de contestar (fresco), se hace lo que dice él: su reloj es el que cuenta.
+  if (cierre && cierre.fresco) return cierre.cerrado ? (cierre.mensaje || "La facturación de hoy ya cerró. Pasa el pedido para mañana.") : "";
   if (!cierre || !cierre.activo || !/^\d{2}:\d{2}$/.test(cierre.hora || "")) return "";
   const closesAt = Number(cierre.hora.slice(0, 2)) * 60 + Number(cierre.hora.slice(3, 5));
   const shifted = new Date(now.getTime() + ((cierre.ajuste || 0) * 60000));

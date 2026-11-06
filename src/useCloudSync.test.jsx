@@ -63,7 +63,7 @@ describe("useCloudSync: enlazar", () => {
     expect(ctx.api.putOrder).toHaveBeenCalledWith("o1", {
       customerName: "Ana López", date: "2026-10-30", total: 4800,
       lines: [{ code: "P500", name: "Parranda 500ml", qty: 40, unitPrice: 120 }],
-    });
+    }, { queuedAt: expect.any(String) });
     await waitFor(() => expect(ctx.hook.result.current.chips.o1).toEqual({ state: "cloud", text: "En nube" }));
     expect(loadCloud().link.name).toBe("Carlos Pérez");
   });
@@ -121,7 +121,7 @@ describe("useCloudSync: esperar a que la app cargue", () => {
     expect(loading.api.putOrder).not.toHaveBeenCalled();
 
     loading.hook.rerender({ ...loading.props, orders: [order()], ready: true });
-    await waitFor(() => expect(loading.api.putOrder).toHaveBeenCalledWith("o1", expect.any(Object)));
+    await waitFor(() => expect(loading.api.putOrder).toHaveBeenCalledWith("o1", expect.any(Object), expect.any(Object)));
     await act(async () => { await loading.hook.result.current.syncNow(); });
     expect(loading.api.statusSince).toHaveBeenCalled();
     expect(loading.api.putOrder.mock.invocationCallOrder[0]).toBeLessThan(loading.api.statusSince.mock.invocationCallOrder[0]);
@@ -214,6 +214,76 @@ describe("useCloudSync: comprobación automática cada hora", () => {
     act(() => { window.dispatchEvent(new Event("online")); document.dispatchEvent(new Event("visibilitychange")); });
     await wait(50);
     expect(ctx.api.statusSince).not.toHaveBeenCalled();
+  });
+
+  // Si el buzón no responde (mala señal, fallo del servidor) la cola se reintenta sola en pocos
+  // segundos, sin esperar a la comprobación de cada hora.
+  describe("reintento automático de la cola", () => {
+    const offline = () => new CloudError("network", 0, "No se pudo conectar con la nube.");
+    const fast = { retryDelaysMs: [30, 30, 30] };
+
+    it("tras un fallo de red lo reintenta solo y el pedido llega", async () => {
+      const ctx = setup(fast);
+      ctx.api.putOrder.mockRejectedValueOnce(offline());
+      await linked(ctx);
+      await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(0));
+      expect(ctx.hook.result.current.chips.o1).toEqual({ state: "cloud", text: "En nube" });
+      expect(ctx.api.statusSince).not.toHaveBeenCalled();
+    });
+
+    it("también tras un fallo del servidor", async () => {
+      const ctx = setup(fast);
+      ctx.api.putOrder.mockRejectedValueOnce(new CloudError("server", 500, "x"));
+      await linked(ctx);
+      await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(0));
+    });
+
+    it("sigue intentando mientras no haya conexión, y para cuando llega", async () => {
+      const ctx = setup(fast);
+      ctx.api.putOrder.mockRejectedValueOnce(offline()).mockRejectedValueOnce(offline());
+      await linked(ctx);
+      await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledTimes(3));
+      await waitFor(() => expect(ctx.hook.result.current.pendingCount).toBe(0));
+      await wait(150);
+      expect(ctx.api.putOrder).toHaveBeenCalledTimes(3);
+    });
+
+    it("conserva cuándo se hizo el cambio aunque se reintente más tarde", async () => {
+      const ctx = setup(fast);
+      ctx.api.putOrder.mockRejectedValueOnce(offline());
+      await linked(ctx);
+      await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledTimes(2));
+      const [first, second] = ctx.api.putOrder.mock.calls;
+      expect(second[2].queuedAt).toBe(first[2].queuedAt);
+    });
+
+    it("si la nube rechaza el pedido (datos no válidos) no lo reintenta", async () => {
+      const ctx = setup(fast);
+      ctx.api.putOrder.mockRejectedValue(new CloudError("invalid", 400, "Falta el nombre del cliente."));
+      await linked(ctx);
+      await wait(150);
+      expect(ctx.api.putOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it("si el código ya no sirve no insiste", async () => {
+      const ctx = setup(fast);
+      ctx.api.putOrder.mockRejectedValue(new CloudError("auth", 401, "x"));
+      await linked(ctx);
+      await wait(150);
+      expect(ctx.api.putOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it("al desenlazar deja de reintentar", async () => {
+      const ctx = setup(fast);
+      ctx.api.putOrder.mockRejectedValue(offline());
+      await linked(ctx);
+      act(() => { ctx.hook.result.current.unlink(); });
+      const calls = ctx.api.putOrder.mock.calls.length;
+      await wait(150);
+      expect(ctx.api.putOrder.mock.calls.length).toBe(calls);
+    });
   });
 
   // Sin internet los pedidos quedan en cola; al volver la conexión se reenvían solos
@@ -353,7 +423,7 @@ describe("useCloudSync: comprobación automática cada hora", () => {
     const ctx = setup({ orders: [] });
     await act(async () => { await ctx.hook.result.current.linkWith(CODE); });
     ctx.hook.rerender({ ...ctx.props, orders: [order({ orderId: "o9" })] });
-    await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledWith("o9", expect.any(Object)));
+    await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledWith("o9", expect.any(Object), expect.any(Object)));
     expect(ctx.api.statusSince).not.toHaveBeenCalled();
   });
 
@@ -395,7 +465,7 @@ describe("useCloudSync: datos del cliente", () => {
     const customers = [{ id: "c1", name: "Ana López", businessName: "Kiosco Sol", phone: "", code: "AB1001" }];
     const ctx = setup({ customers });
     await linked(ctx);
-    expect(ctx.api.putOrder).toHaveBeenCalledWith("o1", expect.objectContaining({ customerCode: "AB1001", businessName: "Kiosco Sol" }));
+    expect(ctx.api.putOrder).toHaveBeenCalledWith("o1", expect.objectContaining({ customerCode: "AB1001", businessName: "Kiosco Sol" }), expect.any(Object));
   });
 });
 
@@ -405,7 +475,7 @@ describe("useCloudSync: subir", () => {
     await act(async () => { await ctx.hook.result.current.linkWith(CODE); });
     expect(ctx.api.putOrder).not.toHaveBeenCalled();
     ctx.hook.rerender({ ...ctx.props, orders: [order({ orderId: "o7" })] });
-    await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledWith("o7", expect.any(Object)));
+    await waitFor(() => expect(ctx.api.putOrder).toHaveBeenCalledWith("o7", expect.any(Object), expect.any(Object)));
   });
 
   it("no sube pedidos viejos al enlazar", async () => {

@@ -795,6 +795,68 @@ export function apiSuite(label, makeStore) {
       });
     });
 
+    // Un pedido que el vendedor envió ANTES del cierre debe llegar aunque la subida se demore (mala señal,
+    // cola): la app dice cuándo hizo el cambio (enviadoEn) y su hora al subirlo (ahora); el buzón cuenta
+    // el cierre en el momento en que se envió, sin fiarse del reloj del teléfono.
+    describe("cierre de facturación: pedidos enviados antes del cierre que llegan tarde", () => {
+      const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
+      const VIERNES_9AM = "2026-10-30T13:00:00.000Z"; // 09:00 en Cuba
+      const VIERNES_11AM = "2026-10-30T15:00:00.000Z"; // 11:00 en Cuba
+      const lateOrder = (waitMs, over = {}) => {
+        const now = new Date(clock).getTime();
+        return order({ enviadoEn: new Date(now - waitMs).toISOString(), ahora: new Date(now).toISOString(), ...over });
+      };
+
+      beforeEach(async () => {
+        clock = VIERNES_9AM;
+        await admin("PUT", "/cierre", { activo: true, hora: "10:00" });
+      });
+
+      it("llega a las 11:00 un pedido que se envió a las 9:30: se acepta", async () => {
+        clock = VIERNES_11AM;
+        expect((await put("o1", lateOrder(90 * 60000))).status).toBe(200);
+      });
+
+      it("llega a las 11:00 un pedido que se envió a las 10:30: se rechaza (ya había cerrado)", async () => {
+        clock = VIERNES_11AM;
+        const r = await put("o1", lateOrder(30 * 60000));
+        expect(r.status).toBe(409);
+        expect(r.json.error).toContain("10:00 a. m.");
+      });
+
+      it("sin esos datos se cuenta la hora en que llega, como siempre", async () => {
+        clock = VIERNES_11AM;
+        expect((await put("o1", order())).status).toBe(409);
+      });
+
+      it("datos mal escritos se ignoran (se cuenta la hora en que llega)", async () => {
+        clock = VIERNES_11AM;
+        expect((await put("o1", order({ enviadoEn: "ayer", ahora: "hoy" }))).status).toBe(409);
+        expect((await put("o2", order({ enviadoEn: 5, ahora: null }))).status).toBe(409);
+      });
+
+      it("una espera imposible (negativa o de más de 12 horas) no abre la puerta", async () => {
+        clock = VIERNES_11AM;
+        const now = new Date(clock).getTime();
+        expect((await put("o1", order({ enviadoEn: new Date(now + 3600000).toISOString(), ahora: new Date(now).toISOString() }))).status).toBe(409);
+        expect((await put("o2", lateOrder(13 * 3600000))).status).toBe(409);
+      });
+
+      it("un cambio hecho después del cierre se rechaza aunque el pedido ya estuviera en la nube", async () => {
+        clock = VIERNES_9AM;
+        await put("o1", order());
+        clock = VIERNES_11AM;
+        expect((await put("o1", lateOrder(60000, { total: 9999 }))).status).toBe(409);
+      });
+
+      it("también vale para pedidos de otro día y con el cierre apagado (no cambian)", async () => {
+        clock = VIERNES_11AM;
+        expect((await put("o1", lateOrder(30 * 60000, { date: "2026-10-31" }))).status).toBe(200);
+        await admin("PUT", "/cierre", { activo: false });
+        expect((await put("o2", lateOrder(30 * 60000))).status).toBe(200);
+      });
+    });
+
     describe("cierre de facturación del día", () => {
       const admin = (method, path, body) => call(method, `/admin${path}`, { token: "tok-admin", body });
       const setCierre = (body) => admin("PUT", "/cierre", body);
