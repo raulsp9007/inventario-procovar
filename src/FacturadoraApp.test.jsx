@@ -341,6 +341,23 @@ describe("facturadora: los vendedores", () => {
   });
 });
 
+describe("facturadora: la nota del pedido", () => {
+  it("la tarjeta muestra la nota que escribió el vendedor", async () => {
+    linkStorage();
+    server.sellers[0].orders[0].note = "Dejar en la puerta de atrás";
+    render(<FacturadoraApp />);
+    await screen.findByText("Ana López");
+    const note = cardOf("Ana López").querySelector("[data-order-note]");
+    expect(note).toBeTruthy();
+    expect(note.textContent).toContain("Dejar en la puerta de atrás");
+  });
+
+  it("sin nota no sale ese bloque", async () => {
+    await openBoard();
+    expect(cardOf("Ana López").querySelector("[data-order-note]")).toBeNull();
+  });
+});
+
 describe("facturadora: cuándo se envió y cuándo llegó", () => {
   it("un pedido que llegó a tiempo muestra solo la hora (como siempre)", async () => {
     linkStorage();

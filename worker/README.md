@@ -225,4 +225,4 @@ repite el 6 y entrega los códigos nuevos; los anteriores dejan de servir.
 ## Qué guarda el buzón
 
 Cliente (con su código del portal y su negocio, si los tiene), fecha, productos con
-cantidad y precio, total y estado. **No** guarda teléfonos ni notas. Los de días anteriores se borran solos (ver "Sin historia").
+cantidad y precio, total, estado y la **nota** del pedido (indicaciones del vendedor; agregarla o cambiarla no reabre un pedido ya confirmado). **No** guarda el teléfono del cliente. Los de días anteriores se borran solos (ver "Sin historia").

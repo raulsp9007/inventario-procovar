@@ -6,23 +6,25 @@ const COLUMNS = [
   "confirmed_at", "confirmed_by", "created_at", "updated_at",
 ];
 
-// La hora de envío (sentAt) viaja dentro de la columna `lines`, sin cambiar la tabla: antes era la lista de
-// productos; si hay hora de envío, es { l: productos, s: hora }. Los pedidos de antes siguen leyéndose igual.
+// La hora de envío (sentAt) y la nota del pedido viajan dentro de la columna `lines`, sin cambiar la tabla: antes era la
+// lista de productos; si hay alguna de las dos, es { l: productos, s: hora de envío, n: nota }. Los pedidos de antes
+// siguen leyéndose igual.
 function fromRow(r) {
   if (!r) return null;
   const stored = JSON.parse(r.lines);
   const lines = Array.isArray(stored) ? stored : stored.l;
   const sentAt = Array.isArray(stored) ? null : stored.s;
+  const note = Array.isArray(stored) ? null : stored.n;
   return {
     id: r.id, sellerId: r.seller_id, sellerName: r.seller_name, date: r.date, customerName: r.customer_name,
     ...(r.customer_code ? { customerCode: r.customer_code } : {}), ...(r.business_name ? { businessName: r.business_name } : {}),
-    lines, ...(sentAt ? { sentAt } : {}), total: r.total, status: r.status, rev: r.rev, modified: !!r.modified,
+    lines, ...(sentAt ? { sentAt } : {}), ...(note ? { note } : {}), total: r.total, status: r.status, rev: r.rev, modified: !!r.modified,
     confirmedAt: r.confirmed_at, confirmedBy: r.confirmed_by, createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
 
 const toValues = (o) => [
-  o.id, o.sellerId, o.sellerName, o.date, o.customerName, o.customerCode || null, o.businessName || null, JSON.stringify(o.sentAt ? { l: o.lines, s: o.sentAt } : o.lines), o.total, o.status, o.rev, o.modified ? 1 : 0,
+  o.id, o.sellerId, o.sellerName, o.date, o.customerName, o.customerCode || null, o.businessName || null, JSON.stringify(o.sentAt || o.note ? { l: o.lines, ...(o.sentAt ? { s: o.sentAt } : {}), ...(o.note ? { n: o.note } : {}) } : o.lines), o.total, o.status, o.rev, o.modified ? 1 : 0,
   o.confirmedAt, o.confirmedBy, o.createdAt, o.updatedAt,
 ];
 

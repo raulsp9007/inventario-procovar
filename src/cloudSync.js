@@ -9,9 +9,9 @@ import { CloudError } from "./cloudApi";
 
 const lineTotal = (lines) => lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 
-// Lo único que sube a la nube de un pedido (sin teléfono ni notas).
-// Además del pedido, el código del cliente (del portal) y su negocio, para que la
-// facturadora lo encuentre; el buzón los guarda aparte del contenido.
+// Lo único que sube a la nube de un pedido (sin el teléfono del cliente).
+// Además del pedido, el código del cliente (del portal), su negocio y la nota del pedido, para que la
+// facturadora lo encuentre y vea las indicaciones; el buzón los guarda aparte del contenido.
 export function toCloudContent(order, products, customers = []) {
   const lines = order.lines.map((l) => {
     const product = products.find((p) => p.code === l.code);
@@ -20,10 +20,12 @@ export function toCloudContent(order, products, customers = []) {
   const customer = customers.find((c) => c.name === order.customerName);
   const customerCode = (customer && customer.code) || "";
   const businessName = (order.businessName || (customer && customer.businessName) || "").trim();
+  const note = (order.note || "").trim();
   return {
     customerName: order.customerName,
     ...(customerCode ? { customerCode } : {}),
     ...(businessName ? { businessName } : {}),
+    ...(note ? { note } : {}),
     date: order.date,
     total: lineTotal(order.lines),
     lines,

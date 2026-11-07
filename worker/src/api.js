@@ -57,8 +57,7 @@ function authenticate(request, users) {
 
 const cleanText = (value, max) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
-// Valida y limpia el cuerpo de un pedido. Solo se guarda lo necesario: no entra
-// el teléfono del cliente ni notas.
+// Valida y limpia el cuerpo de un pedido. Solo se guarda lo necesario: no entra el teléfono del cliente.
 function parseOrder(body) {
   if (!body || typeof body !== "object") return { error: "El pedido no tiene el formato esperado." };
   const customerName = cleanText(body.customerName, 120);
@@ -79,9 +78,12 @@ function parseOrder(body) {
   // del "contenido" del pedido, así que cambiarlos no reabre un pedido confirmado.
   const customerCode = cleanText(body.customerCode, 40);
   const businessName = cleanText(body.businessName, 120);
+  // La nota del pedido (indicaciones para facturar o entregar): también va aparte del contenido, así agregarla o
+  // cambiarla no reabre un pedido ya confirmado.
+  const note = cleanText(body.note, NOTE_MAX);
   return {
     value: { customerName, date: body.date, total: body.total, lines },
-    extra: { ...(customerCode ? { customerCode } : {}), ...(businessName ? { businessName } : {}) },
+    extra: { ...(customerCode ? { customerCode } : {}), ...(businessName ? { businessName } : {}), ...(note ? { note } : {}) },
   };
 }
 
@@ -91,11 +93,11 @@ const sameContent = (order, content) =>
 
 // El pedido con exactamente el código y negocio que llegaron (quita los que ya no vienen).
 function withExtra(order, extra) {
-  const { customerCode, businessName, ...rest } = order;
+  const { customerCode, businessName, note, ...rest } = order;
   return { ...rest, ...extra };
 }
 
-const sameExtra =(order, extra) => (order.customerCode || "") === (extra.customerCode || "") && (order.businessName || "") === (extra.businessName || "");
+const sameExtra = (order, extra) => (order.customerCode || "") === (extra.customerCode || "") && (order.businessName || "") === (extra.businessName || "") && (order.note || "") === (extra.note || "");
 
 function statusRow(o) {
   return { id: o.id, status: o.status, rev: o.rev, modified: o.modified, confirmedAt: o.confirmedAt, confirmedBy: o.confirmedBy, updatedAt: o.updatedAt };
@@ -110,6 +112,7 @@ function shortHash(text) {
 
 const MAX_REJECTIONS = 100;
 const MAX_BATCH = 50;
+const NOTE_MAX = 500;
 const LATE_MINUTES = 2;
 
 const byRecent = (a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt);

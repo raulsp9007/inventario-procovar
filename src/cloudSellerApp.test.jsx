@@ -94,6 +94,15 @@ describe("vendedor: pedidos y nube", () => {
     expect(JSON.stringify(put.body)).not.toContain("5353551234");
   });
 
+  it("la nota del pedido sube con el pedido (el teléfono del cliente, no)", async () => {
+    seed({ movements: [line({ note: "Dejar en la puerta de atrás" })] });
+    render(<InventoryApp />);
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    const put = calls.find((c) => c.method === "PUT");
+    expect(put.body.note).toBe("Dejar en la puerta de atrás");
+    expect(JSON.stringify(put.body)).not.toContain("5353551234");
+  });
+
   it("un pedido que no está enviado a facturación no se sube", async () => {
     seed({ movements: [line({ sent: false })] });
     render(<InventoryApp />);

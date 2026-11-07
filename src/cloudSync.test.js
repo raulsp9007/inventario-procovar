@@ -34,9 +34,30 @@ describe("toCloudContent", () => {
     expect(content.lines[0].name).toBe("GONE");
   });
 
-  it("no incluye teléfono ni notas", () => {
-    const content = toCloudContent(order({ customerPhone: "5353551234", note: "puerta" }), products);
-    expect(JSON.stringify(content)).not.toMatch(/5353551234|puerta/);
+  it("no incluye el teléfono del cliente", () => {
+    const content = toCloudContent(order({ customerPhone: "5353551234" }), products);
+    expect(JSON.stringify(content)).not.toMatch(/5353551234/);
+  });
+
+  // La nota del pedido (instrucciones para facturar o entregar) viaja con el pedido.
+  it("lleva la nota del pedido, sin espacios de más", () => {
+    expect(toCloudContent(order({ note: "  Pasa por la puerta de atrás  " }), products).note).toBe("Pasa por la puerta de atrás");
+  });
+
+  it("sin nota (o solo espacios) no agrega el campo", () => {
+    expect(toCloudContent(order(), products)).not.toHaveProperty("note");
+    expect(toCloudContent(order({ note: "   " }), products)).not.toHaveProperty("note");
+  });
+
+  it("agregar o cambiar la nota de un pedido ya subido vuelve a subirlo", () => {
+    const first = reconcile({ orders: [order()], products, customers: [], map: {} });
+    const withNote = reconcile({ orders: [order({ note: "Frágil" })], products, customers: [], map: first.nextMap });
+    expect(withNote.ops.map((o) => o.kind)).toEqual(["put"]);
+    expect(withNote.ops[0].content.note).toBe("Frágil");
+    const changed = reconcile({ orders: [order({ note: "Muy frágil" })], products, customers: [], map: withNote.nextMap });
+    expect(changed.ops.map((o) => o.kind)).toEqual(["put"]);
+    const same = reconcile({ orders: [order({ note: "Muy frágil" })], products, customers: [], map: changed.nextMap });
+    expect(same.ops).toEqual([]);
   });
 
   // La facturadora busca al cliente por su código del portal y su negocio.

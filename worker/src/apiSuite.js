@@ -104,10 +104,10 @@ export function apiSuite(label, makeStore) {
         expect(json).toMatchObject({ status: "pendiente", modified: true, confirmedAt: null, confirmedBy: null });
       });
 
-      it("no guarda teléfono ni notas del cliente", async () => {
+      it("no guarda el teléfono del cliente, pero sí la nota del pedido", async () => {
         const { json } = await put("o1", order({ customerPhone: "5353551234", note: "dejar en la puerta" }));
         expect(json.customerPhone).toBeUndefined();
-        expect(json.note).toBeUndefined();
+        expect(json.note).toBe("dejar en la puerta");
         expect(JSON.stringify(store.dump())).not.toContain("5353551234");
       });
 
@@ -1420,6 +1420,59 @@ export function apiSuite(label, makeStore) {
         const r = await batch([item("con espacio"), item("b1")]);
         expect(r.json.resultados[0]).toMatchObject({ ok: false, status: 400 });
         expect(r.json.resultados[1]).toEqual({ id: "b1", ok: true });
+      });
+    });
+
+    describe("la nota del pedido", () => {
+      const listed = async () => (await call("GET", "/orders?desde=2026-10-30", { token: "tok-fact" })).json.sellers.find((s) => s.id === "carlos").orders;
+
+      it("se guarda y la facturadora la ve", async () => {
+        await put("o1", order({ note: "Dejar en la puerta de atrás" }));
+        expect((await listed())[0].note).toBe("Dejar en la puerta de atrás");
+      });
+
+      it("se limpia (espacios de más) y se corta a 500 caracteres", async () => {
+        await put("o1", order({ note: "  varias   palabras \n con  saltos  " }));
+        expect((await listed())[0].note).toBe("varias palabras con saltos");
+        await put("o2", order({ customerName: "Beto", note: "x".repeat(900) }));
+        const beto = (await listed()).find((o) => o.id === "o2");
+        expect(beto.note).toHaveLength(500);
+      });
+
+      it("sin nota, el pedido no trae el campo", async () => {
+        await put("o1", order());
+        expect(await listed()).toHaveLength(1);
+        expect((await listed())[0]).not.toHaveProperty("note");
+      });
+
+      it("agregar o cambiar la nota actualiza el pedido sin reabrirlo (sigue confirmado, sin 'modificado')", async () => {
+        await put("o1", order());
+        await call("POST", "/orders/confirm", { token: "tok-fact", body: { ids: ["o1"] } });
+        clock = "2026-10-30T15:05:00.000Z";
+        await put("o1", order({ note: "Frágil" }));
+        const [o] = await listed();
+        expect(o).toMatchObject({ note: "Frágil", status: "confirmado", rev: 1, modified: false });
+        await put("o1", order({ note: "Muy frágil" }));
+        expect((await listed())[0].note).toBe("Muy frágil");
+      });
+
+      it("quitar la nota la borra", async () => {
+        await put("o1", order({ note: "Frágil" }));
+        await put("o1", order());
+        expect((await listed())[0]).not.toHaveProperty("note");
+      });
+
+      it("también en los pedidos que llegan en lote", async () => {
+        await call("POST", "/orders/batch", { token: "tok-carlos", body: { pedidos: [{ id: "b1", ...order({ note: "Nota 1" }) }, { id: "b2", ...order({ customerName: "Beto" }) }] } });
+        const orders = await listed();
+        expect(orders.find((o) => o.id === "b1").note).toBe("Nota 1");
+        expect(orders.find((o) => o.id === "b2")).not.toHaveProperty("note");
+      });
+
+      it("convive con la hora de envío (se guardan las dos)", async () => {
+        const now = new Date(clock).getTime();
+        await put("o1", order({ note: "Frágil", enviadoEn: new Date(now - 5 * 60000).toISOString(), ahora: new Date(now).toISOString() }));
+        expect((await listed())[0]).toMatchObject({ note: "Frágil", sentAt: new Date(now - 5 * 60000).toISOString() });
       });
     });
 

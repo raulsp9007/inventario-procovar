@@ -95,6 +95,13 @@ function OrderCard({ order, readOnly, paused, onConfirm, onUndo }) {
       {order.businessName && <div data-business style={{ fontSize: px(17), color: "var(--text-muted)", marginTop: 2, overflowWrap: "anywhere" }}>{order.businessName}</div>}
       <div style={{ fontSize: px(16), color: "var(--text-muted)", margin: "8px 0 12px", overflowWrap: "anywhere" }}>{`Código del cliente: ${order.customerCode || "sin código"}`}</div>
 
+      {order.note && (
+        <div data-order-note style={{ background: "var(--warn-tint)", border: "1px solid var(--border-warn)", borderRadius: 10, padding: "10px 14px", margin: "0 0 12px", fontSize: px(17), color: "var(--text)", overflowWrap: "anywhere" }}>
+          <span style={{ fontWeight: 700, color: "var(--orange-text)" }}>Nota: </span>
+          {order.note}
+        </div>
+      )}
+
       <div style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", padding: "12px 0", marginBottom: 14 }}>
         {order.lines.map((l) => (
           <div key={l.code} style={{ fontSize: px(18), padding: "2px 0" }}>{`${l.name} × ${l.qty}`}</div>
