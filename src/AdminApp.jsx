@@ -208,7 +208,7 @@ function UserCard({ account, known, busy, siteUrl, onSave, onCopy, onKnown }) {
   const [clave, setClave] = useState("");
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { setUsuario(account.usuario); }, [account.usuario]);
+  // (Al cambiar el usuario guardado, la tarjeta se vuelve a crear: ver `key` en AdminApp.)
   const info = ROLE_INFO[account.rol] || { label: account.rol, blurb: "" };
 
   async function changePassword() {
@@ -627,7 +627,7 @@ export default function AdminApp() {
             )}
             {admin.accounts.cuentas.map((account) => (
               <UserCard
-                key={account.id}
+                key={`${account.id}:${account.usuario}`}
                 account={account}
                 known={known[account.usuario]}
                 busy={admin.busy}
