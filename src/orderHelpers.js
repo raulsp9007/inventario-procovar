@@ -129,13 +129,16 @@ export function groupOrders(movements, dateStr) {
 // controla la fila del pedido dentro de la app). El mensaje AL CLIENTE
 // (formatOrderForCustomer) no lleva esto -- no tiene sentido decirle a él
 // mismo el nombre de su propio negocio.
-export function formatOrderForWhatsApp(order, products, { senderName, sendSenderName } = {}) {
+// `customerCode`: el código del cliente (el del portal), si lo tiene: va en el mensaje para que la facturadora lo busque
+// directo.
+export function formatOrderForWhatsApp(order, products, { senderName, sendSenderName, customerCode } = {}) {
   const lines = [];
   if (sendSenderName && senderName && senderName.trim()) lines.push(senderName.trim());
   if (order.isDelivery) lines.push("🛺 Domicilio 🛺");
   lines.push(customerLabel(order.customerName));
   const business = businessLabel(order.businessName);
   if (business) lines.push(business);
+  if (customerCode && customerCode.trim()) lines.push(`🔖 Código: ${customerCode.trim()}`);
   if (order.note && order.note.trim()) lines.push(order.note.trim());
   order.lines.forEach((line) => {
     const product = products.find((p) => p.code === line.code);

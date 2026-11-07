@@ -189,6 +189,7 @@ function OrderStepTrack({ order, onMarkSentToCustomer, onMarkSent, onMarkConfirm
   );
 }
 
+// `senderOptions` lleva el remitente y el código del cliente (si lo tiene).
 function openOrderWhatsApp(order, products, phone, senderOptions) {
   const text = formatOrderForWhatsApp(order, products, senderOptions);
   const url = `https://wa.me/${phone || ""}?text=${encodeURIComponent(text)}`;
@@ -211,7 +212,7 @@ function orderTotal(order) {
   return order.lines.reduce((sum, l) => sum + l.qty * (l.unitPrice || 0), 0);
 }
 
-export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onRefreshTodayPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, cloudChips = {}, cloud = null, billToCloud = false, focusOrderId, onFocusOrderConsumed }) {
+export default function Orders({ onOpenCierre, theme, products, movements, customers, stock, prices, showPrices, exchangeRate, todaysMovements, mananaMovements, mananaFacturados, whatsappPhone, supervisorPhone, senderName, sendSenderName, sendBusinessName, onConfirmOrder, onEditOrder, onDeleteOrder, onMarkSent, onMarkConfirmed, onMarkSentToCustomer, onSetOrderSteps, onRefreshPendingPrices, onRefreshTodayPrices, onError, onSelectCustomer, cierreVentasHour, dailyHlGoal, dailyBlisterGoal, prefill, onPrefillConsumed, reviewPending, onReviewPendingConsumed, showRecommendations = true, showPortalCheck = true, cloudChips = {}, cloud = null, billToCloud = false, messageToBilling = false, focusOrderId, onFocusOrderConsumed }) {
   const senderOptions = { senderName, sendSenderName };
   const billedToday = billedByProduct(groupAllOrders(movements), products, todayStr());
   const [customerName, setCustomerName] = useState("");
@@ -1386,13 +1387,16 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
                     // "Facturar a la nube": el pedido (que no es a domicilio) solo se
                     // marca facturado; la nube se lo lleva a la facturadora, sin WhatsApp.
                     // Pasada la hora de cierre del día, un pedido de hoy no se envía.
+                    // Con "Enviar mensaje a la facturadora" también sale el WhatsApp, y solo si el pedido de verdad se marcó
+                    // (no si el cierre del día lo frenó). El mensaje lleva el código del cliente, si lo tiene.
+                    const messageOptions = { ...senderOptions, customerCode: codeByName.get(order.customerName) || "" };
                     if (billToCloud && !order.isDelivery) {
-                      requestMarkSent(order);
+                      requestMarkSent(order).then((marked) => {
+                        if (marked && messageToBilling) openOrderWhatsApp(order, products, whatsappPhone, messageOptions);
+                      });
                       return;
                     }
-                    if (!(billToCloud && !order.isDelivery)) {
-                      openOrderWhatsApp(order, products, order.isDelivery ? supervisorPhone : whatsappPhone, senderOptions);
-                    }
+                    openOrderWhatsApp(order, products, order.isDelivery ? supervisorPhone : whatsappPhone, messageOptions);
                     onMarkSent(order.orderId, true);
                   }}
                   title={order.isDelivery ? "Enviar a supervisor(a)" : billToCloud ? "Facturar a la nube" : "Registrar (negocio)"}

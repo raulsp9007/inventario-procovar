@@ -76,6 +76,7 @@ export default function InventoryApp() {
     showRecommendations, setShowRecommendationsSetting,
     showPortalCheck, setShowPortalCheckSetting,
     billToCloud, setBillToCloudSetting,
+    messageToBilling, setMessageToBillingSetting,
     applyProductImport, setOrdersConfirmed,
     lastBackupAt, backupReminderDue, markBackupDone,
     loaded, saveState, error, setError,
@@ -434,6 +435,7 @@ export default function InventoryApp() {
             cloudChips={cloud.chips}
             cloud={cloud}
             billToCloud={billToCloud && !!cloud.link && cloud.enabled}
+            messageToBilling={messageToBilling}
             focusOrderId={orderToFocus}
             onFocusOrderConsumed={() => setOrderToFocus(null)}
           />
@@ -478,7 +480,7 @@ export default function InventoryApp() {
                 onRestoreCopy={restorePreviousCopy}
               />
             )}
-            cloudSlot={<CloudCard cloud={cloud} billToCloud={billToCloud} onBillToCloudChange={setBillToCloudSetting} />}
+            cloudSlot={<CloudCard cloud={cloud} billToCloud={billToCloud} onBillToCloudChange={setBillToCloudSetting} messageToBilling={messageToBilling} onMessageToBillingChange={setMessageToBillingSetting} />}
             whatsappPhone={whatsappPhone}
             onWhatsappPhoneChange={(next) => {
               setWhatsappPhone(next);

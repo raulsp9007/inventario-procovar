@@ -147,6 +147,8 @@ export function useInventoryStore() {
   // "Facturar a la nube": el botón FACT. solo marca facturado (sin WhatsApp a la
   // facturadora) y el pedido sube a la nube de facturación.
   const [billToCloud, setBillToCloud] = useState(false);
+  // "Enviar mensaje a la facturadora": con "Facturar a la nube", FACT. también manda el WhatsApp a la facturadora.
+  const [messageToBilling, setMessageToBilling] = useState(false);
   const [lastBackupAt, setLastBackupAt] = useState(null);
   const [pricesAreUsd, setPricesAreUsd] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -207,7 +209,7 @@ export function useInventoryStore() {
     stock, movements, lastAdjustedAt, products,
     prices, cumulativeRevenue, cumulativeHl, exchangeRate, commissionPercent, showPrices, hlGoal, dailyHlGoal, dailyBlisterGoal, waitlist, customers, productFormats, whatsappPhone,
     whatsappContactName, supervisorPhone, supervisorContactName, cierreVentasHour,
-    senderName, sendSenderName, sendBusinessName, showRecommendations, showPortalCheck, billToCloud, lastBackupAt, pricesAreUsd,
+    senderName, sendSenderName, sendBusinessName, showRecommendations, showPortalCheck, billToCloud, messageToBilling, lastBackupAt, pricesAreUsd,
     // Marca de que la numeración de pedidos ya es por día (ver applyPersistedData).
     orderSeqPerDay: true,
     // Marca de que ya se hizo la migración de "Cerveza o malta" (goals.js):
@@ -324,6 +326,7 @@ export function useInventoryStore() {
     const nextShowRecommendations = parsed.showRecommendations ?? true;
     const nextShowPortalCheck = parsed.showPortalCheck ?? true;
     const nextBillToCloud = parsed.billToCloud ?? false;
+    const nextMessageToBilling = parsed.messageToBilling ?? false;
     const nextLastBackupAt = parsed.lastBackupAt ?? null;
     const migratedHl = parsed.cumulativeHl == null;
     // Migración: dato guardado (o backup) de antes de este campo — se siembra una sola vez
@@ -367,6 +370,7 @@ export function useInventoryStore() {
     setShowRecommendations(nextShowRecommendations);
     setShowPortalCheck(nextShowPortalCheck);
     setBillToCloud(nextBillToCloud);
+    setMessageToBilling(nextMessageToBilling);
     setLastBackupAt(nextLastBackupAt);
 
     if (alwaysPersist || migratedHl || migratedPricesToUsd || migratedCustomers || migratedOrderSeq || migratedProductFormats || sundayScheduleFixed || migratedGoalProducts || migratedHlFormat) {
@@ -379,7 +383,7 @@ export function useInventoryStore() {
         whatsappPhone: nextWhatsappPhone, whatsappContactName: nextWhatsappContactName,
         supervisorPhone: nextSupervisorPhone, supervisorContactName: nextSupervisorContactName, cierreVentasHour: nextCierreVentasHour,
         senderName: nextSenderName, sendSenderName: nextSendSenderName, sendBusinessName: nextSendBusinessName,
-        showRecommendations: nextShowRecommendations, showPortalCheck: nextShowPortalCheck, billToCloud: nextBillToCloud,
+        showRecommendations: nextShowRecommendations, showPortalCheck: nextShowPortalCheck, billToCloud: nextBillToCloud, messageToBilling: nextMessageToBilling,
         lastBackupAt: nextLastBackupAt,
       });
     }
@@ -1384,6 +1388,11 @@ export function useInventoryStore() {
     persist({ ...currentPersistedState, billToCloud: next });
   }
 
+  function setMessageToBillingSetting(next) {
+    setMessageToBilling(next);
+    persist({ ...currentPersistedState, messageToBilling: next });
+  }
+
   function markBackupDone() {
     const next = new Date().toISOString();
     setLastBackupAt(next);
@@ -1407,6 +1416,7 @@ export function useInventoryStore() {
     showRecommendations, setShowRecommendationsSetting,
     showPortalCheck, setShowPortalCheckSetting,
     billToCloud, setBillToCloudSetting,
+    messageToBilling, setMessageToBillingSetting,
     applyProductImport,
     setOrdersConfirmed,
     lastBackupAt, backupReminderDue, markBackupDone,

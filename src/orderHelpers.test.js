@@ -282,6 +282,32 @@ describe("formatOrderForWhatsApp", () => {
     expect(text).toBe("👤 Cliente A\n🏪 Bar Cliente A\nParranda 1500ml - 1");
   });
 
+  // El código del cliente (el del portal) va en el mensaje, para que la facturadora lo busque directo.
+  it("incluye el código del cliente, si lo tiene, debajo del cliente", () => {
+    const order = { customerName: "Cliente A", isDelivery: false, note: "", lines: [{ code: "P1500", qty: 2 }] };
+    expect(formatOrderForWhatsApp(order, products, { customerCode: "LT05TCP0142" })).toBe("👤 Cliente A\n🔖 Código: LT05TCP0142\nParranda 1500ml - 2");
+  });
+
+  it("el código va después del negocio y antes de la nota", () => {
+    const order = { customerName: "Cliente A", businessName: "Bar Cliente A", isDelivery: false, note: "Sin hielo", lines: [{ code: "P1500", qty: 1 }] };
+    expect(formatOrderForWhatsApp(order, products, { customerCode: "AB1001", senderName: "Raul", sendSenderName: true })).toBe(
+      "Raul\n👤 Cliente A\n🏪 Bar Cliente A\n🔖 Código: AB1001\nSin hielo\nParranda 1500ml - 1",
+    );
+  });
+
+  it("sin código (o vacío, o solo espacios) no agrega esa línea", () => {
+    const order = { customerName: "Cliente A", isDelivery: false, note: "", lines: [{ code: "P1500", qty: 2 }] };
+    const plain = "👤 Cliente A\nParranda 1500ml - 2";
+    expect(formatOrderForWhatsApp(order, products, {})).toBe(plain);
+    expect(formatOrderForWhatsApp(order, products, { customerCode: "" })).toBe(plain);
+    expect(formatOrderForWhatsApp(order, products, { customerCode: "   " })).toBe(plain);
+  });
+
+  it("el código se limpia de espacios", () => {
+    const order = { customerName: "Cliente A", isDelivery: false, note: "", lines: [{ code: "P1500", qty: 2 }] };
+    expect(formatOrderForWhatsApp(order, products, { customerCode: "  AB1001 " })).toContain("🔖 Código: AB1001\n");
+  });
+
   it("sin negocio guardado, no agrega esa línea (ni un 🏪 suelto)", () => {
     const order = { customerName: "Cliente A", businessName: "", isDelivery: false, note: "", lines: [{ code: "P1500", qty: 1 }] };
     const text = formatOrderForWhatsApp(order, products, {});
