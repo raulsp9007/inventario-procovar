@@ -427,7 +427,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     upcomingOrders, sortedUpcomingOrders,
     pastOrdersByDate, pastDatesDesc, pastOrdersCount,
     unconfirmedTodayOrders,
-    totalTodayCount, totalUpcomingCount,
+    totalTodayCount, totalUpcomingCount, confirmedTodayCount, confirmedUpcomingCount,
     filterCounts,
   } = useMemo(() => {
     const matchesSearch = (order) => !searchTerm || order.customerName.toLowerCase().includes(searchTerm);
@@ -470,6 +470,9 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     // programados", no cuántos coinciden con los checkboxes.
     const totalTodayCount = allOrders.filter((o) => belongsToToday(o)).length;
     const totalUpcomingCount = allOrders.filter((o) => isUpcoming(o)).length;
+    // Y cuántos de esos están confirmados (a mano o por la facturadora): se muestran entre paréntesis en la pestaña.
+    const confirmedTodayCount = allOrders.filter((o) => belongsToToday(o) && o.confirmed).length;
+    const confirmedUpcomingCount = allOrders.filter((o) => isUpcoming(o) && o.confirmed).length;
 
     // Cuántos pedidos de la sección activa coincidirían con cada filtro de
     // estado si lo marcaras -- independientes entre sí (no se combinan),
@@ -491,7 +494,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
     return {
       allOrders, todaysOrders, sortedTodaysOrders, upcomingOrders, sortedUpcomingOrders,
       pastOrdersByDate, pastDatesDesc, pastOrdersCount, unconfirmedTodayOrders,
-      totalTodayCount, totalUpcomingCount, filterCounts,
+      totalTodayCount, totalUpcomingCount, confirmedTodayCount, confirmedUpcomingCount, filterCounts,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movements, products, today, pastCutoff, searchTerm, filterUnsent, filterUnconfirmed, filterUnsentToCustomer, filterDelivery, filterProductCode, hoyOrderSort, mananaOrderSort, pendingDeletes, pendingPostpones, activeSection]);
@@ -1512,8 +1515,8 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
       {cloud && <CloudCheckBar cloud={cloud} />}
       <div style={{ background: "var(--segment-track)", borderRadius: 12, padding: 3, display: "flex", gap: 2, marginBottom: 16 }}>
         {[
-          { key: "hoy", label: "Hoy", count: totalTodayCount },
-          { key: "manana", label: "Para mañana", count: totalUpcomingCount },
+          { key: "hoy", label: "Hoy", count: totalTodayCount, confirmed: confirmedTodayCount },
+          { key: "manana", label: "Para mañana", count: totalUpcomingCount, confirmed: confirmedUpcomingCount },
         ].map((tab) => {
           const active = activeSection === tab.key;
           return (
@@ -1531,6 +1534,7 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
               {tab.label}
               {/* Cuántos pedidos hay en el día, sin filtrar. */}
               <span
+                data-tab-total={tab.key}
                 aria-label={`${tab.count} pedido${tab.count === 1 ? "" : "s"}`}
                 style={{
                   minWidth: 20, height: 20, padding: "0 6px", borderRadius: 999, boxSizing: "border-box",
@@ -1541,6 +1545,14 @@ export default function Orders({ onOpenCierre, theme, products, movements, custo
                 }}
               >
                 <PulseNumber value={tab.count} />
+              </span>
+              {/* Entre paréntesis, cuántos de esos pedidos ya están confirmados: "Hoy 10 (8)". */}
+              <span
+                data-tab-confirmed={tab.key}
+                aria-label={`${tab.confirmed} confirmado${tab.confirmed === 1 ? "" : "s"}`}
+                style={{ marginLeft: -2, fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: active ? "var(--on-ink-accent)" : "var(--muted)" }}
+              >
+                (<PulseNumber value={tab.confirmed} />)
               </span>
             </button>
           );
